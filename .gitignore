@@ -3,9 +3,10 @@ node_modules/
 
 # Build output
 dist/
+dist2/
 dist_*/
 
-# Environment secrets — NEVER commit these
+# Environment secrets
 .env
 .env.local
 .env.*.local
@@ -22,3 +23,17 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Local browser / OCR artifacts
+chrome_profile/
+rendered/
+pdf_images/
+
+# Temporary work directories
+tmp_*/
+supabase/.temp/
+
+# Archives, dumps and timestamp artifacts
+*.zip
+*.dmp
+vite.config.js.timestamp-*.mjs
