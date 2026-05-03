@@ -1,0 +1,35 @@
+# BankExtract - Coding Agent Rules
+
+## Stack
+- React
+- Supabase
+- Multiempresa SaaS
+- Frontend + backend logic in services
+- Production target: Vercel
+
+## Hardening obrigatório
+Implementar:
+
+1. RBAC
+Roles:
+- owner
+- admin
+- financeiro
+- operador
+- visualizador
+
+2. Audit logs
+
+3. RPC transactional delete by company_id + batch_id
+
+4. CSV sanitization
+
+5. Disable mock in production
+
+## Regras
+- Nunca usar importacao_id
+- Sempre usar batch_id
+- Toda query deve respeitar company_id
+- Nunca expor secrets
+- Nunca usar service_role no frontend
+- Não quebrar build

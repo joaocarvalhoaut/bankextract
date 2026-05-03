@@ -1,0 +1,197 @@
+import { Activity, CheckCircle2, Clock, ShieldCheck, Wifi, WifiOff } from 'lucide-react';
+
+function StatusBadge({ status, ok }) {
+  const isReady = status === 'pronto' || ok;
+  const isWarning = status === 'atencao';
+  if (isReady) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+        Pronto
+      </span>
+    );
+  }
+  if (isWarning) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+        Atencao
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 ring-1 ring-slate-200">
+      <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+      Pendente
+    </span>
+  );
+}
+
+function StatusRow({ item }) {
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3 transition hover:bg-slate-50">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{item.detail}</p>
+      </div>
+      <StatusBadge status={item.status} ok={item.ok} />
+    </div>
+  );
+}
+
+export default function SystemStatusScreen({ status }) {
+  const checklist = status?.checklist || [];
+  const recentAuditLogs = status?.recentAuditLogs || [];
+  const readyCount = checklist.filter((item) => item.status === 'pronto' || item.ok).length;
+  const pendingCount = checklist.filter((item) => !item.ok && item.status !== 'atencao').length;
+  const attentionCount = checklist.filter((item) => item.status === 'atencao').length;
+  const total = checklist.length || 1;
+  const readyPct = Math.round((readyCount / total) * 100);
+
+  return (
+    <div className="space-y-6">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <article className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
+          <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-blue-400 to-blue-600 opacity-70" />
+          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+            <ShieldCheck size={18} />
+          </div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Empresa ativa</p>
+          <p className="mt-1.5 text-2xl font-semibold text-slate-900">
+            {status?.companyMode === 'global' ? 'Modo global' : 'Empresa especifica'}
+          </p>
+          <p className="mt-1 truncate text-xs text-slate-400">{status?.companyName || 'Nenhuma empresa ativa'}</p>
+        </article>
+
+        <article className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
+          <div className={`absolute inset-x-0 top-0 h-0.5 ${status?.googleSheetsConnected ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' : 'bg-slate-200'}`} />
+          <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl ${status?.googleSheetsConnected ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+            {status?.googleSheetsConnected ? <Wifi size={18} /> : <WifiOff size={18} />}
+          </div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Google Sheets</p>
+          <p className={`mt-1.5 text-2xl font-semibold ${status?.googleSheetsConnected ? 'text-emerald-700' : 'text-slate-500'}`}>
+            {status?.googleSheetsConnected ? 'Conectado' : 'Desconectado'}
+          </p>
+          <p className="mt-1 truncate text-xs text-slate-400">{status?.googleSheetsSheetName || 'Sem planilha vinculada'}</p>
+        </article>
+
+        <article className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
+          <div className={`absolute inset-x-0 top-0 h-0.5 ${status?.whatsappMockMode ? 'bg-gradient-to-r from-amber-400 to-orange-400' : 'bg-gradient-to-r from-emerald-400 to-emerald-600'}`} />
+          <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl ${status?.whatsappMockMode ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
+            <Activity size={18} />
+          </div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">WhatsApp</p>
+          <p className={`mt-1.5 text-2xl font-semibold ${status?.whatsappMockMode ? 'text-amber-700' : 'text-emerald-700'}`}>
+            {status?.whatsappMockMode ? 'Modo teste' : 'Pronto'}
+          </p>
+          <p className="mt-1 truncate text-xs text-slate-400">
+            Ultima execucao: {status?.lastAutoExecution || 'Nunca'}
+          </p>
+        </article>
+
+        <article className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
+          <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-violet-400 to-purple-500 opacity-70" />
+          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-50 text-violet-700">
+            <ShieldCheck size={18} />
+          </div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Role atual</p>
+          <p className="mt-1.5 text-2xl font-semibold capitalize text-slate-900">{status?.userRole || 'membro'}</p>
+          <p className="mt-1 text-xs text-slate-400">
+            {status?.isSystemAdmin ? 'Administrador geral' : 'Escopo da empresa'}
+          </p>
+        </article>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <article className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Itens prontos</p>
+              <p className="mt-1.5 text-4xl font-semibold text-emerald-700">{readyCount}</p>
+              <p className="mt-1 text-xs text-slate-500">Fluxos prontos para operacao.</p>
+            </div>
+            <CheckCircle2 size={32} className="text-emerald-200" />
+          </div>
+          <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-emerald-500 transition-all duration-700" style={{ width: `${readyPct}%` }} />
+          </div>
+          <p className="mt-1 text-right text-[10px] text-slate-400">{readyPct}% completo</p>
+        </article>
+
+        <article className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Pendencias</p>
+              <p className="mt-1.5 text-4xl font-semibold text-slate-700">{pendingCount}</p>
+              <p className="mt-1 text-xs text-slate-500">Necessarios antes da ativacao.</p>
+            </div>
+            <Clock size={32} className="text-slate-200" />
+          </div>
+        </article>
+
+        <article className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Atencao</p>
+              <p className="mt-1.5 text-4xl font-semibold text-amber-700">{attentionCount}</p>
+              <p className="mt-1 text-xs text-slate-500">Funcionais, aguardando validacao.</p>
+            </div>
+            <Activity size={32} className="text-amber-100" />
+          </div>
+        </article>
+      </section>
+
+      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Checklist de prontidao</h3>
+            <p className="text-sm text-slate-500">Leitura rapida do que esta pronto, pendente ou em atencao.</p>
+          </div>
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+            {readyCount}/{checklist.length}
+          </span>
+        </div>
+        {checklist.length > 0 ? (
+          <div className="space-y-2">
+            {checklist.map((item) => (
+              <StatusRow key={item.id} item={item} />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+            Nenhum item de checklist encontrado.
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+        <div className="mb-5">
+          <h3 className="text-lg font-semibold text-slate-900">Ultimos audit logs</h3>
+          <p className="text-sm text-slate-500">Historico recente de operacoes sensiveis no escopo atual.</p>
+        </div>
+        {recentAuditLogs.length > 0 ? (
+          <div className="space-y-2">
+            {recentAuditLogs.map((item, index) => (
+              <div
+                key={`${item.action}-${item.created_at}-${index}`}
+                className="flex items-start justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-slate-900">{item.action}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">{item.company_id || 'sem company_id'}</p>
+                </div>
+                <p className="shrink-0 text-xs text-slate-400">
+                  {new Date(item.created_at).toLocaleString('pt-BR')}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+            Nenhum audit log recente encontrado no escopo atual.
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
