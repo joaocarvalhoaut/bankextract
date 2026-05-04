@@ -393,7 +393,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
       </section>
 
       {/* ── CTA FOOTER ───────────────────────────────── */}
-      <section className="overflow-hidden rounded-[32px] bg-gradient-to-br from-slate-950 to-blue-950 p-8 text-center text-white lg:p-12">
+      <section className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-slate-950 to-blue-950 p-8 text-center text-white lg:p-12">
         <div className="pointer-events-none absolute inset-0 dot-grid opacity-30" />
         <div className="relative">
           <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-emerald-400">Pronto para começar?</p>
