@@ -73,7 +73,7 @@ export default function Sidebar({
               </div>
               <div>
                 <p className="text-sm font-bold tracking-tight text-white">BankExtract</p>
-                <p className="text-[11px] leading-tight text-slate-400">SaaS financeiro premium</p>
+                <p className="text-[11px] leading-tight text-slate-300">SaaS financeiro premium</p>
               </div>
               <div className="ml-auto flex h-5 items-center rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 text-[10px] font-bold tracking-[0.18em] text-emerald-300">
                 B2B
@@ -81,7 +81,7 @@ export default function Sidebar({
             </div>
 
             <div className="glass mt-4 rounded-2xl p-3">
-              <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-300">
+              <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                 <Building2 size={10} />
                 Empresa ativa
               </label>
@@ -98,11 +98,11 @@ export default function Sidebar({
                 ))}
               </select>
 
-              <div className="mt-2 text-[11px] text-slate-400">
+              <div className="mt-2 text-[11px] text-slate-500">
                 {activeCompany?.isGlobal ? (
-                  <span className="rounded-lg bg-blue-500/20 px-2 py-1 text-blue-200">Modo global ativo</span>
+                  <span className="rounded-lg bg-blue-50 px-2 py-1 font-semibold text-blue-700">Modo global ativo</span>
                 ) : (
-                  <span className="font-mono opacity-80">{activeCompany?.cnpj || activeCompany?.inviteCode || 'Sem dados'}</span>
+                  <span className="font-mono text-slate-600">{activeCompany?.cnpj || activeCompany?.inviteCode || 'Sem dados'}</span>
                 )}
               </div>
 
