@@ -3,19 +3,19 @@
 @tailwind utilities;
 
 :root {
-  --be-bg: #f7f9fc;
+  --be-bg: #f8fafc;
   --be-card: #ffffff;
   --be-card-muted: #f8fafc;
   --be-border: #e2e8f0;
   --be-text: #0f172a;
-  --be-muted: #64748b;
-  --be-brand: #0e9f6e;
-  --be-brand-dark: #0c7a54;
-  --be-blue: #1e3a8a;
+  --be-muted: #475569;
+  --be-brand: #10B981;
+  --be-brand-dark: #059669;
+  --be-blue: #2563EB;
   --be-gold: #d4a017;
   --be-red: #dc2626;
-  --be-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
-  --be-shadow-md: 0 10px 30px -12px rgba(15, 23, 42, 0.16), 0 4px 10px -6px rgba(15, 23, 42, 0.08);
+  --be-shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --be-shadow-md: 0 10px 30px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.05);
   --be-shadow-lg: 0 20px 60px -22px rgba(15, 23, 42, 0.22), 0 10px 24px -16px rgba(15, 23, 42, 0.1);
 }
 
@@ -33,10 +33,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(14, 159, 110, 0.07), transparent 28%),
-    radial-gradient(circle at top right, rgba(30, 58, 138, 0.08), transparent 32%),
-    linear-gradient(180deg, #f8fbff 0%, #f7f9fc 52%, #f4f7fb 100%);
+  background: #F8FAFC;
   color: var(--be-text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
@@ -51,8 +48,8 @@ body {
 }
 
 ::selection {
-  background: rgba(14, 159, 110, 0.16);
-  color: var(--be-brand-dark);
+  background: rgba(16, 185, 129, 0.18);
+  color: #059669;
 }
 
 ::-webkit-scrollbar {
@@ -74,7 +71,7 @@ body {
 }
 
 *:focus-visible {
-  outline: 2px solid rgba(14, 159, 110, 0.75);
+  outline: 2px solid rgba(16, 185, 129, 0.80);
   outline-offset: 2px;
 }
 
@@ -91,8 +88,8 @@ body {
 }
 
 .glass {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   backdrop-filter: blur(16px) saturate(1.2);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
 }
@@ -105,7 +102,7 @@ body {
 }
 
 .text-gradient {
-  background: linear-gradient(135deg, #0e9f6e 0%, #10b981 45%, #2563eb 100%);
+  background: linear-gradient(135deg, #10B981 0%, #34d399 45%, #2563eb 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -123,8 +120,8 @@ body {
 }
 
 .input-premium:focus {
-  border-color: rgba(14, 159, 110, 0.48);
-  box-shadow: 0 0 0 4px rgba(14, 159, 110, 0.12);
+  border-color: rgba(16, 185, 129, 0.55);
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.14);
 }
 
 .card-hover {
@@ -147,7 +144,7 @@ body {
   position: absolute;
   inset: 0 0 auto 0;
   height: 3px;
-  background: linear-gradient(90deg, #0e9f6e 0%, #10b981 46%, #2563eb 100%);
+  background: linear-gradient(90deg, #10B981 0%, #34d399 46%, #2563eb 100%);
 }
 
 .nav-item-active {
@@ -163,15 +160,15 @@ body {
   width: 3px;
   transform: translateY(-50%);
   border-radius: 999px;
-  background: linear-gradient(180deg, #0e9f6e 0%, #2563eb 100%);
+  background: linear-gradient(180deg, #10B981 0%, #2563eb 100%);
 }
 
 .hero-mesh {
   background:
-    radial-gradient(circle at 14% 22%, rgba(16, 185, 129, 0.2), transparent 28%),
-    radial-gradient(circle at 86% 78%, rgba(59, 130, 246, 0.18), transparent 30%),
-    radial-gradient(circle at 42% 88%, rgba(212, 160, 23, 0.12), transparent 26%),
-    linear-gradient(135deg, #08111f 0%, #0f172a 44%, #12284f 100%);
+    radial-gradient(circle at 14% 22%, rgba(16, 185, 129, 0.22), transparent 28%),
+    radial-gradient(circle at 86% 78%, rgba(37, 99, 235, 0.2), transparent 30%),
+    radial-gradient(circle at 42% 88%, rgba(212, 160, 23, 0.1), transparent 26%),
+    linear-gradient(135deg, #0b1220 0%, #0f172a 48%, #102347 100%);
 }
 
 .dot-grid {
@@ -246,11 +243,11 @@ button:active:not(:disabled) {
 @keyframes ring-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(14, 159, 110, 0.28);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.30);
   }
 
   50% {
-    box-shadow: 0 0 0 9px rgba(14, 159, 110, 0);
+    box-shadow: 0 0 0 9px rgba(16, 185, 129, 0);
   }
 }
 

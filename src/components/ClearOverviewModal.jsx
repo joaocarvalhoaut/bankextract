@@ -29,12 +29,12 @@ export default function ClearOverviewModal({
               <ShieldAlert size={22} />
             </div>
             <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-white/85 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-red-600">
+              <div className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-white/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-red-600">
                 <AlertTriangle size={12} />
                 Acao destrutiva
               </div>
-              <h3 className="text-2xl font-semibold text-slate-950">Limpar Visao Geral</h3>
-              <p className="text-sm leading-6 text-slate-600">
+              <h3 className="text-2xl font-semibold text-white">Limpar Visao Geral</h3>
+              <p className="text-sm leading-6 text-slate-100">
                 Isso removera todos os registros financeiros da empresa selecionada e deixara a carteira pronta para uma nova importacao.
               </p>
             </div>
@@ -42,7 +42,7 @@ export default function ClearOverviewModal({
         </div>
 
         <div className="space-y-5 px-6 py-6">
-          <div className="rounded-[26px] border border-red-200 bg-red-50/90 p-5 shadow-sm">
+          <div className="rounded-[26px] border border-red-200 bg-red-50/95 p-5 shadow-sm">
             <div className="flex items-start gap-3">
               <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-600" />
               <div className="space-y-2 text-sm text-red-900">
@@ -50,7 +50,7 @@ export default function ClearOverviewModal({
                   <span className="font-semibold">Empresa:</span> {companyName || 'Empresa selecionada'}
                 </p>
                 <p>Esta acao nao pode ser desfeita.</p>
-                <p>O historico de cobrancas e mantido separado para auditoria futura.</p>
+                <p>O historico de cobrancas sera mantido separado para auditoria futura.</p>
               </div>
             </div>
           </div>
@@ -58,7 +58,7 @@ export default function ClearOverviewModal({
           <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 shadow-sm">
             <div className="flex items-start gap-2">
               <Sparkles size={15} className="mt-0.5 shrink-0" />
-              <p>Use esta limpeza apenas quando quiser substituir completamente a carteira atual da empresa por uma nova importacao.</p>
+              <p>Use esta limpeza apenas quando quiser substituir completamente a carteira atual por uma nova importacao.</p>
             </div>
           </div>
 
@@ -70,12 +70,12 @@ export default function ClearOverviewModal({
               value={confirmationText}
               onChange={(event) => setConfirmationText(event.target.value)}
               placeholder={companyName || 'Nome da empresa'}
-              className="input-premium w-full"
+              className="input-premium w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none ring-red-500 focus:ring-2"
             />
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-slate-200/80 bg-slate-50/70 px-6 py-4 sm:flex-row sm:justify-end">
+        <div className="flex flex-col gap-3 border-t border-slate-200/80 bg-slate-50/80 px-6 py-4 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onClose}

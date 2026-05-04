@@ -2,7 +2,7 @@ import { Bell, Building2, Zap } from 'lucide-react';
 
 export default function Header({ title, subtitle, companyName, actions = null }) {
   return (
-    <header className="accent-bar card-hover mb-6 overflow-hidden rounded-[30px] border border-white/70 bg-white/90 shadow-card backdrop-blur-sm">
+    <header className="accent-bar mb-6 overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-card">
       <div className="px-5 py-4 lg:px-6 lg:py-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0 space-y-1">
@@ -16,11 +16,11 @@ export default function Header({ title, subtitle, companyName, actions = null })
                 SaaS Premium
               </div>
             </div>
-            <h1 className="truncate text-2xl font-semibold tracking-tight text-slate-950 lg:text-3xl">
+            <h1 className="truncate text-2xl font-bold tracking-tight text-slate-900 lg:text-3xl">
               {title}
             </h1>
             {subtitle ? (
-              <p className="max-w-2xl text-sm leading-relaxed text-slate-500 lg:text-[15px]">{subtitle}</p>
+              <p className="max-w-2xl text-sm leading-relaxed text-slate-700 lg:text-[15px]">{subtitle}</p>
             ) : null}
           </div>
 

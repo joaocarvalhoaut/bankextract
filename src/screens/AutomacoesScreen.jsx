@@ -112,42 +112,90 @@ export default function AutomacoesScreen({
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
             <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Proxima execucao</p>
-            <p className="mt-2 text-xl font-semibold text-slate-900">{configLoading ? '...' : proximaExecucao}</p>
+            <p className="mt-2 text-sm font-semibold text-slate-900">{configLoading ? '...' : proximaExecucao}</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
-          {rules.rules.map((rule) => (
-            <button
-              key={rule.day}
-              type="button"
-              onClick={() => onToggleRule(rule.day)}
-              className={`card-hover rounded-2xl border px-4 py-4 text-left transition ${
-                rule.active ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'
-              }`}
-            >
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm font-semibold text-slate-900">{rule.day}</span>
-                <ToggleLeft size={18} className={rule.active ? 'text-emerald-700' : 'text-slate-400'} />
+        {globalMode ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
+            <p className="font-semibold">Modo global ativo</p>
+            <p className="mt-1 text-xs text-amber-700">
+              Selecione uma empresa especifica para editar regras de automacao individuais.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {(rules.items || []).map((rule, idx) => (
+              <div
+                key={rule.id || idx}
+                className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    <Clock3 size={16} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{rule.label || `Regra ${idx + 1}`}</p>
+                    <p className="text-xs text-slate-500">{rule.description || 'Cadencia por atraso'}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onToggleRule && onToggleRule(rule.id)}
+                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                    rule.active
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                      : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-100'
+                  }`}
+                >
+                  <ToggleLeft size={13} />
+                  {rule.active ? 'Ativo' : 'Inativo'}
+                </button>
               </div>
-              <p className="text-xs text-slate-500">Cobranca automatica por atraso.</p>
-            </button>
-          ))}
-        </div>
+            ))}
 
-        <div className="mt-5 flex justify-end">
-          <button
-            type="button"
-            onClick={onSaveRules}
-            className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800"
-          >
-            <Clock3 size={14} />
-            Salvar automacoes
-          </button>
-        </div>
+            {!(rules.items || []).length && (
+              <div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-200 py-10 text-sm text-slate-400">
+                Nenhuma regra configurada ainda.
+              </div>
+            )}
+
+            {onSaveRules && (
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={onSaveRules}
+                  className="rounded-2xl bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+                >
+                  Salvar regras
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
-      <WhatsAppAutoConfig empresaId={companyId} empresaNome={companyName} globalMode={globalMode} />
+      <section className="accent-bar rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+        <div className="mb-5 flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-700">
+            <Clock3 size={22} />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Configuracao WhatsApp</h3>
+            <p className="text-sm text-slate-500">
+              Gerencie o agendador automatico de cobranca via WhatsApp.
+            </p>
+          </div>
+        </div>
+
+        {companyId ? (
+          <WhatsAppAutoConfig companyId={companyId} companyName={companyName} />
+        ) : (
+          <div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-200 py-10 text-sm text-slate-400">
+            Selecione uma empresa para configurar o WhatsApp automatico.
+          </div>
+        )}
+      </section>
     </div>
   );
 }

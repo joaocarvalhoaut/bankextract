@@ -6,7 +6,7 @@ function SectionHeader({ title, subtitle, badge }) {
   return (
     <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h3 className="text-lg font-semibold tracking-tight text-slate-900">{title}</h3>
+        <h3 className="text-lg font-bold tracking-tight text-slate-900">{title}</h3>
         {subtitle ? <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p> : null}
       </div>
       {badge ? (
@@ -28,7 +28,7 @@ function MiniBars({ items = [] }) {
         return (
           <div key={item.label}>
             <div className="mb-2 flex items-center justify-between text-xs">
-              <span className="font-medium text-slate-700">{item.label}</span>
+              <span className="font-semibold text-slate-800">{item.label}</span>
               <span className="font-semibold text-slate-900">{formatCurrencyBRL(item.value || 0)}</span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-slate-100">
@@ -76,8 +76,8 @@ export default function DashboardScreen({ metrics }) {
         <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100">
           <Activity size={28} className="text-slate-400" />
         </div>
-        <h3 className="text-xl font-semibold tracking-tight text-slate-900">Sem dados financeiros</h3>
-        <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500">
+        <h3 className="text-xl font-bold tracking-tight text-slate-900">Sem dados financeiros</h3>
+        <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-600">
           Importe uma carteira para popular o dashboard executivo com metricas reais da empresa ativa.
         </p>
       </div>
@@ -86,7 +86,7 @@ export default function DashboardScreen({ metrics }) {
 
   return (
     <div className="space-y-6">
-      <section className="hero-mesh overflow-hidden rounded-[32px] p-6 text-white shadow-lifted lg:p-8">
+      <section className="hero-mesh overflow-hidden rounded-[32px] p-7 text-white shadow-lifted lg:p-9">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <div>
             <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -94,10 +94,10 @@ export default function DashboardScreen({ metrics }) {
               {operational.autoChargeActive ? <StatusPill active label="Cobranca automatica" tone="blue" /> : null}
               {operational.whatsappMockMode ? <StatusPill active label="Modo teste WhatsApp" tone="amber" /> : null}
             </div>
-            <h2 className="max-w-2xl text-3xl font-semibold tracking-tight text-white lg:text-4xl">
+            <h2 className="max-w-2xl text-3xl font-bold tracking-tight text-white lg:text-4xl">
               Operacao financeira organizada para escalar cobrancas com seguranca.
             </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-300 lg:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white lg:text-base">
               O BankExtract consolida carteira, lotes importados, automacoes e sinais operacionais em uma leitura
               executiva pronta para venda e para a rotina do financeiro.
             </p>
@@ -111,8 +111,8 @@ export default function DashboardScreen({ metrics }) {
               { label: 'Ambiente', value: operational.whatsappMockMode ? 'Modo teste' : 'Pronto para real' },
             ].map((item) => (
               <div key={item.label} className="glass rounded-2xl p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{item.label}</p>
-                <p className="mt-2 text-sm font-semibold text-white">{item.value}</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-200">{item.label}</p>
+                <p className="mt-1.5 text-sm font-semibold text-white">{item.value}</p>
               </div>
             ))}
           </div>
@@ -139,7 +139,7 @@ export default function DashboardScreen({ metrics }) {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {metrics.charts.importacoes.map((item) => (
                 <div key={item.label} className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{item.label}</p>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-200">{item.label}</p>
                   <p className="mt-2 text-2xl font-bold text-slate-900">{item.value}</p>
                 </div>
               ))}
@@ -174,7 +174,7 @@ export default function DashboardScreen({ metrics }) {
               },
             ].map((row) => (
               <div key={row.label} className="rounded-2xl bg-slate-50 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{row.label}</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-200">{row.label}</p>
                 <p className={`mt-1.5 text-sm font-semibold ${row.cls}`}>{row.value}</p>
               </div>
             ))}
@@ -207,23 +207,20 @@ export default function DashboardScreen({ metrics }) {
               },
               {
                 label: 'Leitura multiempresa',
-                desc: 'Indicadores respeitam empresa ativa e company_id. Modo global apenas para admin.',
+                desc: 'Voce esta em modo global com visao consolidada de todas as empresas, ou no escopo isolado de uma.',
                 icon: BarChart3,
                 color: 'text-blue-600',
                 bg: 'bg-blue-50',
               },
-            ].map((card) => {
-              const Icon = card.icon;
-              return (
-                <div key={card.label} className={`rounded-2xl ${card.bg} p-4`}>
-                  <div className="mb-2 flex items-center gap-2">
-                    <Icon size={15} className={card.color} />
-                    <p className="text-xs font-semibold text-slate-700">{card.label}</p>
-                  </div>
-                  <p className="text-xs leading-relaxed text-slate-500">{card.desc}</p>
+            ].map(({ label, desc, icon: Icon, color, bg }) => (
+              <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl ${bg}`}>
+                  <Icon size={18} className={color} />
                 </div>
-              );
-            })}
+                <p className="text-sm font-semibold text-slate-900">{label}</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-500">{desc}</p>
+              </div>
+            ))}
           </div>
         </article>
       </section>

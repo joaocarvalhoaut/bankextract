@@ -357,4 +357,13 @@ export default function FinanceTable({
             <p className="text-xs text-slate-500">Pagina {page} de {totalPages} · {allRows.length} registros</p>
             <div className="flex items-center gap-1">
               <button onClick={() => setPage(1)} disabled={page === 1} className="rounded border border-slate-200 px-2 py-1 text-xs disabled:opacity-40">{'<<'}</button>
-              <button onClick={() => setPag
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="rounded border border-slate-200 px-2 py-1 text-xs disabled:opacity-40">{'<'}</button>
+              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="rounded border border-slate-200 px-2 py-1 text-xs disabled:opacity-40">{'>'}</button>
+              <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="rounded border border-slate-200 px-2 py-1 text-xs disabled:opacity-40">{'>>'}</button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}

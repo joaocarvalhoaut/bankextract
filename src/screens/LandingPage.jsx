@@ -111,12 +111,12 @@ const steps = [
 function FeatureCard({ icon: Icon, color, title, description }) {
   const c = colorMap[color] || colorMap.emerald;
   return (
-    <article className={`group rounded-[22px] border ${c.border} bg-white p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card`}>
+      <article className={`group rounded-[22px] border ${c.border} bg-white p-5 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lifted`}>
       <div className={`mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl ${c.bg}`}>
         <Icon size={20} className={c.text} />
       </div>
       <h3 className="mb-2 text-base font-semibold text-slate-900">{title}</h3>
-      <p className="text-sm leading-relaxed text-slate-500">{description}</p>
+      <p className="text-sm leading-relaxed text-slate-600">{description}</p>
     </article>
   );
 }
@@ -135,7 +135,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
         <div className="relative grid grid-cols-1 gap-12 xl:grid-cols-[1.15fr_0.85fr]">
           {/* Left column */}
           <div className="space-y-7">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-500/15 px-4 py-1.5 text-xs font-semibold tracking-widest text-emerald-300">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-500/25 px-4 py-1.5 text-xs font-semibold tracking-widest text-emerald-300">
               <Sparkles size={12} />
               SaaS financeiro pronto para operar
             </div>
@@ -146,7 +146,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                 bancários em carteira<br />
                 <span className="text-gradient">financeira inteligente.</span>
               </h1>
-              <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-300 lg:text-lg">
+              <p className="mt-5 max-w-xl text-base leading-relaxed text-white lg:text-lg">
                 Importe documentos, organize vencidos por empresa, automatize cobranças via WhatsApp e entregue visão clara da sua carteira financeira em minutos.
               </p>
             </div>
@@ -162,14 +162,14 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
               </button>
               <a
                 href="mailto:comercial@bankextract.app?subject=Demo%20BankExtract"
-                className="inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-white/8 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/15"
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-white/15 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/25"
               >
                 Agendar demonstração
               </a>
               <button
                 type="button"
                 onClick={onOpenPlans}
-                className="inline-flex items-center gap-1.5 rounded-2xl px-4 py-3.5 text-sm font-medium text-slate-300 transition hover:text-white"
+                className="inline-flex items-center gap-1.5 rounded-2xl px-4 py-3.5 text-sm font-medium text-slate-200 transition hover:text-white"
               >
                 Ver planos <ChevronRight size={14} />
               </button>
@@ -178,9 +178,9 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
             {/* Stats row */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {stats.map((s) => (
-                <div key={s.label} className="rounded-2xl border border-white/8 bg-white/6 px-4 py-3.5 backdrop-blur-sm">
+                <div key={s.label} className="rounded-2xl border border-white/8 bg-white/15 px-4 py-3.5 backdrop-blur-sm">
                   <p className="text-lg font-bold text-white">{s.value}</p>
-                  <p className="mt-0.5 text-[11px] leading-tight text-slate-400">{s.label}</p>
+                  <p className="mt-0.5 text-[11px] leading-tight text-slate-200">{s.label}</p>
                 </div>
               ))}
             </div>
@@ -189,8 +189,8 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
           {/* Right column — UI mockup */}
           <div className="space-y-3">
             {/* KPI mini-preview */}
-            <div className="rounded-[22px] border border-white/10 bg-white/8 p-4 backdrop-blur-sm">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">Dashboard executivo</p>
+            <div className="rounded-[22px] border border-white/20 bg-white/13 p-4 backdrop-blur-sm">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-300">Dashboard executivo</p>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { label: 'Em aberto', value: 'R$ 48.290', color: 'text-emerald-400' },
@@ -198,8 +198,8 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                   { label: 'Cobranças', value: '148',        color: 'text-blue-400'    },
                   { label: 'Sem tel.',  value: '19',          color: 'text-amber-400'   },
                 ].map((k) => (
-                  <div key={k.label} className="rounded-xl bg-white/8 p-3">
-                    <p className="text-[11px] uppercase tracking-wider text-slate-400">{k.label}</p>
+                  <div key={k.label} className="rounded-xl bg-white/15 p-3">
+                    <p className="text-[11px] uppercase tracking-wider text-slate-300">{k.label}</p>
                     <p className={`mt-1.5 text-xl font-bold ${k.color}`}>{k.value}</p>
                   </div>
                 ))}
@@ -207,15 +207,15 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
             </div>
 
             {/* Pipeline mockup */}
-            <div className="rounded-[22px] border border-white/10 bg-white/8 p-4 backdrop-blur-sm">
+            <div className="rounded-[22px] border border-white/20 bg-white/13 p-4 backdrop-blur-sm">
               <div className="mb-3 flex items-center gap-2">
                 <FileSearch size={14} className="text-emerald-400" />
-                <p className="text-xs font-semibold text-slate-300">Pipeline OCR</p>
+                <p className="text-xs font-semibold text-slate-200">Pipeline OCR</p>
               </div>
               <div className="space-y-1.5">
                 {['Enviando arquivo', 'Executando OCR', 'Estruturando dados', 'Validando registros'].map((item, i) => (
-                  <div key={item} className="flex items-center justify-between rounded-xl border border-white/6 bg-white/5 px-3 py-2">
-                    <span className="text-xs text-slate-300">{item}</span>
+                  <div key={item} className="flex items-center justify-between rounded-xl border border-white/6 bg-white/12 px-3 py-2">
+                    <span className="text-xs text-slate-200">{item}</span>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${i < 3 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/30 text-slate-500'}`}>
                       {i < 3 ? '✓' : '…'}
                     </span>
@@ -225,10 +225,10 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
             </div>
 
             {/* WhatsApp mockup */}
-            <div className="rounded-[22px] border border-white/10 bg-white/8 p-4 backdrop-blur-sm">
+            <div className="rounded-[22px] border border-white/20 bg-white/13 p-4 backdrop-blur-sm">
               <div className="mb-3 flex items-center gap-2">
                 <Zap size={14} className="text-amber-400" />
-                <p className="text-xs font-semibold text-slate-300">Cobrança automática</p>
+                <p className="text-xs font-semibold text-slate-200">Cobrança automática</p>
                 <span className="ml-auto rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-400">Modo teste</span>
               </div>
               <div className="space-y-1.5">
@@ -237,10 +237,10 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                   { name: 'CLÍNICA SANTA LUZIA',    status: 'pendente', valor: 'R$ 1.850' },
                   { name: 'LOJAS CENTRO SUL',        status: 'sem tel.', valor: 'R$ 990'   },
                 ].map((r) => (
-                  <div key={r.name} className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2">
+                  <div key={r.name} className="flex items-center justify-between rounded-xl bg-white/12 px-3 py-2">
                     <div>
-                      <p className="text-[11px] font-semibold text-slate-200">{r.name}</p>
-                      <p className="text-[10px] text-slate-500">{r.valor}</p>
+                      <p className="text-[11px] font-semibold text-white">{r.name}</p>
+                      <p className="text-[10px] text-slate-300">{r.valor}</p>
                     </div>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                       r.status === 'enviado'  ? 'bg-emerald-500/20 text-emerald-400' :
@@ -265,7 +265,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
         </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           {steps.map((s, idx) => (
-            <div key={s.n} className="relative rounded-[20px] bg-slate-50 p-5">
+            <div key={s.n} className="relative rounded-[20px] border border-slate-200 bg-slate-50 p-5">
               {idx < steps.length - 1 && (
                 <div className="absolute right-0 top-1/2 hidden h-px w-4 -translate-y-1/2 translate-x-full bg-slate-200 xl:block" />
               )}
@@ -318,7 +318,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
           ].map((b) => (
             <div key={b} className="flex items-start gap-3 rounded-2xl bg-white/70 px-4 py-3.5 shadow-soft">
               <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0 text-emerald-600" />
-              <p className="text-sm font-medium text-slate-700">{b}</p>
+              <p className="text-sm font-semibold text-slate-800">{b}</p>
             </div>
           ))}
         </div>
@@ -413,7 +413,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
             </button>
             <a
               href="mailto:comercial@bankextract.app?subject=Contato%20BankExtract"
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-white/8 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/15"
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-white/15 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/25"
             >
               Falar com time comercial
             </a>
