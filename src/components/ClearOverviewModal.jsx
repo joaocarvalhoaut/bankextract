@@ -33,8 +33,8 @@ export default function ClearOverviewModal({
                 <AlertTriangle size={12} />
                 Acao destrutiva
               </div>
-              <h3 className="text-2xl font-semibold text-white">Limpar Visao Geral</h3>
-              <p className="text-sm leading-6 text-slate-100">
+              <h3 className="text-2xl font-semibold text-slate-950">Limpar Visao Geral</h3>
+              <p className="text-sm leading-6 text-slate-600">
                 Isso removera todos os registros financeiros da empresa selecionada e deixara a carteira pronta para uma nova importacao.
               </p>
             </div>

@@ -86,7 +86,7 @@ export default function DashboardScreen({ metrics }) {
 
   return (
     <div className="space-y-6">
-      <section className="hero-mesh overflow-hidden rounded-[32px] p-7 text-white shadow-lifted lg:p-9">
+      <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-200 bg-white p-7 shadow-lifted lg:p-9">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <div>
             <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -94,10 +94,10 @@ export default function DashboardScreen({ metrics }) {
               {operational.autoChargeActive ? <StatusPill active label="Cobranca automatica" tone="blue" /> : null}
               {operational.whatsappMockMode ? <StatusPill active label="Modo teste WhatsApp" tone="amber" /> : null}
             </div>
-            <h2 className="max-w-2xl text-3xl font-bold tracking-tight text-white lg:text-4xl">
+            <h2 className="max-w-2xl text-3xl font-bold tracking-tight text-slate-950 lg:text-4xl">
               Operacao financeira organizada para escalar cobrancas com seguranca.
             </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white lg:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 lg:text-base">
               O BankExtract consolida carteira, lotes importados, automacoes e sinais operacionais em uma leitura
               executiva pronta para venda e para a rotina do financeiro.
             </p>
@@ -110,9 +110,9 @@ export default function DashboardScreen({ metrics }) {
               { label: 'Audit log recente', value: operational.recentAuditAction || 'Sem atividade' },
               { label: 'Ambiente', value: operational.whatsappMockMode ? 'Modo teste' : 'Pronto para real' },
             ].map((item) => (
-              <div key={item.label} className="glass rounded-2xl p-4">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-200">{item.label}</p>
-                <p className="mt-1.5 text-sm font-semibold text-white">{item.value}</p>
+              <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
+                <p className="mt-1.5 text-sm font-semibold text-slate-900">{item.value}</p>
               </div>
             ))}
           </div>
@@ -139,7 +139,7 @@ export default function DashboardScreen({ metrics }) {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {metrics.charts.importacoes.map((item) => (
                 <div key={item.label} className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-200">{item.label}</p>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
                   <p className="mt-2 text-2xl font-bold text-slate-900">{item.value}</p>
                 </div>
               ))}
@@ -174,7 +174,7 @@ export default function DashboardScreen({ metrics }) {
               },
             ].map((row) => (
               <div key={row.label} className="rounded-2xl bg-slate-50 px-4 py-3">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-200">{row.label}</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{row.label}</p>
                 <p className={`mt-1.5 text-sm font-semibold ${row.cls}`}>{row.value}</p>
               </div>
             ))}

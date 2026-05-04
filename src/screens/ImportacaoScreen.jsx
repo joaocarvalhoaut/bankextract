@@ -69,37 +69,37 @@ export default function ImportacaoScreen({
 
   return (
     <div className="space-y-6">
-      <section className="hero-mesh overflow-hidden rounded-[32px] p-6 text-white shadow-lifted lg:p-8">
+      <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-200 bg-white p-6 shadow-lifted lg:p-8">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           <div>
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
               <Wand2 size={13} />
               OCR operacional
             </div>
-            <h2 className="max-w-2xl text-3xl font-semibold tracking-tight text-white lg:text-4xl">
+            <h2 className="max-w-2xl text-3xl font-semibold tracking-tight text-slate-950 lg:text-4xl">
               Importe documentos e transforme arquivos soltos em carteira acionavel.
             </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-300 lg:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 lg:text-base">
               O fluxo abaixo envia o arquivo, extrai os dados por OCR, organiza a previa e grava apenas os registros
               aprovados na empresa ativa.
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            <div className="glass rounded-2xl p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Tipo ativo</p>
-              <p className="mt-2 text-sm font-semibold text-white">{selectedType.label}</p>
-              <p className="mt-1 text-xs text-slate-400">{selectedType.hint}</p>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Tipo ativo</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{selectedType.label}</p>
+              <p className="mt-1 text-xs text-slate-500">{selectedType.hint}</p>
             </div>
-            <div className="glass rounded-2xl p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Empresa destino</p>
-              <p className="mt-2 text-sm font-semibold text-white">{activeCompany?.nome || 'Selecione uma empresa'}</p>
-              <p className="mt-1 text-xs text-slate-400">company_id sempre acompanha o lote importado.</p>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Empresa destino</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{activeCompany?.nome || 'Selecione uma empresa'}</p>
+              <p className="mt-1 text-xs text-slate-500">company_id sempre acompanha o lote importado.</p>
             </div>
-            <div className="glass rounded-2xl p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Permissao</p>
-              <p className="mt-2 text-sm font-semibold text-white">{canImport ? 'Liberada' : 'Restrita'}</p>
-              <p className="mt-1 text-xs text-slate-400">A importacao respeita role e escopo multiempresa.</p>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Permissao</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{canImport ? 'Liberada' : 'Restrita'}</p>
+              <p className="mt-1 text-xs text-slate-500">A importacao respeita role e escopo multiempresa.</p>
             </div>
           </div>
         </div>

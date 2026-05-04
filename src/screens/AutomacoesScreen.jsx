@@ -16,11 +16,11 @@ function calcProximaExecucao(horaEnvio) {
     const [hTarget, mTarget] = (horaEnvio || '08:00').split(':').map(Number);
 
     if (hNow * 60 + mNow < hTarget * 60 + mTarget) {
-      return `Hoje as ${horaEnvio}`;
+      return `Hoje às ${horaEnvio}`;
     }
-    return `Amanha as ${horaEnvio}`;
+    return `Amanhã às ${horaEnvio}`;
   } catch {
-    return `as ${horaEnvio}`;
+    return `às ${horaEnvio}`;
   }
 }
 
@@ -53,34 +53,34 @@ export default function AutomacoesScreen({
 
   return (
     <div className="space-y-6">
-      <section className="hero-mesh overflow-hidden rounded-[32px] p-6 text-white shadow-lifted lg:p-8">
+      <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-200 bg-white p-6 shadow-lifted lg:p-8">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
               <Sparkles size={13} />
-              Automacoes
+              Automações
             </div>
-            <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-white lg:text-4xl">
-              Organize a cobranca automatica por atraso, horario e regras por empresa.
+            <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 lg:text-4xl">
+              Organize a cobrança automática por atraso, horário e regras por empresa.
             </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-300 lg:text-base">
-              O motor abaixo prepara a operacao automatica sem mexer na cobranca real. Tudo continua respeitando
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 lg:text-base">
+              O motor abaixo prepara a operação automática sem mexer na cobrança real. Tudo continua respeitando
               company_id, escopo da empresa ativa e modo global do admin.
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            <div className="glass rounded-2xl p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Status</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{configLoading ? '...' : ativo ? 'Ativo' : 'Inativo'}</p>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Status</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-950">{configLoading ? '...' : ativo ? 'Ativo' : 'Inativo'}</p>
             </div>
-            <div className="glass rounded-2xl p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Horario</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{configLoading ? '...' : horaEnvio}</p>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Horário</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-950">{configLoading ? '...' : horaEnvio}</p>
             </div>
-            <div className="glass rounded-2xl p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Proxima janela</p>
-              <p className="mt-2 text-sm font-semibold text-white">{configLoading ? '...' : proximaExecucao}</p>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Próxima janela</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{configLoading ? '...' : proximaExecucao}</p>
             </div>
           </div>
         </div>
@@ -92,9 +92,9 @@ export default function AutomacoesScreen({
             <Sparkles size={22} />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-slate-900">Regras de automacao</h3>
+            <h3 className="text-lg font-semibold text-slate-900">Regras de automação</h3>
             <p className="text-sm text-slate-500">
-              Motor inicial de cadencia por atraso preparado para Supabase Scheduler.
+              Motor inicial de cadência por atraso preparado para Supabase Scheduler.
             </p>
           </div>
         </div>
@@ -107,11 +107,11 @@ export default function AutomacoesScreen({
             </p>
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Horario de envio</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Horário de envio</p>
             <p className="mt-2 text-2xl font-semibold text-slate-900">{configLoading ? '...' : horaEnvio}</p>
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Proxima execucao</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Próxima execução</p>
             <p className="mt-2 text-sm font-semibold text-slate-900">{configLoading ? '...' : proximaExecucao}</p>
           </div>
         </div>
@@ -120,7 +120,7 @@ export default function AutomacoesScreen({
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
             <p className="font-semibold">Modo global ativo</p>
             <p className="mt-1 text-xs text-amber-700">
-              Selecione uma empresa especifica para editar regras de automacao individuais.
+              Selecione uma empresa específica para editar regras de automação individuais.
             </p>
           </div>
         ) : (
@@ -136,7 +136,7 @@ export default function AutomacoesScreen({
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-slate-900">{rule.label || `Regra ${idx + 1}`}</p>
-                    <p className="text-xs text-slate-500">{rule.description || 'Cadencia por atraso'}</p>
+                    <p className="text-xs text-slate-500">{rule.description || 'Cadência por atraso'}</p>
                   </div>
                 </div>
                 <button
@@ -154,13 +154,13 @@ export default function AutomacoesScreen({
               </div>
             ))}
 
-            {!(rules.items || []).length && (
+            {!(rules.items || []).length ? (
               <div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-200 py-10 text-sm text-slate-400">
                 Nenhuma regra configurada ainda.
               </div>
-            )}
+            ) : null}
 
-            {onSaveRules && (
+            {onSaveRules ? (
               <div className="flex justify-end pt-2">
                 <button
                   type="button"
@@ -170,7 +170,7 @@ export default function AutomacoesScreen({
                   Salvar regras
                 </button>
               </div>
-            )}
+            ) : null}
           </div>
         )}
       </section>
@@ -181,9 +181,9 @@ export default function AutomacoesScreen({
             <Clock3 size={22} />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-slate-900">Configuracao WhatsApp</h3>
+            <h3 className="text-lg font-semibold text-slate-900">Configuração WhatsApp</h3>
             <p className="text-sm text-slate-500">
-              Gerencie o agendador automatico de cobranca via WhatsApp.
+              Gerencie o agendador automático de cobrança via WhatsApp.
             </p>
           </div>
         </div>
@@ -192,7 +192,7 @@ export default function AutomacoesScreen({
           <WhatsAppAutoConfig companyId={companyId} companyName={companyName} />
         ) : (
           <div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-200 py-10 text-sm text-slate-400">
-            Selecione uma empresa para configurar o WhatsApp automatico.
+            Selecione uma empresa para configurar o WhatsApp automático.
           </div>
         )}
       </section>

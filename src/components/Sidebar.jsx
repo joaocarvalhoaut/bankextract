@@ -65,17 +65,17 @@ export default function Sidebar({
   return (
     <aside className="w-full border-r border-slate-200 bg-white lg:min-h-screen lg:w-[286px] lg:px-3 lg:py-5">
       <div className="space-y-4 lg:sticky lg:top-0">
-        <div className="hero-mesh overflow-hidden rounded-[26px] shadow-lifted">
+        <div className="hero-mesh overflow-hidden rounded-[26px] border border-slate-200 shadow-lifted">
           <div className="p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-900/35">
                 <PanelLeftOpen size={18} className="text-white" />
               </div>
               <div>
-                <p className="text-sm font-bold tracking-tight text-white">BankExtract</p>
-                <p className="text-[11px] leading-tight text-slate-300">SaaS financeiro premium</p>
+                <p className="text-sm font-bold tracking-tight text-slate-950">BankExtract</p>
+                <p className="text-[11px] leading-tight text-slate-500">SaaS financeiro premium</p>
               </div>
-              <div className="ml-auto flex h-5 items-center rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 text-[10px] font-bold tracking-[0.18em] text-emerald-300">
+              <div className="ml-auto flex h-5 items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 text-[10px] font-bold tracking-[0.18em] text-emerald-700">
                 B2B
               </div>
             </div>

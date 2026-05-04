@@ -88,36 +88,36 @@ export default function VisaoGeralScreen({
 
   return (
     <div className="space-y-6">
-      <section className="hero-mesh overflow-hidden rounded-[32px] p-6 text-white shadow-lifted lg:p-8">
+      <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-200 bg-white p-6 shadow-lifted lg:p-8">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-300/20 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-100">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
               <WalletCards size={13} />
               Carteira financeira
             </div>
-            <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-white lg:text-4xl">
+            <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 lg:text-4xl">
               Visao consolidada da carteira para operar, exportar e limpar com seguranca.
             </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-300 lg:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 lg:text-base">
               Esta tela concentra registros reais, filtros comerciais e acoes operacionais com company_id, batch_id e
               permissoes por role.
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            <div className="glass rounded-2xl p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Escopo atual</p>
-              <p className="mt-2 text-sm font-semibold text-white">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Escopo atual</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">
                 {globalMode ? 'Todas as empresas' : activeCompanyName || 'Nenhuma empresa ativa'}
               </p>
             </div>
-            <div className="glass rounded-2xl p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Registros visiveis</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{rows.length}</p>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Registros visiveis</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-950">{rows.length}</p>
             </div>
-            <div className="glass rounded-2xl p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Acoes destrutivas</p>
-              <p className="mt-2 text-sm font-semibold text-white">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Acoes destrutivas</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">
                 {globalMode ? 'Bloqueadas no modo global' : canClearView ? 'Controladas por role' : 'Restritas'}
               </p>
             </div>

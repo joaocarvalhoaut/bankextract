@@ -30,34 +30,34 @@ export default function ConfiguracoesScreen({
 }) {
   return (
     <div className="space-y-6">
-      <section className="hero-mesh overflow-hidden rounded-[32px] p-6 text-white shadow-lifted lg:p-8">
+      <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-200 bg-white p-6 shadow-lifted lg:p-8">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-200">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700">
               <Shield size={13} />
-              Configuracoes
+              Configurações
             </div>
-            <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-white lg:text-4xl">
-              Governe empresa ativa, permissoes e prontidao comercial em um unico lugar.
+            <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 lg:text-4xl">
+              Governe empresa ativa, permissões e prontidão comercial em um único lugar.
             </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-300 lg:text-base">
-              Esta tela organiza dados da empresa, usuarios, invite code e preferencias operacionais sem mexer no
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 lg:text-base">
+              Esta tela organiza dados da empresa, usuários, invite code e preferências operacionais sem mexer no
               schema nem no fluxo real do produto.
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            <div className="glass rounded-2xl p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Empresa ativa</p>
-              <p className="mt-2 text-sm font-semibold text-white">{companyName || 'Nenhuma empresa ativa'}</p>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Empresa ativa</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{companyName || 'Nenhuma empresa ativa'}</p>
             </div>
-            <div className="glass rounded-2xl p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Role atual</p>
-              <p className="mt-2 text-sm font-semibold capitalize text-white">{userRole}</p>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Role atual</p>
+              <p className="mt-2 text-sm font-semibold capitalize text-slate-900">{userRole}</p>
             </div>
-            <div className="glass rounded-2xl p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Escopo</p>
-              <p className="mt-2 text-sm font-semibold text-white">{isSystemAdmin ? 'Admin geral habilitado' : 'Escopo da empresa ativa'}</p>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Escopo</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{isSystemAdmin ? 'Admin geral habilitado' : 'Escopo da empresa ativa'}</p>
             </div>
           </div>
         </div>
@@ -70,15 +70,15 @@ export default function ConfiguracoesScreen({
               <span className="font-semibold text-slate-900">Nome:</span> {companyName || 'Nenhuma empresa ativa'}
             </p>
             <p>
-              <span className="font-semibold text-slate-900">CNPJ:</span> {activeCompany?.cnpj || 'Nao informado'}
+              <span className="font-semibold text-slate-900">CNPJ:</span> {activeCompany?.cnpj || 'Não informado'}
             </p>
             <p>
               <span className="font-semibold text-slate-900">Modo:</span>{' '}
-              {activeCompany?.isGlobal ? 'Todas as empresas' : 'Empresa especifica'}
+              {activeCompany?.isGlobal ? 'Todas as empresas' : 'Empresa específica'}
             </p>
             <p>
               <span className="font-semibold text-slate-900">Invite code:</span>{' '}
-              {activeCompany?.inviteCode || 'Indisponivel'}
+              {activeCompany?.inviteCode || 'Indisponível'}
             </p>
             <p>
               <span className="font-semibold text-slate-900">Role atual:</span> {userRole}
@@ -86,29 +86,29 @@ export default function ConfiguracoesScreen({
           </div>
         </InfoCard>
 
-        <InfoCard icon={KeyRound} title="Preferencias de exportacao" badge={isSystemAdmin ? 'Admin' : 'Padrao'}>
+        <InfoCard icon={KeyRound} title="Preferências de exportação" badge={isSystemAdmin ? 'Admin' : 'Padrão'}>
           <div className="space-y-2 text-sm text-slate-600">
             <p>
               <span className="font-semibold text-slate-900">Formato:</span>{' '}
               {settings?.preferencias?.exportacao || 'CSV e Excel'}
             </p>
             <p>
-              <span className="font-semibold text-slate-900">Fuso horario:</span>{' '}
+              <span className="font-semibold text-slate-900">Fuso horário:</span>{' '}
               {settings?.preferencias?.timezone || 'America/Sao_Paulo'}
             </p>
             <p>
-              <span className="font-semibold text-slate-900">Permissao especial:</span>{' '}
-              {isSystemAdmin ? 'Admin geral' : 'Usuario padrao'}
+              <span className="font-semibold text-slate-900">Permissão especial:</span>{' '}
+              {isSystemAdmin ? 'Admin geral' : 'Usuário padrão'}
             </p>
             <p>
-              <span className="font-semibold text-slate-900">Acoes destrutivas:</span>{' '}
+              <span className="font-semibold text-slate-900">Ações destrutivas:</span>{' '}
               {activeCompany?.isGlobal ? 'Bloqueadas no modo global' : 'Controladas por role'}
             </p>
           </div>
         </InfoCard>
       </section>
 
-      <InfoCard icon={Users2} title="Usuarios e permissoes" badge={`${(settings?.usuarios || []).length} usuarios`}>
+      <InfoCard icon={Users2} title="Usuários e permissões" badge={`${(settings?.usuarios || []).length} usuários`}>
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {(settings?.usuarios || []).map((user) => (
             <div key={user.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -119,24 +119,24 @@ export default function ConfiguracoesScreen({
         </div>
       </InfoCard>
 
-      <InfoCard icon={Shield} title="Prontidao comercial" badge="Go-to-market">
+      <InfoCard icon={Shield} title="Prontidão comercial" badge="Go-to-market">
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
             <p className="text-sm font-semibold text-slate-900">Empresa ativa controlada</p>
             <p className="mt-1 text-xs text-slate-500">
-              Selecao por company_id com bloqueio de acoes globais destrutivas.
+              Seleção por company_id com bloqueio de ações globais destrutivas.
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
             <p className="text-sm font-semibold text-slate-900">Convite pronto para onboarding</p>
             <p className="mt-1 text-xs text-slate-500">
-              Use o invite code da empresa para entrada de novos usuarios sem criar outra carteira.
+              Use o invite code da empresa para entrada de novos usuários sem criar outra carteira.
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-sm font-semibold text-slate-900">Permissoes por role</p>
+            <p className="text-sm font-semibold text-slate-900">Permissões por role</p>
             <p className="mt-1 text-xs text-slate-500">
-              Importacao, exportacao e limpeza seguem a role da empresa ativa.
+              Importação, exportação e limpeza seguem a role da empresa ativa.
             </p>
           </div>
         </div>
