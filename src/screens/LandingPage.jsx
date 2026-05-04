@@ -162,7 +162,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
               </button>
               <a
                 href="mailto:comercial@bankextract.app?subject=Demo%20BankExtract"
-                className="inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-white/15 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/25"
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/12 bg-slate-950/25 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-slate-950/35"
               >
                 Agendar demonstração
               </a>
@@ -178,7 +178,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
             {/* Stats row */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {stats.map((s) => (
-                <div key={s.label} className="rounded-2xl border border-white/8 bg-white/15 px-4 py-3.5 backdrop-blur-sm">
+                <div key={s.label} className="rounded-2xl border border-white/10 bg-slate-950/22 px-4 py-3.5 backdrop-blur-sm">
                   <p className="text-lg font-bold text-white">{s.value}</p>
                   <p className="mt-0.5 text-[11px] leading-tight text-slate-200">{s.label}</p>
                 </div>
@@ -189,7 +189,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
           {/* Right column — UI mockup */}
           <div className="space-y-3">
             {/* KPI mini-preview */}
-            <div className="rounded-[22px] border border-white/20 bg-white/13 p-4 backdrop-blur-sm">
+            <div className="rounded-[22px] border border-white/12 bg-slate-950/24 p-4 backdrop-blur-sm">
                 <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-300">Dashboard executivo</p>
               <div className="grid grid-cols-2 gap-2">
                 {[
@@ -198,7 +198,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                   { label: 'Cobranças', value: '148',        color: 'text-blue-400'    },
                   { label: 'Sem tel.',  value: '19',          color: 'text-amber-400'   },
                 ].map((k) => (
-                  <div key={k.label} className="rounded-xl bg-white/15 p-3">
+                  <div key={k.label} className="rounded-xl bg-slate-950/22 p-3">
                     <p className="text-[11px] uppercase tracking-wider text-slate-300">{k.label}</p>
                     <p className={`mt-1.5 text-xl font-bold ${k.color}`}>{k.value}</p>
                   </div>
@@ -207,14 +207,14 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
             </div>
 
             {/* Pipeline mockup */}
-            <div className="rounded-[22px] border border-white/20 bg-white/13 p-4 backdrop-blur-sm">
+            <div className="rounded-[22px] border border-white/12 bg-slate-950/24 p-4 backdrop-blur-sm">
               <div className="mb-3 flex items-center gap-2">
                 <FileSearch size={14} className="text-emerald-400" />
                 <p className="text-xs font-semibold text-slate-200">Pipeline OCR</p>
               </div>
               <div className="space-y-1.5">
                 {['Enviando arquivo', 'Executando OCR', 'Estruturando dados', 'Validando registros'].map((item, i) => (
-                  <div key={item} className="flex items-center justify-between rounded-xl border border-white/6 bg-white/12 px-3 py-2">
+                  <div key={item} className="flex items-center justify-between rounded-xl border border-white/10 bg-slate-950/18 px-3 py-2">
                     <span className="text-xs text-slate-200">{item}</span>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${i < 3 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/30 text-slate-500'}`}>
                       {i < 3 ? '✓' : '…'}
@@ -225,7 +225,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
             </div>
 
             {/* WhatsApp mockup */}
-            <div className="rounded-[22px] border border-white/20 bg-white/13 p-4 backdrop-blur-sm">
+            <div className="rounded-[22px] border border-white/12 bg-slate-950/24 p-4 backdrop-blur-sm">
               <div className="mb-3 flex items-center gap-2">
                 <Zap size={14} className="text-amber-400" />
                 <p className="text-xs font-semibold text-slate-200">Cobrança automática</p>
@@ -237,7 +237,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                   { name: 'CLÍNICA SANTA LUZIA',    status: 'pendente', valor: 'R$ 1.850' },
                   { name: 'LOJAS CENTRO SUL',        status: 'sem tel.', valor: 'R$ 990'   },
                 ].map((r) => (
-                  <div key={r.name} className="flex items-center justify-between rounded-xl bg-white/12 px-3 py-2">
+                  <div key={r.name} className="flex items-center justify-between rounded-xl bg-slate-950/18 px-3 py-2">
                     <div>
                       <p className="text-[11px] font-semibold text-white">{r.name}</p>
                       <p className="text-[10px] text-slate-300">{r.valor}</p>
@@ -316,7 +316,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
             'Integração com Google Sheets por empresa',
             'Audit logs e permissões por role',
           ].map((b) => (
-            <div key={b} className="flex items-start gap-3 rounded-2xl bg-white/70 px-4 py-3.5 shadow-soft">
+            <div key={b} className="flex items-start gap-3 rounded-2xl bg-white px-4 py-3.5 shadow-soft">
               <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0 text-emerald-600" />
               <p className="text-sm font-semibold text-slate-800">{b}</p>
             </div>
@@ -413,7 +413,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
             </button>
             <a
               href="mailto:comercial@bankextract.app?subject=Contato%20BankExtract"
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-white/15 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/25"
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/12 bg-slate-950/25 px-6 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-slate-950/35"
             >
               Falar com time comercial
             </a>

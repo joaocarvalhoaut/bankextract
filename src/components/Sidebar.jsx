@@ -63,7 +63,7 @@ export default function Sidebar({
   const groups = ['marketing', 'core', 'ops', 'admin'];
 
   return (
-    <aside className="w-full border-r border-slate-200/80 bg-white/90 backdrop-blur-sm lg:min-h-screen lg:w-[286px] lg:px-3 lg:py-5">
+    <aside className="w-full border-r border-slate-200 bg-white lg:min-h-screen lg:w-[286px] lg:px-3 lg:py-5">
       <div className="space-y-4 lg:sticky lg:top-0">
         <div className="hero-mesh overflow-hidden rounded-[26px] shadow-lifted">
           <div className="p-4">
