@@ -500,7 +500,7 @@ $$;
 
 alter table public.logs_cobranca
   add constraint logs_cobranca_status_envio_check
-  check (status_envio in ('sucesso', 'erro', 'ignorado'));
+  check (status_envio in ('sucesso', 'sucesso_simulado', 'simulado', 'erro', 'ignorado'));
 
 do $$
 begin

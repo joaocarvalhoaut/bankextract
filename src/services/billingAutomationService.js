@@ -49,12 +49,13 @@ export async function getBillingAutomationOverview(companyId) {
   );
 }
 
-export async function runBillingAutomationNow(companyId) {
+export async function runBillingAutomationNow(companyId, options = {}) {
   return invokeBillingAutomation(
     {
       action: 'run',
       company_id: companyId,
       manual: true,
+      simulate: options.simulate === true,
     },
     'Falha ao executar a régua de cobrança.'
   );

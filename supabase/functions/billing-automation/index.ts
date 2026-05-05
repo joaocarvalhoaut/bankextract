@@ -825,6 +825,7 @@ async function processChargeForRecord(
   folderId: string,
   todayIso: string,
   force = false,
+  simulate = false,
 ) {
   const normalizedStatus = normalizeText(record.status);
   if (CLOSED_STATUSES.has(normalizedStatus)) {
@@ -901,8 +902,48 @@ async function processChargeForRecord(
     return { status: 'erro', reason: 'boleto_nao_encontrado' };
   }
 
-  const base64 = await downloadDriveFileBase64(token, file.id);
   const message = fillTemplate(resolveTemplate(config, tipo), record, diasAtraso);
+
+  if (simulate) {
+    await insertLog(supabaseAdmin, {
+      financeiro_id: record.id,
+      company_id: record.company_id,
+      cliente_nome: record.cliente_nome || record.nome,
+      cliente_numero: record.cliente_numero,
+      telefone: phone,
+      documento: record.documento,
+      numero_boleto: record.numero_boleto,
+      numero_nf: record.numero_nf,
+      valor: record.valor,
+      vencimento: record.data_vencimento,
+      tipo_cobranca: tipo,
+      dias_atraso: diasAtraso,
+      arquivo_encontrado: true,
+      drive_file_id: file.id,
+      status_envio: 'sucesso_simulado',
+      erro: null,
+      payload: {
+        company_id: record.company_id,
+        record_id: record.id,
+        stage: tipo,
+        simulate: true,
+        file_name: file.name || null,
+        message_preview: message,
+      },
+      envio_hash: hash,
+    });
+
+    return {
+      status: 'sucesso',
+      tipo,
+      fileId: file.id,
+      simulated: true,
+      message,
+      fileName: file.name || `${record.numero_boleto || record.documento || record.id}.pdf`,
+    };
+  }
+
+  const base64 = await downloadDriveFileBase64(token, file.id);
   const sendResult = await sendZapiDocument(phone, message, file.name || `${record.numero_boleto || record.documento || record.id}.pdf`, base64);
 
   await supabaseAdmin.from('cobrancas_whatsapp').insert({
@@ -1029,12 +1070,13 @@ async function getOverview(supabaseAdmin: AdminClient, companyId: string, todayI
   if (error) throw new Error(error.message);
 
   const allRows = rows || [];
+  const isSuccessRow = (row: { status_envio?: string | null }) => row.status_envio === 'sucesso' || row.status_envio === 'sucesso_simulado' || row.status_envio === 'simulado';
   return {
     summary: {
-      enviados_hoje: allRows.filter((row) => row.status_envio === 'sucesso').length,
-      preventivos: allRows.filter((row) => row.tipo_cobranca === 'preventiva' && row.status_envio === 'sucesso').length,
-      vencimento: allRows.filter((row) => row.tipo_cobranca === 'vencimento' && row.status_envio === 'sucesso').length,
-      atraso: allRows.filter((row) => row.tipo_cobranca === 'atraso' && row.status_envio === 'sucesso').length,
+      enviados_hoje: allRows.filter((row) => isSuccessRow(row)).length,
+      preventivos: allRows.filter((row) => row.tipo_cobranca === 'preventiva' && isSuccessRow(row)).length,
+      vencimento: allRows.filter((row) => row.tipo_cobranca === 'vencimento' && isSuccessRow(row)).length,
+      atraso: allRows.filter((row) => row.tipo_cobranca === 'atraso' && isSuccessRow(row)).length,
       erros: allRows.filter((row) => row.status_envio === 'erro').length,
       boletos_nao_encontrados: allRows.filter((row) => row.erro === 'boleto_nao_encontrado').length,
     },
@@ -1109,6 +1151,7 @@ Deno.serve(async (req: Request) => {
   let action = 'overview';
   let companyId: string | null = null;
   let manual = false;
+  let simulate = false;
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
@@ -1126,6 +1169,7 @@ Deno.serve(async (req: Request) => {
     action = String(body?.action || 'overview');
     companyId = body?.company_id ? String(body.company_id) : null;
     manual = body?.manual === true;
+    simulate = body?.simulate === true;
     console.log('billing-automation request', { action, company_id: companyId });
 
     if (action === 'get_drive_config' || action === 'save_drive_config' || action === 'test_drive_connection' || action === 'sync_drive') {
@@ -1311,8 +1355,12 @@ Deno.serve(async (req: Request) => {
       const nowTime = currentTimeInSaoPaulo();
       const isManualRun = action === 'run' && manual === true && !cronSecret;
       let sent = 0;
+      let sentSimulated = 0;
       let ignored = 0;
       let errors = 0;
+      let boletosEncontrados = 0;
+      let mensagensGeradas = 0;
+      let arquivosAnexados = 0;
       const companyResults: Array<{ company_id: string; sent: number; ignored: number; errors: number }> = [];
       const debugByCompany: Array<Record<string, unknown>> = [];
 
@@ -1443,6 +1491,7 @@ Deno.serve(async (req: Request) => {
         if (error) throw new Error(error.message);
 
         let companySent = 0;
+        let companySentSimulated = 0;
         let companyIgnored = 0;
         let companyErrors = 0;
         const explainedRecords = (records || []).map((record) => {
@@ -1490,8 +1539,18 @@ Deno.serve(async (req: Request) => {
             folderId,
             todayIso,
             action === 'reprocess_failures',
+            simulate,
           );
-          if (outcome.status === 'sucesso') companySent += 1;
+          if (outcome.status === 'sucesso') {
+            companySent += 1;
+            if (outcome.simulated) {
+              companySentSimulated += 1;
+              sentSimulated += 1;
+            }
+            if (outcome.fileId) boletosEncontrados += 1;
+            if (outcome.message) mensagensGeradas += 1;
+            if (outcome.fileName) arquivosAnexados += 1;
+          }
           else if (outcome.status === 'erro') companyErrors += 1;
           else companyIgnored += 1;
         }
@@ -1506,7 +1565,7 @@ Deno.serve(async (req: Request) => {
           user_id: auth.userId,
           action: action === 'run' ? 'billing_automation_run' : 'billing_automation_reprocess',
           entity: 'logs_cobranca',
-          metadata: { sent: companySent, ignored: companyIgnored, errors: companyErrors, company_id: targetCompanyId },
+          metadata: { sent: companySent, sent_simulated: companySentSimulated, ignored: companyIgnored, errors: companyErrors, company_id: targetCompanyId, simulate },
         }).then(() => {}).catch(() => {});
       }
 
@@ -1515,7 +1574,7 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({
         ok: true,
         message: action === 'run' ? 'Régua executada com sucesso.' : 'Falhas reprocessadas com sucesso.',
-        result: { sent, ignored, errors, companies: companyResults },
+        result: { sent, sent_simulated: sentSimulated, boletos_encontrados: boletosEncontrados, mensagens_geradas: mensagensGeradas, arquivos_anexados: arquivosAnexados, ignored, errors, companies: companyResults },
         debug: companyId
           ? (debugByCompany.find((item) => item.company_id === companyId) || null)
           : debugByCompany[0] || null,

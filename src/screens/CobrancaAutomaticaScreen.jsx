@@ -17,6 +17,8 @@ import { canUserPerformAction } from '../security/permissions';
 
 const statusTone = {
   sucesso: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  sucesso_simulado: 'bg-blue-50 text-blue-700 ring-blue-200',
+  simulado: 'bg-blue-50 text-blue-700 ring-blue-200',
   erro: 'bg-red-50 text-red-700 ring-red-200',
   ignorado: 'bg-amber-50 text-amber-700 ring-amber-200',
 };
@@ -366,6 +368,15 @@ export default function CobrancaAutomaticaScreen({
           >
             {executingAction === 'run' ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
             Executar agora
+          </button>
+          <button
+            type="button"
+            onClick={() => runAction('simulate', (id) => runBillingAutomationNow(id, { simulate: true }), 'Simulacao executada com sucesso.')}
+            disabled={Boolean(executingAction)}
+            className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-soft transition hover:bg-blue-100 disabled:opacity-50"
+          >
+            {executingAction === 'simulate' ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
+            Executar simulacao
           </button>
           <button
             type="button"
