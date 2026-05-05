@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, Loader2, RefreshCcw, Sheet, UploadCloud } from 'lucide-react';
 import DataTable from '../components/DataTable';
 import {
+  getBillingConfig,
   getDriveConfig,
   getBillingAutomationOverview,
   reprocessBillingFailures,
   runBillingAutomationNow,
+  saveBillingConfig,
   saveDriveConfig,
   syncBillingDrive,
   syncBillingSheet,
@@ -73,6 +75,15 @@ export default function CobrancaAutomaticaScreen({
   const [driveFolderInput, setDriveFolderInput] = useState('');
   const [driveSaving, setDriveSaving] = useState(false);
   const [driveTesting, setDriveTesting] = useState(false);
+  const [billingSaving, setBillingSaving] = useState(false);
+  const [billingConfig, setBillingConfig] = useState({
+    ativo: false,
+    hora_execucao: '08:00',
+    mensagem_template: '',
+    intervalo_dias: 5,
+    cobrar_apos_dias_vencido: 1,
+    limite_cobrancas_por_titulo: 4,
+  });
 
   const canManage = canUserPerformAction(userRole, 'manage_automations');
 
@@ -130,6 +141,38 @@ export default function CobrancaAutomaticaScreen({
   useEffect(() => {
     loadDriveConfig();
   }, [loadDriveConfig]);
+
+  const loadBillingConfig = useCallback(async () => {
+    if (!resolvedCompanyId || globalMode) {
+      setBillingConfig({
+        ativo: false,
+        hora_execucao: '08:00',
+        mensagem_template: '',
+        intervalo_dias: 5,
+        cobrar_apos_dias_vencido: 1,
+        limite_cobrancas_por_titulo: 4,
+      });
+      return;
+    }
+
+    try {
+      const data = await getBillingConfig(resolvedCompanyId);
+      setBillingConfig({
+        ativo: Boolean(data?.config?.ativo),
+        hora_execucao: data?.config?.hora_execucao || data?.config?.hora_envio || '08:00',
+        mensagem_template: data?.config?.mensagem_template || '',
+        intervalo_dias: Number(data?.config?.intervalo_dias || 5),
+        cobrar_apos_dias_vencido: Number(data?.config?.cobrar_apos_dias_vencido || 1),
+        limite_cobrancas_por_titulo: Number(data?.config?.limite_cobrancas_por_titulo || 4),
+      });
+    } catch (error) {
+      onToast?.('erro', error.message || 'Falha ao carregar a configuração da régua.');
+    }
+  }, [globalMode, onToast, resolvedCompanyId]);
+
+  useEffect(() => {
+    loadBillingConfig();
+  }, [loadBillingConfig]);
 
   const rows = overview?.rows || [];
   const summary = overview?.summary || {
@@ -253,6 +296,36 @@ export default function CobrancaAutomaticaScreen({
     }
   }, [globalMode, onToast, resolvedCompanyId]);
 
+  const handleSaveBillingConfig = useCallback(async () => {
+    if (!resolvedCompanyId || globalMode) {
+      onToast?.('erro', 'Selecione uma empresa específica para configurar a régua.');
+      return;
+    }
+    if (!canManage) {
+      onToast?.('erro', 'Seu perfil atual não pode gerenciar automações.');
+      return;
+    }
+
+    setBillingSaving(true);
+    try {
+      const data = await saveBillingConfig(resolvedCompanyId, billingConfig);
+      setBillingConfig({
+        ativo: Boolean(data?.config?.ativo),
+        hora_execucao: data?.config?.hora_execucao || data?.config?.hora_envio || '08:00',
+        mensagem_template: data?.config?.mensagem_template || '',
+        intervalo_dias: Number(data?.config?.intervalo_dias || 5),
+        cobrar_apos_dias_vencido: Number(data?.config?.cobrar_apos_dias_vencido || 1),
+        limite_cobrancas_por_titulo: Number(data?.config?.limite_cobrancas_por_titulo || 4),
+      });
+      await loadOverview();
+      onToast?.('sucesso', data?.message || 'Configuração da régua salva com sucesso.');
+    } catch (error) {
+      onToast?.('erro', error.message || 'Falha ao salvar a configuração da régua.');
+    } finally {
+      setBillingSaving(false);
+    }
+  }, [billingConfig, canManage, globalMode, loadOverview, onToast, resolvedCompanyId]);
+
   if (globalMode || !resolvedCompanyId) {
     return (
       <section className="rounded-[28px] border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800 shadow-soft">
@@ -349,6 +422,43 @@ export default function CobrancaAutomaticaScreen({
       </div>
 
       <section className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5 shadow-soft">
+        <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Ativar cobrança automática</span>
+            <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <span className="text-sm font-medium text-slate-700">{billingConfig.ativo ? 'Ativa' : 'Desativada'}</span>
+              <input
+                type="checkbox"
+                checked={Boolean(billingConfig.ativo)}
+                onChange={(event) => setBillingConfig((current) => ({ ...current, ativo: event.target.checked }))}
+                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+            </div>
+          </label>
+
+          <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Horário de execução</span>
+            <input
+              type="time"
+              value={billingConfig.hora_execucao}
+              onChange={(event) => setBillingConfig((current) => ({ ...current, hora_execucao: event.target.value }))}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+            />
+          </label>
+        </div>
+
+        <div className="mb-5 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleSaveBillingConfig}
+            disabled={billingSaving || !canManage}
+            className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {billingSaving ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+            Salvar configuração da régua
+          </button>
+        </div>
+
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-sm font-semibold text-slate-950">Google Drive dos boletos</p>

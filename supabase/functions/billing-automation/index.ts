@@ -624,6 +624,54 @@ async function saveDriveConfigForCompany(
   return await getSheetsDriveConfig(supabaseAdmin, companyId);
 }
 
+async function getBillingConfigForCompany(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+) {
+  requireCompanyId(companyId);
+  const { data, error } = await supabaseAdmin
+    .from('whatsapp_cobranca_config')
+    .select('empresa_id, ativo, hora_execucao, hora_envio, mensagem_template, template_preventiva, template_vencimento, template_atraso, regua_atraso, intervalo_dias, cobrar_apos_dias_vencido, limite_cobrancas_por_titulo')
+    .eq('empresa_id', companyId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function saveBillingConfigForCompany(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  payload: Record<string, unknown>,
+) {
+  requireCompanyId(companyId);
+  const existing = await getBillingConfigForCompany(supabaseAdmin, companyId);
+  const horario = String(payload?.hora_execucao || payload?.hora_envio || existing?.hora_execucao || existing?.hora_envio || DEFAULT_EXECUTION_TIME).trim() || DEFAULT_EXECUTION_TIME;
+
+  const upsertPayload = {
+    empresa_id: companyId,
+    ativo: Boolean(payload?.ativo ?? existing?.ativo ?? false),
+    hora_execucao: horario,
+    hora_envio: horario,
+    mensagem_template: String(payload?.mensagem_template ?? existing?.mensagem_template ?? DEFAULT_ATRASO_TEMPLATE),
+    template_preventiva: String(payload?.template_preventiva ?? existing?.template_preventiva ?? DEFAULT_PREVENTIVA_TEMPLATE),
+    template_vencimento: String(payload?.template_vencimento ?? existing?.template_vencimento ?? DEFAULT_VENCIMENTO_TEMPLATE),
+    template_atraso: String(payload?.template_atraso ?? existing?.template_atraso ?? DEFAULT_ATRASO_TEMPLATE),
+    regua_atraso: Array.isArray(payload?.regua_atraso) ? payload.regua_atraso : (existing?.regua_atraso ?? DEFAULT_RULES),
+    intervalo_dias: Number(payload?.intervalo_dias ?? existing?.intervalo_dias ?? 5) || 5,
+    cobrar_apos_dias_vencido: Number(payload?.cobrar_apos_dias_vencido ?? existing?.cobrar_apos_dias_vencido ?? 1) || 1,
+    limite_cobrancas_por_titulo: Number(payload?.limite_cobrancas_por_titulo ?? existing?.limite_cobrancas_por_titulo ?? 4) || 4,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabaseAdmin
+    .from('whatsapp_cobranca_config')
+    .upsert(upsertPayload, { onConflict: 'empresa_id' });
+
+  if (error) throw new Error(error.message);
+  return await getBillingConfigForCompany(supabaseAdmin, companyId);
+}
+
 async function testDriveConnectionForCompany(
   supabaseAdmin: AdminClient,
   companyId: string,
@@ -917,6 +965,54 @@ async function processChargeForRecord(
   return { status: 'sucesso', tipo, fileId: file.id };
 }
 
+function explainRecordEligibility(
+  record: FinancialRow,
+  config: BillingConfigRow | null,
+  todayIso: string,
+) {
+  const normalizedStatus = normalizeText(record.status);
+  const phone = normalizePhone(record.telefone);
+  const diff = isoDaysDiff(record.data_vencimento, todayIso);
+  const rules = extractRuleDays(config?.regua_atraso);
+
+  let etapa: 'preventiva' | 'vencimento' | 'atraso' | null = null;
+  let motivo = '';
+
+  if (CLOSED_STATUSES.has(normalizedStatus)) {
+    motivo = 'status_fechado';
+  } else if (!OPEN_STATUSES.has(normalizedStatus)) {
+    motivo = 'status_fora_da_regua';
+  } else if (!validatePhone(phone)) {
+    motivo = 'telefone_invalido';
+  } else if (diff === null) {
+    motivo = 'vencimento_invalido';
+  } else if (diff === 1 && record.preventiva_enviada) {
+    motivo = 'preventiva_ja_enviada';
+  } else if (diff === 0 && record.cobranca_vencimento_enviada) {
+    motivo = 'vencimento_ja_enviado';
+  } else if (diff === 1 && !record.preventiva_enviada) {
+    etapa = 'preventiva';
+  } else if (diff === 0 && !record.cobranca_vencimento_enviada) {
+    etapa = 'vencimento';
+  } else if (diff < 0) {
+    const atraso = Math.abs(diff);
+    if (rules.includes(atraso)) etapa = 'atraso';
+    else motivo = 'fora_da_regua';
+  } else {
+    motivo = 'fora_da_regua';
+  }
+
+  return {
+    etapa,
+    motivo_nao_elegivel: motivo || null,
+    dias_para_vencer: diff,
+    dias_atraso: diff !== null && diff < 0 ? Math.abs(diff) : 0,
+    status_aberto: OPEN_STATUSES.has(normalizedStatus) && !CLOSED_STATUSES.has(normalizedStatus),
+    telefone_valido: validatePhone(phone),
+    vencimento_parseado: diff !== null,
+  };
+}
+
 async function getOverview(supabaseAdmin: AdminClient, companyId: string, todayIso: string) {
   const start = `${todayIso}T00:00:00-03:00`;
   const end = `${todayIso}T23:59:59-03:00`;
@@ -1036,9 +1132,22 @@ Deno.serve(async (req: Request) => {
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
     }
 
+    if (action === 'get_billing_config' || action === 'save_billing_config') {
+      requireCompanyId(companyId);
+    }
+
     const auth = await assertCompanyAccess(admin, authClient, companyId, authHeader, cronSecret);
     const todayIso = todayInSaoPaulo();
-    const googleToken = await getGoogleAccessToken();
+    const needsGoogleToken = [
+      'get_drive_config',
+      'save_drive_config',
+      'test_drive_connection',
+      'sync_drive',
+      'sync_sheet',
+      'run',
+      'reprocess_failures',
+    ].includes(action);
+    const googleToken = needsGoogleToken ? await getGoogleAccessToken() : '';
 
     if (action === 'overview') {
       const overview = await getOverview(admin, companyId || '', todayIso);
@@ -1065,6 +1174,55 @@ Deno.serve(async (req: Request) => {
         status: connection.status,
         quantidade_arquivos_pdf: connection.quantidade_arquivos_pdf,
         mensagem_erro: connection.mensagem_erro,
+      });
+    }
+
+    if (action === 'get_billing_config') {
+      requireCompanyId(companyId);
+      const config = await getBillingConfigForCompany(admin, companyId || '');
+      return jsonResponse({
+        ok: true,
+        company_id: companyId,
+        config: {
+          ativo: Boolean(config?.ativo),
+          hora_execucao: config?.hora_execucao || config?.hora_envio || DEFAULT_EXECUTION_TIME,
+          hora_envio: config?.hora_envio || config?.hora_execucao || DEFAULT_EXECUTION_TIME,
+          mensagem_template: config?.mensagem_template || DEFAULT_ATRASO_TEMPLATE,
+          intervalo_dias: Number(config?.intervalo_dias || 5),
+          cobrar_apos_dias_vencido: Number(config?.cobrar_apos_dias_vencido || 1),
+          limite_cobrancas_por_titulo: Number(config?.limite_cobrancas_por_titulo || 4),
+        },
+      });
+    }
+
+    if (action === 'save_billing_config') {
+      requireCompanyId(companyId);
+      const savedConfig = await saveBillingConfigForCompany(admin, companyId || '', body?.config || {});
+
+      await admin.from('audit_logs').insert({
+        company_id: companyId,
+        user_id: auth.userId,
+        action: 'billing_config_saved',
+        entity: 'whatsapp_cobranca_config',
+        metadata: {
+          ativo: Boolean(savedConfig?.ativo),
+          hora_execucao: savedConfig?.hora_execucao || savedConfig?.hora_envio || DEFAULT_EXECUTION_TIME,
+        },
+      }).then(() => {}).catch(() => {});
+
+      return jsonResponse({
+        ok: true,
+        company_id: companyId,
+        message: 'Configuração da régua salva com sucesso.',
+        config: {
+          ativo: Boolean(savedConfig?.ativo),
+          hora_execucao: savedConfig?.hora_execucao || savedConfig?.hora_envio || DEFAULT_EXECUTION_TIME,
+          hora_envio: savedConfig?.hora_envio || savedConfig?.hora_execucao || DEFAULT_EXECUTION_TIME,
+          mensagem_template: savedConfig?.mensagem_template || DEFAULT_ATRASO_TEMPLATE,
+          intervalo_dias: Number(savedConfig?.intervalo_dias || 5),
+          cobrar_apos_dias_vencido: Number(savedConfig?.cobrar_apos_dias_vencido || 1),
+          limite_cobrancas_por_titulo: Number(savedConfig?.limite_cobrancas_por_titulo || 4),
+        },
       });
     }
 
@@ -1153,6 +1311,7 @@ Deno.serve(async (req: Request) => {
       let ignored = 0;
       let errors = 0;
       const companyResults: Array<{ company_id: string; sent: number; ignored: number; errors: number }> = [];
+      const debugByCompany: Array<Record<string, unknown>> = [];
 
       for (const targetCompanyId of companies) {
         if (action === 'run') {
@@ -1168,6 +1327,18 @@ Deno.serve(async (req: Request) => {
 
         if (!config?.ativo && action === 'run') {
           companyResults.push({ company_id: targetCompanyId, sent: 0, ignored: 0, errors: 0 });
+          debugByCompany.push({
+            company_id: targetCompanyId,
+            total_registros_encontrados: 0,
+            total_status_aberto: 0,
+            total_com_telefone: 0,
+            total_com_vencimento: 0,
+            total_preventiva: 0,
+            total_vencimento: 0,
+            total_atraso: 0,
+            primeiros_registros: [],
+            motivo_execucao: 'config_inativa',
+          });
           continue;
         }
 
@@ -1175,6 +1346,18 @@ Deno.serve(async (req: Request) => {
         const folderId = String(driveConfig?.drive_root_folder_id || '').trim();
         if (!folderId) {
           companyResults.push({ company_id: targetCompanyId, sent: 0, ignored: 0, errors: 1 });
+          debugByCompany.push({
+            company_id: targetCompanyId,
+            total_registros_encontrados: 0,
+            total_status_aberto: 0,
+            total_com_telefone: 0,
+            total_com_vencimento: 0,
+            total_preventiva: 0,
+            total_vencimento: 0,
+            total_atraso: 0,
+            primeiros_registros: [],
+            motivo_execucao: 'sem_drive_root_folder_id',
+          });
           await admin.from('audit_logs').insert({
             company_id: targetCompanyId,
             user_id: auth.userId,
@@ -1190,6 +1373,18 @@ Deno.serve(async (req: Request) => {
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Falha ao acessar a pasta do Google Drive.';
           companyResults.push({ company_id: targetCompanyId, sent: 0, ignored: 0, errors: 1 });
+          debugByCompany.push({
+            company_id: targetCompanyId,
+            total_registros_encontrados: 0,
+            total_status_aberto: 0,
+            total_com_telefone: 0,
+            total_com_vencimento: 0,
+            total_preventiva: 0,
+            total_vencimento: 0,
+            total_atraso: 0,
+            primeiros_registros: [],
+            motivo_execucao: 'drive_access_error',
+          });
           await admin.from('audit_logs').insert({
             company_id: targetCompanyId,
             user_id: auth.userId,
@@ -1209,6 +1404,18 @@ Deno.serve(async (req: Request) => {
         const scheduledTime = config?.hora_execucao || DEFAULT_EXECUTION_TIME;
         if (action === 'run' && nowTime.slice(0, 2) !== scheduledTime.slice(0, 2)) {
           companyResults.push({ company_id: targetCompanyId, sent: 0, ignored: 0, errors: 0 });
+          debugByCompany.push({
+            company_id: targetCompanyId,
+            total_registros_encontrados: 0,
+            total_status_aberto: 0,
+            total_com_telefone: 0,
+            total_com_vencimento: 0,
+            total_preventiva: 0,
+            total_vencimento: 0,
+            total_atraso: 0,
+            primeiros_registros: [],
+            motivo_execucao: 'hora_fora_da_janela',
+          });
           continue;
         }
 
@@ -1223,6 +1430,38 @@ Deno.serve(async (req: Request) => {
         let companySent = 0;
         let companyIgnored = 0;
         let companyErrors = 0;
+        const explainedRecords = (records || []).map((record) => {
+          const eligibility = explainRecordEligibility(record as FinancialRow, config as BillingConfigRow | null, todayIso);
+          return {
+            id: record.id,
+            cliente_nome: record.cliente_nome || null,
+            nome: record.nome || null,
+            numero_boleto: record.numero_boleto || null,
+            vencimento: record.data_vencimento || null,
+            data_vencimento: record.data_vencimento || null,
+            status: record.status || null,
+            telefone: record.telefone || null,
+            dias_para_vencer: eligibility.dias_para_vencer,
+            dias_atraso: eligibility.dias_atraso,
+            motivo_nao_elegivel: eligibility.motivo_nao_elegivel,
+            etapa: eligibility.etapa,
+            status_aberto: eligibility.status_aberto,
+            telefone_valido: eligibility.telefone_valido,
+            vencimento_parseado: eligibility.vencimento_parseado,
+          };
+        });
+
+        debugByCompany.push({
+          company_id: targetCompanyId,
+          total_registros_encontrados: (records || []).length,
+          total_status_aberto: explainedRecords.filter((row) => row.status_aberto).length,
+          total_com_telefone: explainedRecords.filter((row) => row.telefone_valido).length,
+          total_com_vencimento: explainedRecords.filter((row) => row.vencimento_parseado).length,
+          total_preventiva: explainedRecords.filter((row) => row.etapa === 'preventiva').length,
+          total_vencimento: explainedRecords.filter((row) => row.etapa === 'vencimento').length,
+          total_atraso: explainedRecords.filter((row) => row.etapa === 'atraso').length,
+          primeiros_registros: explainedRecords.slice(0, 10),
+        });
 
         for (const record of records || []) {
           const outcome = await processChargeForRecord(
@@ -1259,6 +1498,10 @@ Deno.serve(async (req: Request) => {
         ok: true,
         message: action === 'run' ? 'Régua executada com sucesso.' : 'Falhas reprocessadas com sucesso.',
         result: { sent, ignored, errors, companies: companyResults },
+        debug: companyId
+          ? (debugByCompany.find((item) => item.company_id === companyId) || null)
+          : debugByCompany[0] || null,
+        debug_by_company: debugByCompany,
         ...(overview || {}),
       });
     }

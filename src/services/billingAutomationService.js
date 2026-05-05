@@ -99,6 +99,27 @@ export async function getDriveConfig(companyId) {
   );
 }
 
+export async function getBillingConfig(companyId) {
+  return invokeBillingAutomation(
+    {
+      action: 'get_billing_config',
+      company_id: companyId,
+    },
+    'Falha ao carregar a configuracao da regua.'
+  );
+}
+
+export async function saveBillingConfig(companyId, config) {
+  return invokeBillingAutomation(
+    {
+      action: 'save_billing_config',
+      company_id: companyId,
+      config,
+    },
+    'Falha ao salvar a configuracao da regua.'
+  );
+}
+
 export async function saveDriveConfig(companyId, driveRootFolderId) {
   return invokeBillingAutomation(
     {
