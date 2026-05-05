@@ -200,6 +200,17 @@ export async function getBillingHistory(companyId, filters = {}, pagination = {}
   );
 }
 
+export async function getBillingInconsistencies(companyId, filters = {}) {
+  return invokeBillingAutomation(
+    {
+      action: 'get_billing_inconsistencies',
+      company_id: companyId,
+      filters,
+    },
+    'Falha ao carregar o painel de inconsistencias.'
+  );
+}
+
 export async function simulateChargeItem(companyId, registroId) {
   return invokeBillingAutomation(
     {
@@ -220,6 +231,18 @@ export async function updateChargeStatus(companyId, registroId, status) {
       status,
     },
     'Falha ao atualizar o status da cobranca.'
+  );
+}
+
+export async function updateFinancialPhone(companyId, registroId, telefone) {
+  return invokeBillingAutomation(
+    {
+      action: 'update_financial_phone',
+      company_id: companyId,
+      registro_id: registroId,
+      telefone,
+    },
+    'Falha ao atualizar o telefone do registro.'
   );
 }
 

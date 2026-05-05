@@ -19,6 +19,7 @@ const HistoricoScreen = lazy(() => import('./screens/HistoricoScreen'));
 const CobrancasScreen = lazy(() => import('./screens/CobrancasScreen'));
 const CentralCobrancaScreen = lazy(() => import('./screens/CentralCobrancaScreen'));
 const HistoricoCobrancaScreen = lazy(() => import('./screens/HistoricoCobrancaScreen'));
+const InconsistenciasCobrancaScreen = lazy(() => import('./screens/InconsistenciasCobrancaScreen'));
 const AutomacoesScreen = lazy(() => import('./screens/AutomacoesScreen'));
 const IntegracoesScreen = lazy(() => import('./screens/IntegracoesScreen'));
 const ConfiguracoesScreen = lazy(() => import('./screens/ConfiguracoesScreen'));
@@ -152,6 +153,10 @@ const headerMap = {
     title: 'Historico de Cobrancas',
     subtitle: 'Auditoria detalhada das simulacoes e eventos registrados em logs_cobranca por empresa.',
   },
+  inconsistencias: {
+    title: 'Inconsistencias de Cobranca',
+    subtitle: 'Painel preventivo com problemas que podem bloquear ou prejudicar a cobranca automatica.',
+  },
   automacoes: {
     title: 'Automacoes',
     subtitle: 'Cadencias de cobranca e motor automatico por atraso configuravel por empresa.',
@@ -178,7 +183,7 @@ const headerMap = {
   },
 };
 
-const companyDependentTabs = new Set(['importacao', 'visao-geral', 'historico', 'cobrancas', 'central-cobranca', 'historico-cobranca', 'automacoes', 'integracoes']);
+const companyDependentTabs = new Set(['importacao', 'visao-geral', 'historico', 'cobrancas', 'central-cobranca', 'historico-cobranca', 'inconsistencias', 'automacoes', 'integracoes']);
 
 function ScreenFallback() {
   return (
@@ -915,6 +920,19 @@ export default function App() {
       case 'historico-cobranca':
         currentContent = (
           <HistoricoCobrancaScreen
+            companyId={globalMode ? null : currentCompanyId}
+            activeCompanyId={currentCompanyId}
+            activeCompany={empresa.activeCompany}
+            companyName={currentCompanyName}
+            globalMode={globalMode}
+            userRole={empresa.userRole}
+            onToast={showToast}
+          />
+        );
+        break;
+      case 'inconsistencias':
+        currentContent = (
+          <InconsistenciasCobrancaScreen
             companyId={globalMode ? null : currentCompanyId}
             activeCompanyId={currentCompanyId}
             activeCompany={empresa.activeCompany}

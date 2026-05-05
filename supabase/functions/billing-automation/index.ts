@@ -1332,6 +1332,143 @@ function buildHistoryCards(rows: Array<Record<string, unknown>>, todayIso: strin
   };
 }
 
+type InconsistencyKind =
+  | 'sem_telefone'
+  | 'telefone_invalido'
+  | 'sem_boleto'
+  | 'status_invalido'
+  | 'vencimento_ausente'
+  | 'valor_zerado'
+  | 'duplicado'
+  | 'suspenso';
+
+function getInconsistencyMeta(kind: InconsistencyKind) {
+  switch (kind) {
+    case 'sem_telefone':
+      return { label: 'Sem telefone', severity: 'alta', suggestion: 'Cadastrar telefone' };
+    case 'telefone_invalido':
+      return { label: 'Telefone invalido', severity: 'alta', suggestion: 'Corrigir telefone' };
+    case 'sem_boleto':
+      return { label: 'Sem boleto', severity: 'alta', suggestion: 'Reprocessar boleto' };
+    case 'status_invalido':
+      return { label: 'Status invalido', severity: 'media', suggestion: 'Corrigir status' };
+    case 'vencimento_ausente':
+      return { label: 'Vencimento ausente', severity: 'alta', suggestion: 'Informar vencimento' };
+    case 'valor_zerado':
+      return { label: 'Valor zerado', severity: 'alta', suggestion: 'Revisar valor' };
+    case 'duplicado':
+      return { label: 'Duplicado', severity: 'media', suggestion: 'Revisar duplicidade' };
+    case 'suspenso':
+      return { label: 'Suspenso', severity: 'baixa', suggestion: 'Revisar suspensao' };
+    default:
+      return { label: 'Inconsistencia', severity: 'media', suggestion: 'Revisar registro' };
+  }
+}
+
+function buildInconsistencyCards(items: Array<Record<string, unknown>>) {
+  return {
+    sem_telefone: items.filter((item) => item.tipo_problema === 'sem_telefone').length,
+    telefone_invalido: items.filter((item) => item.tipo_problema === 'telefone_invalido').length,
+    sem_boleto: items.filter((item) => item.tipo_problema === 'sem_boleto').length,
+    status_invalido: items.filter((item) => item.tipo_problema === 'status_invalido').length,
+    vencimento_ausente: items.filter((item) => item.tipo_problema === 'vencimento_ausente').length,
+    valor_zerado: items.filter((item) => item.tipo_problema === 'valor_zerado').length,
+    duplicados: items.filter((item) => item.tipo_problema === 'duplicado').length,
+    suspensos: items.filter((item) => item.tipo_problema === 'suspenso').length,
+  };
+}
+
+async function getBillingInconsistenciesData(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  filters: Record<string, unknown>,
+) {
+  const { data: records, error } = await supabaseAdmin
+    .from('registros_financeiros')
+    .select('id, company_id, nome, numero_boleto, data_vencimento, valor, telefone, status, created_at, updated_at')
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  const safeRecords = records || [];
+  const validStatuses = new Set(['pendente', 'pago', 'negociado', 'suspenso', 'cancelado', 'liquidado']);
+
+  const boletoCount = new Map<string, number>();
+  const composedCount = new Map<string, number>();
+
+  for (const record of safeRecords) {
+    const boletoKey = normalizeText(record.numero_boleto);
+    if (boletoKey) {
+      boletoCount.set(boletoKey, (boletoCount.get(boletoKey) || 0) + 1);
+    }
+    const composedKey = `${normalizeText(record.nome)}|${Number(record.valor || 0)}|${String(record.data_vencimento || '')}`;
+    if (normalizeText(record.nome) && String(record.data_vencimento || '')) {
+      composedCount.set(composedKey, (composedCount.get(composedKey) || 0) + 1);
+    }
+  }
+
+  const items: Array<Record<string, unknown>> = [];
+
+  for (const record of safeRecords) {
+    const telefoneDigits = String(record.telefone || '').replace(/\D/g, '');
+    const normalizedStatus = normalizeChargeStatus(record.status);
+    const boletoKey = normalizeText(record.numero_boleto);
+    const composedKey = `${normalizeText(record.nome)}|${Number(record.valor || 0)}|${String(record.data_vencimento || '')}`;
+    const problems: InconsistencyKind[] = [];
+
+    if (!String(record.telefone || '').trim()) problems.push('sem_telefone');
+    else if (telefoneDigits.length < 10) problems.push('telefone_invalido');
+    if (!String(record.numero_boleto || '').trim()) problems.push('sem_boleto');
+    if (!validStatuses.has(normalizedStatus)) problems.push('status_invalido');
+    if (!record.data_vencimento) problems.push('vencimento_ausente');
+    if (record.valor === null || Number(record.valor) <= 0) problems.push('valor_zerado');
+    if ((boletoKey && (boletoCount.get(boletoKey) || 0) > 1) || (!boletoKey && (composedCount.get(composedKey) || 0) > 1)) {
+      problems.push('duplicado');
+    }
+    if (normalizedStatus === 'suspenso') problems.push('suspenso');
+
+    for (const kind of problems) {
+      const meta = getInconsistencyMeta(kind);
+      items.push({
+        id: `${record.id}:${kind}`,
+        registro_id: record.id,
+        company_id: record.company_id,
+        nome: record.nome || 'Cliente',
+        numero_boleto: record.numero_boleto || '',
+        data_vencimento: record.data_vencimento || null,
+        valor: Number(record.valor || 0),
+        telefone: record.telefone || '',
+        status: normalizedStatus || 'pendente',
+        created_at: record.created_at || null,
+        updated_at: record.updated_at || null,
+        tipo_problema: kind,
+        problema_label: meta.label,
+        severidade: meta.severity,
+        acao_sugerida: meta.suggestion,
+      });
+    }
+  }
+
+  const cliente = normalizeText(filters?.cliente as string);
+  const tipoProblema = String(filters?.tipo_problema || '').trim();
+  const severidade = String(filters?.severidade || '').trim();
+  const status = normalizeText(filters?.status as string);
+
+  const filteredItems = items.filter((item) => {
+    if (cliente && !normalizeText(String(item.nome || '')).includes(cliente)) return false;
+    if (tipoProblema && item.tipo_problema !== tipoProblema) return false;
+    if (severidade && item.severidade !== severidade) return false;
+    if (status && normalizeText(String(item.status || '')) !== status) return false;
+    return true;
+  });
+
+  return {
+    cards: buildInconsistencyCards(filteredItems),
+    items: filteredItems,
+  };
+}
+
 async function getBillingHistoryData(
   supabaseAdmin: AdminClient,
   companyId: string,
@@ -1518,7 +1655,7 @@ Deno.serve(async (req: Request) => {
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
     }
 
-    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'preview_template') {
+    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template') {
       requireCompanyId(companyId);
     }
 
@@ -1759,6 +1896,30 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    if (action === 'get_billing_inconsistencies') {
+      try {
+        const filters = body?.filters && typeof body.filters === 'object' ? body.filters : {};
+        const inconsistencies = await getBillingInconsistenciesData(admin, companyId || '', filters as Record<string, unknown>);
+
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'get_billing_inconsistencies',
+          cards: inconsistencies.cards,
+          items: inconsistencies.items,
+        }, 200);
+      } catch (error) {
+        console.error('get_billing_inconsistencies error', error);
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'get_billing_inconsistencies',
+          error: String(error instanceof Error ? error.message : error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
+    }
+
     if (action === 'preview_template') {
       const companyName = await getCompanyName(admin, companyId || '');
       const sample = {
@@ -1813,11 +1974,54 @@ Deno.serve(async (req: Request) => {
 
       return jsonResponse({
         ok: true,
+        success: true,
         company_id: companyId,
         registro_id: registroId,
         status: nextStatus,
         message: 'Status do titulo atualizado com sucesso.',
       });
+    }
+
+    if (action === 'update_financial_phone') {
+      const registroId = String(body?.registro_id || '').trim();
+      if (!registroId) {
+        return jsonResponse({ ok: false, success: false, error: 'registro_id e obrigatorio.' }, 400);
+      }
+
+      const telefone = String(body?.telefone || '').replace(/\D/g, '');
+      const { error: updateError } = await admin
+        .from('registros_financeiros')
+        .update({ telefone: telefone || null, updated_at: new Date().toISOString() })
+        .eq('id', registroId)
+        .eq('company_id', companyId || '');
+
+      if (updateError) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'update_financial_phone',
+          error: updateError.message,
+        }, 200);
+      }
+
+      await admin.from('audit_logs').insert({
+        company_id: companyId,
+        user_id: auth.userId,
+        action: 'billing_phone_updated',
+        entity: 'registros_financeiros',
+        entity_id: registroId,
+        metadata: { telefone: telefone || null },
+      }).then(() => {}).catch(() => {});
+
+      return jsonResponse({
+        ok: true,
+        success: true,
+        action: 'update_financial_phone',
+        company_id: companyId,
+        registro_id: registroId,
+        telefone: telefone || null,
+        message: 'Telefone atualizado com sucesso.',
+      }, 200);
     }
 
     if (action === 'simulate_charge_item') {
