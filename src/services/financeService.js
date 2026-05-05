@@ -358,6 +358,72 @@ export async function getRepresentatives(companyId, tenantOptions = {}) {
   }
 }
 
+export async function updateFinancialRecord(recordId, updates = {}, companyId, tenantOptions = {}) {
+  try {
+    if (!recordId) {
+      throw new Error('recordId é obrigatório para atualizar o registro financeiro.');
+    }
+
+    const payload = updates && typeof updates === 'object' ? { ...updates } : {};
+    const tenant = {
+      ...tenantOptions,
+      companyId: tenantOptions.companyId || companyId,
+    };
+
+    if (!Object.keys(payload).length) {
+      const records = await financeService.fetchRegistros({
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+      });
+      return (records || []).find((row) => row.id === recordId) || { id: recordId, success: true };
+    }
+
+    return await financeService.updateRegistro(recordId, payload, tenant);
+  } catch (error) {
+    throw new Error(error?.message || 'Não foi possível atualizar o registro financeiro.');
+  }
+}
+
+export async function saveRepresentative(companyId, representative = {}, tenantOptions = {}) {
+  try {
+    const payload = {
+      ...representative,
+      company_id: tenantOptions.companyId || companyId,
+      user_id: tenantOptions.userId || representative.user_id,
+    };
+    return await financeService.upsertRepresentante(payload, payload);
+  } catch (error) {
+    throw new Error(error?.message || 'Não foi possível salvar o representante.');
+  }
+}
+
+export async function deleteRepresentative(companyId, representativeId, tenantOptions = {}) {
+  try {
+    if (!representativeId) {
+      throw new Error('representativeId é obrigatório para excluir o representante.');
+    }
+
+    return await financeService.deleteRepresentante(representativeId, {
+      ...tenantOptions,
+      companyId: tenantOptions.companyId || companyId,
+    });
+  } catch (error) {
+    throw new Error(error?.message || 'Não foi possível excluir o representante.');
+  }
+}
+
+export async function deleteFinancialRecords(recordIds = [], tenantOptions = {}) {
+  try {
+    if (!Array.isArray(recordIds) || !recordIds.length) {
+      return true;
+    }
+
+    return await financeService.deleteRegistros(recordIds, tenantOptions);
+  } catch (error) {
+    throw new Error(error?.message || 'Não foi possível excluir os registros financeiros.');
+  }
+}
+
 const mapDbPatchToRegistroPatch = (payload) => {
   const nextPayload = { ...payload };
 
@@ -998,6 +1064,30 @@ export const financeService = {
 
   async getRepresentatives(companyId, tenantOptions = {}) {
     return getRepresentatives(companyId, tenantOptions);
+  },
+
+  async updateFinancialRecord(recordId, updates = {}, companyId, tenantOptions = {}) {
+    const resolvedTenant =
+      companyId && typeof companyId === 'object' && !Array.isArray(companyId)
+        ? companyId
+        : {
+            ...tenantOptions,
+            companyId: tenantOptions.companyId || companyId,
+          };
+
+    return updateFinancialRecord(recordId, updates, resolvedTenant.companyId, resolvedTenant);
+  },
+
+  async saveRepresentative(companyId, representative = {}, tenantOptions = {}) {
+    return saveRepresentative(companyId, representative, tenantOptions);
+  },
+
+  async deleteRepresentative(companyId, representativeId, tenantOptions = {}) {
+    return deleteRepresentative(companyId, representativeId, tenantOptions);
+  },
+
+  async deleteFinancialRecords(recordIds = [], tenantOptions = {}) {
+    return deleteFinancialRecords(recordIds, tenantOptions);
   },
 
   async getImportHistory(companyId, filters = {}, tenantOptions = {}) {

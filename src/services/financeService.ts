@@ -543,6 +543,82 @@ export async function getRepresentatives(companyId = runtimeContext.companyId, o
   }
 }
 
+export async function updateFinancialRecord(recordId, updates = {}, companyId = runtimeContext.companyId, options = {}) {
+  try {
+    if (!recordId) {
+      throw new Error('recordId é obrigatório para atualizar o registro financeiro.');
+    }
+
+    const payload = updates && typeof updates === 'object' ? { ...updates } : {};
+    const tenantOptions =
+      companyId && typeof companyId === 'object' && !Array.isArray(companyId)
+        ? companyId
+        : {
+            ...options,
+            companyId: options.companyId || companyId,
+            userId: options.userId || runtimeContext.userId || null,
+          };
+
+    if (!Object.keys(payload).length) {
+      const dataset = await loadDataset(tenantOptions.companyId || runtimeContext.companyId, tenantOptions);
+      return (dataset.records || []).find((row) => row.id === recordId) || { id: recordId, success: true };
+    }
+
+    const saved = await legacyFinanceService.updateFinancialRecord(
+      recordId,
+      payload,
+      tenantOptions.companyId || runtimeContext.companyId,
+      tenantOptions,
+    );
+
+    return saved ? toUiRecord(saved, runtimeContext.companies || []) : { id: recordId, success: true };
+  } catch (error) {
+    throw new Error(error?.message || 'Não foi possível atualizar o registro financeiro.');
+  }
+}
+
+export async function saveRepresentative(companyId = runtimeContext.companyId, representative = {}, options = {}) {
+  try {
+    const saved = await legacyFinanceService.saveRepresentative(companyId, representative, {
+      companyId,
+      userId: options.userId || runtimeContext.userId || null,
+    });
+    return saved;
+  } catch (error) {
+    throw new Error(error?.message || 'Não foi possível salvar o representante.');
+  }
+}
+
+export async function deleteRepresentative(companyId = runtimeContext.companyId, representativeId, options = {}) {
+  try {
+    if (!representativeId) {
+      throw new Error('representativeId é obrigatório para excluir o representante.');
+    }
+
+    return await legacyFinanceService.deleteRepresentative(companyId, representativeId, {
+      companyId,
+      userId: options.userId || runtimeContext.userId || null,
+    });
+  } catch (error) {
+    throw new Error(error?.message || 'Não foi possível excluir o representante.');
+  }
+}
+
+export async function deleteFinancialRecords(recordIds = [], options = {}) {
+  try {
+    if (!Array.isArray(recordIds) || !recordIds.length) {
+      return true;
+    }
+
+    return await legacyFinanceService.deleteFinancialRecords(recordIds, {
+      companyId: options.companyId || runtimeContext.companyId,
+      userId: options.userId || runtimeContext.userId || null,
+    });
+  } catch (error) {
+    throw new Error(error?.message || 'Não foi possível excluir os registros financeiros.');
+  }
+}
+
 export const financeService = {
   setRuntimeContext(nextContext = {}) {
     Object.assign(runtimeContext, {
@@ -569,6 +645,22 @@ export const financeService = {
 
   async getRepresentatives(companyId = runtimeContext.companyId, overrides = {}) {
     return getRepresentatives(companyId, overrides);
+  },
+
+  async updateFinancialRecord(recordId, updates = {}, companyId = runtimeContext.companyId, options = {}) {
+    return updateFinancialRecord(recordId, updates, companyId, options);
+  },
+
+  async saveRepresentative(companyId = runtimeContext.companyId, representative = {}, options = {}) {
+    return saveRepresentative(companyId, representative, options);
+  },
+
+  async deleteRepresentative(companyId = runtimeContext.companyId, representativeId, options = {}) {
+    return deleteRepresentative(companyId, representativeId, options);
+  },
+
+  async deleteFinancialRecords(recordIds = [], options = {}) {
+    return deleteFinancialRecords(recordIds, options);
   },
 
   async getImportHistory(companyId = runtimeContext.companyId, filters = {}, overrides = {}) {
