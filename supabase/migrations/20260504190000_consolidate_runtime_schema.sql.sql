@@ -160,7 +160,7 @@ create table if not exists public.google_sheets_config (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null unique references public.empresas(id) on delete cascade,
   spreadsheet_id text,
-  sheet_name text not null default 'Pagina1',
+  sheet_name text default 'Pagina1',
   ativo boolean not null default true,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
@@ -352,6 +352,9 @@ alter table public.google_sheets_config
 
 alter table public.google_sheets_config
   alter column spreadsheet_id drop not null;
+
+alter table public.google_sheets_config
+  alter column sheet_name drop not null;
 
 update public.empresas
 set invite_code = upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8))

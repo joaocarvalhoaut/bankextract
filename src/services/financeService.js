@@ -307,6 +307,57 @@ const normalizeIsoDate = (value) => {
   return date.toISOString();
 };
 
+const normalizeRepresentativeList = (items = []) => {
+  const unique = new Map();
+
+  (items || []).forEach((item) => {
+    const rawName = item?.nome ?? item?.name ?? item?.representante ?? item?.representative ?? '';
+    const nome = String(rawName || '').trim();
+    if (!nome) return;
+
+    const normalizedKey = normalizeText(nome);
+    const id = item?.id || normalizedKey;
+    if (!unique.has(normalizedKey)) {
+      unique.set(normalizedKey, {
+        id,
+        nome,
+        telefone: item?.telefone || '',
+        observacao: item?.observacao || '',
+        ativo: item?.ativo !== false,
+      });
+    }
+  });
+
+  return Array.from(unique.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+};
+
+export async function getRepresentatives(companyId, tenantOptions = {}) {
+  try {
+    const reps = await financeService.fetchRepresentantes({
+      companyId,
+      userId: tenantOptions.userId,
+    });
+
+    if (Array.isArray(reps) && reps.length) {
+      return normalizeRepresentativeList(reps);
+    }
+
+    const records = await financeService.fetchRegistros({
+      companyId,
+      userId: tenantOptions.userId,
+    });
+
+    return normalizeRepresentativeList(
+      (records || []).map((row) => ({
+        id: row.representante_id ?? row.representanteId ?? null,
+        nome: row.representante_nome ?? row.representanteNome ?? row.representante ?? '',
+      })),
+    );
+  } catch {
+    return [];
+  }
+}
+
 const mapDbPatchToRegistroPatch = (payload) => {
   const nextPayload = { ...payload };
 
@@ -943,6 +994,10 @@ export const financeService = {
   async fetchRepresentantes({ companyId, userId } = {}) {
     const dataset = await this.fetchCompanyDataset({ companyId, userId });
     return dataset.representatives;
+  },
+
+  async getRepresentatives(companyId, tenantOptions = {}) {
+    return getRepresentatives(companyId, tenantOptions);
   },
 
   async getImportHistory(companyId, filters = {}, tenantOptions = {}) {

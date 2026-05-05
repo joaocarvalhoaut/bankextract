@@ -139,6 +139,17 @@ function normalizeText(value: string | null | undefined) {
     .trim();
 }
 
+function normalizeDriveName(value: string | null | undefined) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9\s_-]/g, ' ')
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .toUpperCase();
+}
+
 function normalizePhone(raw: string | null | undefined) {
   const digits = String(raw || '').replace(/\D/g, '');
   if (!digits) return '';
@@ -303,6 +314,29 @@ async function getGoogleAccessToken() {
   return String(tokenData.access_token || '');
 }
 
+function requireEnvSecret(name: string) {
+  const value = Deno.env.get(name) || '';
+  if (!value) {
+    throw new Error(`Secret ${name} não configurado`);
+  }
+  return value;
+}
+
+function requireCompanyId(companyId: string | null) {
+  if (!companyId) {
+    throw new Error('company_id é obrigatório');
+  }
+  return companyId;
+}
+
+function requireDriveFolderId(folderId: string | null | undefined) {
+  const value = String(folderId || '').trim();
+  if (!value) {
+    throw new Error('drive_root_folder_id não configurado para esta empresa');
+  }
+  return value;
+}
+
 async function googleJson<T>(url: string, token: string): Promise<T> {
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
@@ -348,19 +382,19 @@ async function countPdfFilesInFolder(token: string, folderId: string) {
 }
 
 async function searchDriveFiles(token: string, folderId: string, record: FinancialRow) {
-  const candidates = [
-    record.drive_file_id || '',
-    `${record.cliente_numero || ''}_${record.numero_boleto || ''}.pdf`,
-    `${record.cliente_numero || ''}_${record.numero_nf || ''}.pdf`,
-    `${record.cliente_numero || ''}_${record.documento || ''}.pdf`,
-  ].filter(Boolean);
-
   if (record.drive_file_id) {
     const file = await getDriveFileMetadata(token, record.drive_file_id).catch(() => null);
     if (file?.id && file.parents?.includes(folderId)) {
       return [file];
     }
   }
+
+  const boleto = String(record.numero_boleto || '').trim();
+  const normalizedName = normalizeDriveName(record.cliente_nome || record.nome || '');
+  const candidates = [
+    boleto ? `${boleto}.pdf` : '',
+    boleto && normalizedName ? `${normalizedName}_${boleto}.pdf` : '',
+  ].filter(Boolean);
 
   const results: DriveCandidate[] = [];
 
@@ -378,16 +412,22 @@ async function searchDriveFiles(token: string, folderId: string, record: Financi
     }
   }
 
-  const fuzzyTerms = [record.cliente_numero, record.numero_boleto].filter(Boolean).map((item) => String(item));
-  if (fuzzyTerms.length) {
-    const queryParts = fuzzyTerms.map((term) => `fullText contains '${term.replace(/'/g, "\\'")}'`);
+  const fuzzySearches = [
+    boleto ? [`fullText contains '${boleto.replace(/'/g, "\\'")}'`] : [],
+    normalizedName ? [`fullText contains '${normalizedName.replace(/'/g, "\\'")}'`] : [],
+  ].filter((parts) => parts.length);
+
+  for (const queryParts of fuzzySearches) {
     queryParts.push(`'${folderId}' in parents`);
     queryParts.push('trashed=false');
     const data = await googleJson<{ files?: DriveCandidate[] }>(
       `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(queryParts.join(' and '))}&fields=files(id,name,mimeType)&pageSize=10`,
       token,
     );
-    if (data.files?.length) results.push(...data.files);
+    if (data.files?.length) {
+      results.push(...data.files);
+      break;
+    }
   }
 
   return results;
@@ -556,16 +596,22 @@ async function saveDriveConfigForCompany(
   companyId: string,
   driveRootFolderId: string,
 ) {
+  requireCompanyId(companyId);
   const folderId = String(driveRootFolderId || '').trim();
   if (!folderId) {
     throw new Error('Informe o ID da pasta do Google Drive.');
   }
 
+  const existingConfig = await getSheetsDriveConfig(supabaseAdmin, companyId);
+
   const payload = {
     empresa_id: companyId,
     drive_root_folder_id: folderId,
+    spreadsheet_id: existingConfig?.spreadsheet_id ?? null,
+    sheet_name: existingConfig?.sheet_name ?? null,
+    source_spreadsheet_id: existingConfig?.source_spreadsheet_id ?? null,
+    source_sheet_name: existingConfig?.source_sheet_name ?? null,
     ativo: true,
-    sheet_name: 'Pagina1',
     updated_at: new Date().toISOString(),
   };
 
@@ -583,6 +629,7 @@ async function testDriveConnectionForCompany(
   companyId: string,
   token: string,
 ) {
+  requireCompanyId(companyId);
   const config = await getSheetsDriveConfig(supabaseAdmin, companyId);
   const folderId = String(config?.drive_root_folder_id || '').trim();
 
@@ -611,7 +658,7 @@ async function testDriveConnectionForCompany(
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha ao acessar a pasta do Google Drive.';
     const friendly = /File not found|insufficientFilePermissions|notFound|403|404/i.test(message)
-      ? 'A pasta não está acessível. Compartilhe a pasta com o e-mail da Service Account.'
+      ? 'A pasta não está acessível. Compartilhe com a Service Account.'
       : message;
     return {
       status: 'erro',
@@ -625,12 +672,13 @@ async function testDriveConnectionForCompany(
 }
 
 async function syncDriveForCompany(supabaseAdmin: AdminClient, companyId: string, token: string) {
+  requireCompanyId(companyId);
   const config = await getSheetsDriveConfig(supabaseAdmin, companyId);
-  const folderId = await ensureConfiguredFolderId(config?.drive_root_folder_id, companyId);
+  const folderId = requireDriveFolderId(await ensureConfiguredFolderId(config?.drive_root_folder_id, companyId));
   await getDriveFolderInfo(token, folderId).catch((error) => {
     const message = error instanceof Error ? error.message : 'Falha ao acessar pasta do Google Drive.';
     if (/File not found|insufficientFilePermissions|notFound|403|404/i.test(message)) {
-      throw new Error('A pasta não está acessível. Compartilhe a pasta com o e-mail da Service Account.');
+      throw new Error('A pasta não está acessível. Compartilhe com a Service Account.');
     }
     throw error;
   });
@@ -962,10 +1010,13 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   if (req.method !== 'POST') return jsonResponse({ ok: false, error: 'Metodo nao permitido.' }, 405);
 
+  let action = 'overview';
+  let companyId: string | null = null;
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
-    const serviceRoleKey = Deno.env.get('SERVICE_ROLE_KEY') || '';
+    const serviceRoleKey = requireEnvSecret('SERVICE_ROLE_KEY');
     const authHeader = req.headers.get('Authorization');
     const cronSecret = req.headers.get('x-cron-secret');
 
@@ -975,8 +1026,15 @@ Deno.serve(async (req: Request) => {
     });
 
     const body = await req.json().catch(() => ({}));
-    const action = String(body?.action || 'overview');
-    const companyId = body?.company_id ? String(body.company_id) : null;
+    action = String(body?.action || 'overview');
+    companyId = body?.company_id ? String(body.company_id) : null;
+    console.log('billing-automation request', { action, company_id: companyId });
+
+    if (action === 'get_drive_config' || action === 'save_drive_config' || action === 'test_drive_connection' || action === 'sync_drive') {
+      requireCompanyId(companyId);
+      requireEnvSecret('GOOGLE_CLIENT_EMAIL');
+      requireEnvSecret('GOOGLE_PRIVATE_KEY');
+    }
 
     const auth = await assertCompanyAccess(admin, authClient, companyId, authHeader, cronSecret);
     const todayIso = todayInSaoPaulo();
@@ -995,6 +1053,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'get_drive_config') {
+      requireCompanyId(companyId);
       const config = await getSheetsDriveConfig(admin, companyId || '');
       const connection = await testDriveConnectionForCompany(admin, companyId || '', googleToken);
       return jsonResponse({
@@ -1010,6 +1069,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'save_drive_config') {
+      requireCompanyId(companyId);
       const driveRootFolderId = String(body?.drive_root_folder_id || '').trim();
       const savedConfig = await saveDriveConfigForCompany(admin, companyId || '', driveRootFolderId);
       const connection = await testDriveConnectionForCompany(admin, companyId || '', googleToken);
@@ -1039,6 +1099,9 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'test_drive_connection') {
+      requireCompanyId(companyId);
+      const existingConfig = await getSheetsDriveConfig(admin, companyId || '');
+      requireDriveFolderId(existingConfig?.drive_root_folder_id);
       const result = await testDriveConnectionForCompany(admin, companyId || '', googleToken);
       return jsonResponse({
         ok: true,
@@ -1135,7 +1198,7 @@ Deno.serve(async (req: Request) => {
             metadata: {
               company_id: targetCompanyId,
               error: /File not found|insufficientFilePermissions|notFound|403|404/i.test(message)
-                ? 'A pasta não está acessível. Compartilhe a pasta com o e-mail da Service Account.'
+                ? 'A pasta não está acessível. Compartilhe com a Service Account.'
                 : message,
             },
           }).then(() => {}).catch(() => {});
@@ -1202,10 +1265,19 @@ Deno.serve(async (req: Request) => {
 
     return jsonResponse({ ok: false, error: 'Acao nao suportada.' }, 400);
   } catch (error) {
+    console.error('billing-automation fatal error', {
+      action,
+      company_id: companyId,
+      name: error instanceof Error ? error.name : undefined,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return jsonResponse(
       {
         ok: false,
-        error: error instanceof Error ? error.message : 'Erro interno na automacao de cobranca.',
+        action,
+        company_id: companyId,
+        error: error instanceof Error ? error.message : 'Erro interno na billing-automation',
       },
       500,
     );

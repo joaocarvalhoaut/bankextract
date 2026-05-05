@@ -109,6 +109,30 @@ const normalizeText = (value) =>
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
 
+const normalizeRepresentativeList = (items = []) => {
+  const unique = new Map();
+
+  (items || []).forEach((item) => {
+    const rawName = item?.nome ?? item?.name ?? item?.representante ?? item?.representative ?? '';
+    const nome = String(rawName || '').trim();
+    if (!nome) return;
+
+    const normalizedKey = normalizeText(nome);
+    const id = item?.id || normalizedKey;
+    if (!unique.has(normalizedKey)) {
+      unique.set(normalizedKey, {
+        id,
+        nome,
+        telefone: item?.telefone || '',
+        observacao: item?.observacao || '',
+        ativo: item?.ativo !== false,
+      });
+    }
+  });
+
+  return Array.from(unique.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+};
+
 const getContext = (overrides = {}) => ({
   ...runtimeContext,
   ...overrides,
@@ -491,6 +515,34 @@ const loadDataset = async (companyId, overrides = {}) => {
   };
 };
 
+export async function getRepresentatives(companyId = runtimeContext.companyId, overrides = {}) {
+  try {
+    if (typeof legacyFinanceService.getRepresentatives === 'function') {
+      const reps = await legacyFinanceService.getRepresentatives(companyId, {
+        companyId,
+        userId: overrides.userId || runtimeContext.userId || null,
+      });
+      if (Array.isArray(reps)) {
+        return normalizeRepresentativeList(reps);
+      }
+    }
+
+    const dataset = await loadDataset(companyId, overrides);
+    if (Array.isArray(dataset.representatives) && dataset.representatives.length) {
+      return normalizeRepresentativeList(dataset.representatives);
+    }
+
+    return normalizeRepresentativeList(
+      (dataset.records || []).map((row) => ({
+        id: row.representante_id ?? row.representanteId ?? null,
+        nome: row.representante_nome ?? row.representanteNome ?? row.representante ?? '',
+      })),
+    );
+  } catch {
+    return [];
+  }
+}
+
 export const financeService = {
   setRuntimeContext(nextContext = {}) {
     Object.assign(runtimeContext, {
@@ -513,6 +565,10 @@ export const financeService = {
     } catch {
       return [];
     }
+  },
+
+  async getRepresentatives(companyId = runtimeContext.companyId, overrides = {}) {
+    return getRepresentatives(companyId, overrides);
   },
 
   async getImportHistory(companyId = runtimeContext.companyId, filters = {}, overrides = {}) {
