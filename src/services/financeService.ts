@@ -515,6 +515,25 @@ export const financeService = {
     }
   },
 
+  async getImportHistory(companyId = runtimeContext.companyId, filters = {}, overrides = {}) {
+    try {
+      const dataset = await loadDataset(companyId, overrides);
+      const rows = dataset.history || [];
+
+      return rows.filter((row) => {
+        if (filters.status && filters.status !== 'todos' && row.status !== filters.status) return false;
+        if (filters.tipo && filters.tipo !== 'todos' && row.tipo !== filters.tipo) return false;
+        if (filters.search) {
+          const haystack = normalizeText(`${row.arquivo || ''} ${row.empresa_nome || ''} ${row.tipo || ''}`);
+          if (!haystack.includes(normalizeText(filters.search))) return false;
+        }
+        return true;
+      });
+    } catch {
+      return [];
+    }
+  },
+
   async getDashboardMetrics(companyId = runtimeContext.companyId, overrides = {}) {
     const dataset = await loadDataset(companyId, overrides);
     const context = dataset.context;

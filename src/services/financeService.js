@@ -607,6 +607,27 @@ export const financeService = {
     return dataset.representatives;
   },
 
+  async getImportHistory(companyId, filters = {}, tenantOptions = {}) {
+    try {
+      const dataset = await this.fetchCompanyDataset({
+        companyId,
+        userId: tenantOptions.userId
+      });
+
+      return (dataset.history || []).filter((row) => {
+        if (filters.status && filters.status !== 'todos' && row.status !== filters.status) return false;
+        if (filters.tipo && filters.tipo !== 'todos' && row.tipo !== filters.tipo) return false;
+        if (filters.search) {
+          const haystack = normalizeText(`${row.arquivo || ''} ${row.empresaNome || row.empresa_nome || ''} ${row.tipo || ''}`);
+          if (!haystack.includes(normalizeText(filters.search))) return false;
+        }
+        return true;
+      });
+    } catch {
+      return [];
+    }
+  },
+
   async upsertRepresentante(payload, tenantOptions = {}) {
     const tenant = await getEffectiveTenant({
       userId: tenantOptions.userId || payload.user_id,
