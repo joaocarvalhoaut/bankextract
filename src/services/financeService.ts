@@ -1,12 +1,21 @@
 import { financeService as legacyFinanceService, tenantContext } from './financeService.js';
 import { GLOBAL_COMPANY_ID } from './companyService.js';
 import { supabase, hasSupabaseConfig } from './supabaseClient.js';
+import { canUserPerformAction } from '../security/permissions';
+import {
+  defaultWhatsAppAutoConfig,
+  getWhatsAppAutoConfig,
+  saveWhatsAppAutoConfig,
+} from './whatsappAutoService.js';
+
+const isProduction = import.meta.env.PROD;
+const isDevelopment = import.meta.env.DEV;
 
 const defaultRuntimeContext = {
   userId: tenantContext.currentUserId || '',
   companyId: tenantContext.defaultCompanyId || '',
   isSystemAdmin: false,
-  userRole: 'membro',
+  userRole: 'operador',
   companyName: '',
   companies: [],
 };
@@ -16,7 +25,6 @@ const runtimeContext = {
 };
 
 const chargeMessageDrafts = new Map();
-const automationRulesStore = new Map();
 
 const sampleNames = [
   'VALERIA CORDEIRO DE SOUZA',
@@ -105,6 +113,12 @@ const getContext = (overrides = {}) => ({
   ...runtimeContext,
   ...overrides,
 });
+
+const ensureSupabaseOrDevelopmentMock = () => {
+  if (!hasSupabaseConfig && isProduction) {
+    throw new Error('Supabase não configurado para produção.');
+  }
+};
 
 const companyNameMap = (companies = []) =>
   new Map((companies || []).filter(Boolean).map((company) => [company.id, company.nome]));
@@ -285,6 +299,7 @@ const buildChargeRows = (records) =>
         cliente: record.nome,
         documento: record.numero_boleto,
         valor: record.valor,
+        vencimento: record.data_vencimento,
         telefone: record.telefone,
         status: record.telefone ? 'pendente' : 'sem telefone',
         origem: 'manual',
@@ -293,26 +308,6 @@ const buildChargeRows = (records) =>
           `Olá, ${record.nome}. Identificamos o título ${record.numero_boleto} em aberto no BankExtract. Poderia nos confirmar a programação de pagamento?`,
       };
     });
-
-const ensureAutomationRules = (companyId) => {
-  if (!automationRulesStore.has(companyId)) {
-    automationRulesStore.set(companyId, {
-      company_id: companyId,
-      active: false,
-      horario: '08:00',
-      canal: 'WhatsApp',
-      rules: [
-        { day: 'D+1', active: true },
-        { day: 'D+3', active: true },
-        { day: 'D+5', active: true },
-        { day: 'D+10', active: false },
-        { day: 'D+15', active: false },
-      ],
-    });
-  }
-
-  return automationRulesStore.get(companyId);
-};
 
 const filterRecords = (records, filters = {}) =>
   records.filter((row) => {
@@ -409,6 +404,13 @@ const deriveDashboardMetrics = (records, history, extras = {}) => {
   };
 };
 
+export const sanitizeSpreadsheetCell = (value) => {
+  if (value === null || typeof value === 'undefined') return '';
+
+  const raw = String(value);
+  return /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+};
+
 const inferChecklistStatus = (condition, pendingDetail, readyDetail, attentionDetail = pendingDetail) => {
   if (condition === true) {
     return { status: 'pronto', detail: readyDetail };
@@ -456,6 +458,7 @@ const getPlanCatalog = () => ([
 ]);
 
 const loadDataset = async (companyId, overrides = {}) => {
+  ensureSupabaseOrDevelopmentMock();
   const context = getContext({
     companyId,
     ...overrides,
@@ -518,389 +521,6 @@ export const financeService = {
       safeSupabaseSelect(() =>
         buildScopedQuery(
           supabase.from('whatsapp_cobranca_config').select('empresa_id, ativo, hora_envio, updated_at'),
-          context,
-          'empresa_id'
-        )
-      ),
-      safeSupabaseSelect(() =>
-        buildScopedQuery(
-          supabase.from('audit_logs').select('action, created_at, company_id').order('created_at', { ascending: false }).limit(5),
-          context,
-          'company_id'
-        )
-      ),
-    ]);
-
-    const sentCharges = (chargeRows || []).filter((item) => ['enviado', 'mock_enviado'].includes(item.status));
-    const autoExecutions = sentCharges
-      .filter((item) => !item.enviado_por)
-      .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime());
-    const firstAutoConfig = (autoConfigs || []).find((item) => item.ativo) || autoConfigs?.[0] || null;
-
-    return deriveDashboardMetrics(dataset.records, dataset.history, {
-      totalChargesSent: sentCharges.length,
-      autoChargeActive: (autoConfigs || []).some((item) => item.ativo),
-      whatsappMockMode: sentCharges.some((item) => item.status === 'mock_enviado'),
-      lastAutoExecution: formatDateTimeLabel(autoExecutions[0]?.created_at),
-      nextRunHint: firstAutoConfig?.ativo ? calcNextRunHint(firstAutoConfig.hora_envio) : 'Automacao inativa',
-      recentAuditAction: auditLogs?.[0]?.action || 'Sem atividade recente',
-    });
-  },
-
-  async processImportFile(file, tipo, companyId = runtimeContext.companyId, overrides = {}) {
-    const context = getContext({
-      companyId,
-      ...overrides,
-    });
-
-    const now = new Date();
-
-    if (tipo === 'liquidacao') {
-      const records = await this.getFinancialRecords(context.companyId, {}, context);
-      const rows = records
-        .filter((record) => record.status !== 'liquidado')
-        .slice(0, 6)
-        .map((record) => ({
-          ...record,
-          documento: record.numero_boleto,
-          observacoes: record.observacoes || 'Prévia de baixa manual carregada a partir da carteira atual.',
-          selected: true,
-          tipo_importacao: 'liquidacao',
-          status: 'liquidado',
-        }));
-
-      return {
-        fileName: file?.name || 'liquidacao_manual.xlsx',
-        tipo,
-        company_id: context.companyId,
-        rows,
-        summary: {
-          registros_totais: rows.length,
-          valor_total: rows.reduce((sum, row) => sum + row.valor, 0),
-          a_vencer: 0,
-          vencidos: rows.reduce((sum, row) => sum + row.valor, 0),
-        },
-      };
-    }
-
-    const rows = Array.from({ length: 6 }).map((_, index) => {
-      const dueDate = new Date(now);
-      dueDate.setDate(dueDate.getDate() + index + 2);
-
-      return {
-        id: makeUuid(),
-        company_id: context.companyId,
-        batch_id: null,
-        nome: sampleNames[index % sampleNames.length],
-        documento: `${String(3000 + index)}-${index + 1}`,
-        numero_boleto: `${String(3000 + index)}-${index + 1}`,
-        data_vencimento: toIsoDate(dueDate),
-        valor: money(950 + index * 221.4),
-        status: index === 4 ? 'vencido' : 'pendente',
-        telefone: samplePhones[index % samplePhones.length],
-        observacoes: index === 1 ? 'Extraido via OCR.' : '',
-        selected: true,
-        tipo_importacao: tipo,
-      };
-    });
-
-    return {
-      fileName: file?.name || 'arquivo_importado.pdf',
-      tipo,
-      company_id: context.companyId,
-      rows,
-      summary: {
-        registros_totais: rows.length,
-        valor_total: rows.reduce((sum, row) => sum + row.valor, 0),
-        a_vencer: rows.filter((row) => parseDate(row.data_vencimento) >= now).reduce((sum, row) => sum + row.valor, 0),
-        vencidos: rows.filter((row) => parseDate(row.data_vencimento) < now).reduce((sum, row) => sum + row.valor, 0),
-      },
-    };
-  },
-
-  async importSelectedRows(rows, batchId, companyId = runtimeContext.companyId, options = {}) {
-    const context = getContext({
-      companyId,
-      ...options,
-    });
-
-    const selectedRows = (rows || []).filter((row) => row.selected !== false);
-    const timestamp = new Date().toISOString();
-    const batchHistoryEntry = {
-      id: makeUuid(),
-      company_id: context.companyId,
-      batch_id: batchId,
-      arquivo: options.fileName || 'importacao_ocr.pdf',
-      tipo: options.tipo || 'vencidos',
-      quantidade_registros: selectedRows.length,
-      valor_total: selectedRows.reduce((sum, row) => sum + Number(row.valor || 0), 0),
-      status: 'concluida',
-      created_at: timestamp,
-    };
-
-    if (options.tipo === 'liquidacao') {
-      await legacyFinanceService.confirmLiquidacaoManual(
-        selectedRows.map((row) =>
-          toLegacyRecord(
-            {
-              ...row,
-              status: 'liquidado',
-              liquidado_em: timestamp,
-            },
-            context
-          )
-        ),
-        {
-          userId: context.userId,
-          companyId: context.companyId,
-        }
-      );
-
-      await legacyFinanceService.appendImportacao(toLegacyImportEntry(batchHistoryEntry, context), {
-        userId: context.userId,
-        companyId: context.companyId,
-      });
-
-      return {
-        imported: [],
-        historySaved: true,
-        batch_id: batchId,
-      };
-    }
-
-    const payload = selectedRows.map((row) =>
-      toLegacyRecord(
-        {
-          ...row,
-          batch_id: batchId,
-          importado_em: timestamp,
-        },
-        context
-      )
-    );
-
-    const inserted = await legacyFinanceService.insertRegistros(payload, {
-      userId: context.userId,
-      companyId: context.companyId,
-    });
-
-    await legacyFinanceService.appendImportacao(toLegacyImportEntry(batchHistoryEntry, context), {
-      userId: context.userId,
-      companyId: context.companyId,
-    });
-
-    return {
-      imported: (inserted || []).map((row) => toUiRecord(row, runtimeContext.companies)),
-      historySaved: true,
-      batch_id: batchId,
-    };
-  },
-
-  async getFinancialRecords(companyId = runtimeContext.companyId, filters = {}, overrides = {}) {
-    const dataset = await loadDataset(companyId, overrides);
-    return filterRecords(dataset.records, filters);
-  },
-
-  async getFinancialConfig(companyId = runtimeContext.companyId, overrides = {}) {
-    const dataset = await loadDataset(companyId, overrides);
-    return dataset.config;
-  },
-
-  async saveFinancialConfig(companyId = runtimeContext.companyId, payload = {}, overrides = {}) {
-    const context = getContext({
-      companyId,
-      ...overrides,
-    });
-
-    if (!context.companyId || context.companyId === GLOBAL_COMPANY_ID) {
-      throw new Error('Selecione uma empresa especifica para salvar a configuracao financeira.');
-    }
-
-    const saved = await legacyFinanceService.updateConfiguracao(
-      {
-        company_id: context.companyId,
-        user_id: context.userId,
-        multaPercentual: Number(payload.multaPercentual ?? 2),
-        jurosPercentualDia: Number(payload.jurosPercentualDia ?? 0.033),
-      },
-      {
-        userId: context.userId,
-        companyId: context.companyId,
-      }
-    );
-
-    return {
-      company_id: saved.company_id,
-      multaPercentual: Number(saved.multaPercentual ?? 2),
-      jurosPercentualDia: Number(saved.jurosPercentualDia ?? 0.033),
-    };
-  },
-
-  async clearOverview(companyId = runtimeContext.companyId, overrides = {}) {
-    const context = getContext({
-      companyId,
-      ...overrides,
-    });
-
-    return legacyFinanceService.clearOverview(context.companyId, {
-      userId: context.userId,
-      companyId: context.companyId,
-    });
-  },
-
-  async getImportHistory(companyId = runtimeContext.companyId, overrides = {}) {
-    const dataset = await loadDataset(companyId, overrides);
-    return dataset.history;
-  },
-
-  async deleteImportHistory(item, overrides = {}) {
-    const context = getContext(overrides);
-
-    await legacyFinanceService.deleteImportacoes(
-      [item.id],
-      {
-        id: context.companyId || item.company_id,
-      },
-      Boolean(context.isSystemAdmin),
-      {
-        userId: context.userId,
-        companyId: item.company_id,
-      }
-    );
-
-    return true;
-  },
-
-  async getBatchRows(companyId = runtimeContext.companyId, batchId, overrides = {}) {
-    const rows = await this.getFinancialRecords(companyId, {}, overrides);
-    return rows.filter((row) => row.batch_id === batchId);
-  },
-
-  async getCharges(companyId = runtimeContext.companyId, overrides = {}) {
-    const records = await this.getFinancialRecords(companyId, {}, overrides);
-    return buildChargeRows(records);
-  },
-
-  async sendWhatsAppCharge(charge, mode = 'manual') {
-    const messageKey = `${charge.company_id}:${charge.registro_id || charge.id}`;
-    chargeMessageDrafts.set(messageKey, charge.mensagem);
-
-    if (!charge.telefone || !String(charge.telefone).trim()) {
-      return { ...charge, status: 'sem telefone', enviado_em: new Date().toISOString() };
-    }
-
-    if (!hasSupabaseConfig || !supabase) {
-      return {
-        ...charge,
-        status: 'mock_enviado',
-        mocked: true,
-        enviado_em: new Date().toISOString(),
-      };
-    }
-
-    const empresaId  = charge.company_id  ?? charge.empresa_id  ?? runtimeContext.companyId;
-    const registroId = charge.registro_id ?? charge.id          ?? null;
-
-    if (!empresaId) {
-      throw new Error('Nenhuma empresa ativa selecionada para enviar cobranca.');
-    }
-
-    const { data: inserted, error: insertError } = await supabase
-      .from('cobrancas_whatsapp')
-      .insert({
-        empresa_id:  empresaId,
-        registro_id: registroId,
-        telefone:    charge.telefone,
-        mensagem:    charge.mensagem || '',
-        status:      'preparado',
-      })
-      .select('id')
-      .single();
-
-    if (insertError || !inserted?.id) {
-      throw new Error(
-        'Falha ao registrar cobranca no banco: ' + (insertError?.message || 'ID nao retornado.')
-      );
-    }
-
-    const { data, error: fnError } = await supabase.functions.invoke('send-whatsapp-charge', {
-      body: { chargeId: inserted.id },
-    });
-
-    if (fnError) {
-      throw new Error('Falha ao chamar Edge Function de WhatsApp: ' + fnError.message);
-    }
-
-    if (!data?.ok) {
-      throw new Error(data?.error || 'Resposta inesperada da Edge Function.');
-    }
-
-    return {
-      ...charge,
-      chargeId:   inserted.id,
-      status:     data.mocked ? 'mock_enviado' : 'enviado',
-      mocked:     data.mocked || false,
-      enviado_em: new Date().toISOString(),
-    };
-  },
-
-  async getAutomationRules(companyId = runtimeContext.companyId) {
-    if (!companyId || companyId === GLOBAL_COMPANY_ID) {
-      return {
-        company_id: companyId,
-        active: false,
-        horario: '08:00',
-        canal: 'WhatsApp',
-        rules: [
-          { day: 'D+1', active: false },
-          { day: 'D+3', active: false },
-          { day: 'D+5', active: false },
-          { day: 'D+10', active: false },
-          { day: 'D+15', active: false },
-        ],
-      };
-    }
-
-    return {
-      ...ensureAutomationRules(companyId),
-    };
-  },
-
-  async saveAutomationRules(companyId = runtimeContext.companyId, payload = {}) {
-    const current = ensureAutomationRules(companyId);
-    automationRulesStore.set(companyId, {
-      ...current,
-      ...payload,
-      company_id: companyId,
-    });
-    return true;
-  },
-
-  async getSettingsOverview(companyId = runtimeContext.companyId, companies = []) {
-    const currentCompanies = companies?.length ? companies : runtimeContext.companies;
-    const company = currentCompanies.find((item) => item.id === companyId) || null;
-
-    return {
-      company,
-      usuarios: [
-        { id: 'u1', nome: 'Joao Carvalho', perfil: 'Admin geral' },
-        { id: 'u2', nome: 'Equipe cobranca', perfil: 'Operador' },
-      ],
-      preferencias: {
-        exportacao: 'CSV e Excel',
-        timezone: 'America/Sao_Paulo',
-      },
-    };
-  },
-
-  async getSystemStatus(companyId = runtimeContext.companyId, overrides = {}) {
-    const dataset = await loadDataset(companyId, overrides);
-    const context = dataset.context;
-
-    const [googleSheetsConfig, auditLogs, autoConfigs, recentCharges] = await Promise.all([
-      safeSupabaseSelect(() =>
-        buildScopedQuery(
-          supabase.from('google_sheets_config').select('id, empresa_id, spreadsheet_id, sheet_name, ativo, updated_at'),
           context,
           'empresa_id'
         )
@@ -974,7 +594,7 @@ export const financeService = {
     return {
       companyMode: context.companyId === GLOBAL_COMPANY_ID ? 'global' : 'company',
       companyName: context.companyName || 'Nenhuma empresa ativa',
-      userRole: context.userRole || 'membro',
+      userRole: context.userRole || 'operador',
       isSystemAdmin: Boolean(context.isSystemAdmin),
       googleSheetsConnected: Boolean(sheetsConfig?.ativo && sheetsConfig?.spreadsheet_id),
       googleSheetsSheetName: sheetsConfig?.sheet_name || '',
@@ -1013,55 +633,13 @@ export const financeService = {
     const activeAutoConfig = (autoConfigs || []).find((item) => item.ativo) || autoConfigs?.[0] || null;
     const sheetConfig = googleSheetsConfig?.[0] || null;
     const steps = [
-      {
-        id: 'empresa',
-        title: 'Criar ou selecionar empresa',
-        description: 'Defina a empresa ativa que vai receber a carteira financeira.',
-        done: Boolean(context.companyId),
-        actionTab: 'configuracoes',
-      },
-      {
-        id: 'dados-empresa',
-        title: 'Configurar dados da empresa',
-        description: 'Revise nome, CNPJ, invite code e preferencias operacionais.',
-        done: Boolean(runtimeContext.companyName),
-        actionTab: 'configuracoes',
-      },
-      {
-        id: 'google-sheets',
-        title: 'Conectar Google Sheets',
-        description: 'Salve uma planilha para exportacao e sincronizacao operacional.',
-        done: Boolean(sheetConfig?.ativo && sheetConfig?.spreadsheet_id),
-        actionTab: 'integracoes',
-      },
-      {
-        id: 'cobranca-auto',
-        title: 'Configurar cobranca automatica',
-        description: 'Ative ou deixe preparado o fluxo automatico por WhatsApp.',
-        done: Boolean(activeAutoConfig),
-        actionTab: 'automacoes',
-      },
-      {
-        id: 'horario',
-        title: 'Escolher horario de cobranca',
-        description: 'Defina a janela operacional do envio automatico.',
-        done: Boolean(activeAutoConfig?.hora_envio),
-        actionTab: 'automacoes',
-      },
-      {
-        id: 'primeiro-arquivo',
-        title: 'Importar primeiro arquivo',
-        description: 'Envie um documento para popular a visao geral e o historico.',
-        done: dataset.history.length > 0,
-        actionTab: 'importacao',
-      },
-      {
-        id: 'checklist',
-        title: 'Ver checklist de prontidao',
-        description: 'Revise status operacional, auditoria e integracoes antes de vender.',
-        done: (systemStatus?.checklist || []).filter((item) => item.ok).length >= 4,
-        actionTab: 'status-sistema',
-      },
+      { id: 'empresa', title: 'Criar ou selecionar empresa', description: 'Defina a empresa ativa que vai receber a carteira financeira.', done: Boolean(context.companyId), actionTab: 'configuracoes' },
+      { id: 'dados-empresa', title: 'Configurar dados da empresa', description: 'Revise nome, CNPJ, invite code e preferencias operacionais.', done: Boolean(runtimeContext.companyName), actionTab: 'configuracoes' },
+      { id: 'google-sheets', title: 'Conectar Google Sheets', description: 'Salve uma planilha para exportacao e sincronizacao operacional.', done: Boolean(sheetConfig?.ativo && sheetConfig?.spreadsheet_id), actionTab: 'integracoes' },
+      { id: 'cobranca-auto', title: 'Configurar cobranca automatica', description: 'Ative ou deixe preparado o fluxo automatico por WhatsApp.', done: Boolean(activeAutoConfig), actionTab: 'automacoes' },
+      { id: 'horario', title: 'Escolher horario de cobranca', description: 'Defina a janela operacional do envio automatico.', done: Boolean(activeAutoConfig?.hora_envio), actionTab: 'automacoes' },
+      { id: 'primeiro-arquivo', title: 'Importar primeiro arquivo', description: 'Envie um documento para popular a visao geral e o historico.', done: dataset.history.length > 0, actionTab: 'importacao' },
+      { id: 'checklist', title: 'Ver checklist de prontidao', description: 'Revise status operacional, auditoria e integracoes antes de vender.', done: (systemStatus?.checklist || []).filter((item) => item.ok).length >= 4, actionTab: 'status-sistema' },
     ];
 
     const completed = steps.filter((step) => step.done).length;

@@ -1,6 +1,7 @@
 import { MessageCircleMore, PhoneCall, PhoneOff, Send } from 'lucide-react';
 import DataTable from '../components/DataTable';
 import { formatCurrencyBRL } from '../utils/format';
+import { canUserPerformAction } from '../security/permissions';
 
 const statusTone = {
   pendente: 'bg-slate-100 text-slate-700 ring-slate-200',
@@ -12,7 +13,9 @@ export default function CobrancasScreen({
   rows,
   onGenerateMessage,
   onSend,
+  userRole = 'operador',
 }) {
+  const canManageCharges = canUserPerformAction(userRole, 'manage_charges');
   const pending = rows.filter((row) => row.status === 'pendente').length;
   const withoutPhone = rows.filter((row) => row.status === 'sem telefone').length;
   const sent = rows.filter((row) => row.status === 'enviada').length;
@@ -63,16 +66,18 @@ export default function CobrancasScreen({
         <div className="flex gap-2">
           <button
             type="button"
+            disabled={!canManageCharges}
             onClick={() => onGenerateMessage(row)}
-            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50 active:scale-[0.98]"
+            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <MessageCircleMore size={12} />
             Gerar mensagem
           </button>
           <button
             type="button"
+            disabled={!canManageCharges}
             onClick={() => onSend(row)}
-            className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 active:scale-[0.98]"
+            className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <Send size={12} />
             Enviar

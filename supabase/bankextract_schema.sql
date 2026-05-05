@@ -14,7 +14,7 @@ create table if not exists public.usuarios_empresas (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   company_id uuid not null references public.empresas(id) on delete cascade,
-  role text not null default 'membro',
+  role text not null default 'operador',
   created_at timestamptz not null default timezone('utc', now()),
   unique (user_id, company_id)
 );
@@ -82,12 +82,14 @@ create table if not exists public.importacoes (
 
 create table if not exists public.audit_logs (
   id uuid primary key default gen_random_uuid(),
-  company_id uuid references public.empresas(id) on delete set null,
+  company_id uuid not null references public.empresas(id) on delete cascade,
   user_id uuid references auth.users(id) on delete set null,
   action text not null,
   entity text not null,
   entity_id text,
   metadata jsonb not null default '{}'::jsonb,
+  ip_address text,
+  user_agent text,
   created_at timestamptz not null default timezone('utc', now())
 );
 
@@ -101,6 +103,30 @@ create table if not exists public.cobrancas_whatsapp (
   zapi_message_id text,
   erro text,
   enviado_por uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.logs_cobranca (
+  id uuid primary key default gen_random_uuid(),
+  financeiro_id uuid references public.registros_financeiros(id) on delete set null,
+  company_id uuid not null references public.empresas(id) on delete cascade,
+  data_hora timestamptz not null default timezone('utc', now()),
+  cliente_nome text,
+  cliente_numero text,
+  telefone text,
+  documento text,
+  numero_boleto text,
+  numero_nf text,
+  valor numeric(14,2),
+  vencimento date,
+  tipo_cobranca text not null,
+  dias_atraso integer not null default 0,
+  arquivo_encontrado boolean not null default false,
+  drive_file_id text,
+  status_envio text not null,
+  erro text,
+  payload jsonb not null default '{}'::jsonb,
+  envio_hash text,
   created_at timestamptz not null default timezone('utc', now())
 );
 
@@ -122,6 +148,9 @@ create table if not exists public.whatsapp_cobranca_config (
   hora_envio time not null default '08:00',
   cobrar_apos_dias_vencido integer not null default 1,
   limite_cobrancas_por_titulo integer not null default 4,
+  protesto_apos_5_dias boolean not null default true,
+  canal_envio text not null default 'WhatsApp',
+  regras jsonb not null default '[]'::jsonb,
   mensagem_template text,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
@@ -130,7 +159,7 @@ create table if not exists public.whatsapp_cobranca_config (
 create table if not exists public.google_sheets_config (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null unique references public.empresas(id) on delete cascade,
-  spreadsheet_id text not null,
+  spreadsheet_id text,
   sheet_name text not null default 'Pagina1',
   ativo boolean not null default true,
   created_at timestamptz not null default timezone('utc', now()),
@@ -150,7 +179,32 @@ alter table public.empresas
   add column if not exists updated_at timestamptz not null default timezone('utc', now());
 
 alter table public.usuarios_empresas
-  add column if not exists role text not null default 'membro';
+  add column if not exists role text not null default 'operador';
+
+alter table public.usuarios_empresas
+  alter column role set default 'operador';
+
+alter table public.audit_logs
+  add column if not exists ip_address text;
+
+alter table public.audit_logs
+  add column if not exists user_agent text;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from public.audit_logs
+    where company_id is null
+  ) then
+    alter table public.audit_logs
+      alter column company_id set not null;
+  end if;
+exception
+  when undefined_table then
+    null;
+end;
+$$;
 
 alter table public.registros_financeiros
   add column if not exists batch_id uuid;
@@ -160,6 +214,39 @@ alter table public.registros_financeiros
 
 alter table public.registros_financeiros
   add column if not exists updated_at timestamptz not null default timezone('utc', now());
+
+alter table public.registros_financeiros
+  add column if not exists cliente_nome text;
+
+alter table public.registros_financeiros
+  add column if not exists cliente_numero text;
+
+alter table public.registros_financeiros
+  add column if not exists documento text;
+
+alter table public.registros_financeiros
+  add column if not exists numero_nf text;
+
+alter table public.registros_financeiros
+  add column if not exists drive_file_id text;
+
+alter table public.registros_financeiros
+  add column if not exists preventiva_enviada boolean not null default false;
+
+alter table public.registros_financeiros
+  add column if not exists data_envio_preventiva timestamptz;
+
+alter table public.registros_financeiros
+  add column if not exists cobranca_vencimento_enviada boolean not null default false;
+
+alter table public.registros_financeiros
+  add column if not exists data_envio_vencimento timestamptz;
+
+alter table public.registros_financeiros
+  add column if not exists ultima_cobranca timestamptz;
+
+alter table public.registros_financeiros
+  add column if not exists tentativas_cobranca integer not null default 0;
 
 alter table public.importacoes
   add column if not exists batch_id uuid;
@@ -215,11 +302,56 @@ alter table public.whatsapp_cobranca_config
 alter table public.whatsapp_cobranca_config
   add column if not exists updated_at timestamptz not null default timezone('utc', now());
 
+alter table public.whatsapp_cobranca_config
+  add column if not exists protesto_apos_5_dias boolean not null default true;
+
+alter table public.whatsapp_cobranca_config
+  add column if not exists canal_envio text not null default 'WhatsApp';
+
+alter table public.whatsapp_cobranca_config
+  add column if not exists regras jsonb not null default '[]'::jsonb;
+
+alter table public.whatsapp_cobranca_config
+  add column if not exists template_preventiva text;
+
+alter table public.whatsapp_cobranca_config
+  add column if not exists template_vencimento text;
+
+alter table public.whatsapp_cobranca_config
+  add column if not exists template_atraso text;
+
+alter table public.whatsapp_cobranca_config
+  add column if not exists regua_atraso jsonb not null default '[1,3,5,10,15,30]'::jsonb;
+
+alter table public.whatsapp_cobranca_config
+  add column if not exists hora_execucao time not null default '08:00';
+
 alter table public.google_sheets_config
   add column if not exists created_at timestamptz not null default timezone('utc', now());
 
 alter table public.google_sheets_config
   add column if not exists updated_at timestamptz not null default timezone('utc', now());
+
+alter table public.google_sheets_config
+  add column if not exists source_spreadsheet_id text;
+
+alter table public.google_sheets_config
+  add column if not exists source_sheet_name text;
+
+alter table public.google_sheets_config
+  add column if not exists drive_root_folder_id text;
+
+alter table public.google_sheets_config
+  add column if not exists last_source_sync_at timestamptz;
+
+alter table public.google_sheets_config
+  add column if not exists last_source_sync_status text;
+
+alter table public.google_sheets_config
+  add column if not exists last_source_sync_error text;
+
+alter table public.google_sheets_config
+  alter column spreadsheet_id drop not null;
 
 update public.empresas
 set invite_code = upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8))
@@ -275,7 +407,7 @@ $$;
 
 alter table public.registros_financeiros
   add constraint registros_financeiros_status_check
-  check (status in ('pendente', 'aberto', 'vencido', 'negociacao', 'promessa', 'liquidado'));
+  check (status in ('pendente', 'aberto', 'vencido', 'negociacao', 'promessa', 'liquidado', 'em_aberto', 'pago', 'cancelado', 'negociado'));
 
 do $$
 begin
@@ -330,6 +462,42 @@ $$;
 alter table public.cobrancas_whatsapp
   add constraint cobrancas_whatsapp_status_check
   check (status in ('preparado', 'enviado', 'mock_enviado', 'erro', 'cancelado'));
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conname = 'logs_cobranca_tipo_cobranca_check'
+      and conrelid = 'public.logs_cobranca'::regclass
+  ) then
+    alter table public.logs_cobranca
+      drop constraint logs_cobranca_tipo_cobranca_check;
+  end if;
+end;
+$$;
+
+alter table public.logs_cobranca
+  add constraint logs_cobranca_tipo_cobranca_check
+  check (tipo_cobranca in ('preventiva', 'vencimento', 'atraso'));
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conname = 'logs_cobranca_status_envio_check'
+      and conrelid = 'public.logs_cobranca'::regclass
+  ) then
+    alter table public.logs_cobranca
+      drop constraint logs_cobranca_status_envio_check;
+  end if;
+end;
+$$;
+
+alter table public.logs_cobranca
+  add constraint logs_cobranca_status_envio_check
+  check (status_envio in ('sucesso', 'erro', 'ignorado'));
 
 do $$
 begin
@@ -457,6 +625,32 @@ as $$
   end;
 $$;
 
+create or replace function public.has_company_role(
+  target_company_id uuid,
+  allowed_roles text[]
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    when public.is_system_admin(auth.uid()) then true
+    when target_company_id is null then false
+    else exists (
+      select 1
+      from public.usuarios_empresas ue
+      where ue.company_id = target_company_id
+        and ue.user_id = auth.uid()
+        and (
+          ue.role = any(allowed_roles)
+          or (ue.role in ('membro', 'member') and 'operador' = any(allowed_roles))
+        )
+    )
+  end;
+$$;
+
 create or replace function public.user_has_company_access(target_company_id uuid)
 returns boolean
 language sql
@@ -484,7 +678,7 @@ stable
 security definer
 set search_path = public
 as $$
-  select public.user_company_role(target_company_id, auth.uid()) in ('owner', 'admin', 'financeiro', 'operador');
+  select public.has_company_role(target_company_id, array['owner', 'admin', 'financeiro', 'operador']);
 $$;
 
 create or replace function public.user_can_delete_company(target_company_id uuid)
@@ -494,7 +688,106 @@ stable
 security definer
 set search_path = public
 as $$
-  select public.user_company_role(target_company_id, auth.uid()) in ('owner', 'admin', 'financeiro');
+  select public.has_company_role(target_company_id, array['owner', 'admin', 'financeiro']);
+$$;
+
+create or replace function public.delete_import_batch(
+  p_company_id uuid,
+  p_history_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_user_id uuid;
+  target_import public.importacoes;
+  target_company_id uuid;
+  deleted_financial_records_count integer := 0;
+begin
+  current_user_id := auth.uid();
+
+  if current_user_id is null then
+    raise exception 'Usuario nao autenticado.';
+  end if;
+
+  if public.is_system_admin(current_user_id) then
+    select *
+      into target_import
+    from public.importacoes
+    where id = p_history_id
+      and (p_company_id is null or company_id = p_company_id)
+    limit 1;
+  else
+    if p_company_id is null then
+      raise exception 'company_id obrigatorio para esta operacao.';
+    end if;
+
+    if not public.has_company_role(p_company_id, array['owner', 'admin', 'financeiro']) then
+      raise exception 'Sem permissao para excluir historico desta empresa.';
+    end if;
+
+    select *
+      into target_import
+    from public.importacoes
+    where id = p_history_id
+      and company_id = p_company_id
+    limit 1;
+  end if;
+
+  if target_import.id is null then
+    raise exception 'Lote de historico nao encontrado.';
+  end if;
+
+  target_company_id := target_import.company_id;
+
+  if target_import.tipo = 'vencidos' and target_import.batch_id is not null then
+    delete from public.registros_financeiros
+    where company_id = target_company_id
+      and batch_id = target_import.batch_id;
+
+    get diagnostics deleted_financial_records_count = row_count;
+  elsif target_import.tipo = 'vencidos' and target_import.batch_id is null then
+    delete from public.registros_financeiros
+    where company_id = target_company_id
+      and importado_em = target_import.created_at;
+
+    get diagnostics deleted_financial_records_count = row_count;
+  end if;
+
+  delete from public.importacoes
+  where id = target_import.id
+    and company_id = target_company_id;
+
+  insert into public.audit_logs (
+    company_id,
+    user_id,
+    action,
+    entity,
+    entity_id,
+    metadata
+  )
+  values (
+    target_company_id,
+    current_user_id,
+    'history_deleted',
+    'importacoes',
+    target_import.id::text,
+    jsonb_build_object(
+      'tipo', target_import.tipo,
+      'batch_id', target_import.batch_id,
+      'deleted_financial_records_count', deleted_financial_records_count
+    )
+  );
+
+  return jsonb_build_object(
+    'deleted_history_id', target_import.id,
+    'deleted_financial_records_count', deleted_financial_records_count,
+    'tipo', target_import.tipo,
+    'batch_id', target_import.batch_id
+  );
+end;
 $$;
 
 create or replace function public.generate_invite_code()
@@ -656,9 +949,11 @@ $$;
 
 grant execute on function public.is_system_admin(uuid) to authenticated;
 grant execute on function public.user_company_role(uuid, uuid) to authenticated;
+grant execute on function public.has_company_role(uuid, text[]) to authenticated;
 grant execute on function public.user_has_company_access(uuid) to authenticated;
 grant execute on function public.user_can_write_company(uuid) to authenticated;
 grant execute on function public.user_can_delete_company(uuid) to authenticated;
+grant execute on function public.delete_import_batch(uuid, uuid) to authenticated;
 grant execute on function public.generate_invite_code() to authenticated;
 grant execute on function public.create_empresa_with_admin(text, text) to authenticated;
 grant execute on function public.join_empresa_by_invite_code(text) to authenticated;
@@ -732,6 +1027,11 @@ create index if not exists idx_cobrancas_whatsapp_empresa_id on public.cobrancas
 create index if not exists idx_cobrancas_whatsapp_registro_id on public.cobrancas_whatsapp(registro_id);
 create index if not exists idx_cobrancas_whatsapp_status on public.cobrancas_whatsapp(status);
 create index if not exists idx_cobrancas_whatsapp_created_at on public.cobrancas_whatsapp(created_at);
+create index if not exists idx_logs_cobranca_company_id on public.logs_cobranca(company_id);
+create index if not exists idx_logs_cobranca_financeiro_id on public.logs_cobranca(financeiro_id);
+create index if not exists idx_logs_cobranca_tipo_cobranca on public.logs_cobranca(tipo_cobranca);
+create index if not exists idx_logs_cobranca_created_at on public.logs_cobranca(created_at);
+create unique index if not exists idx_logs_cobranca_envio_hash on public.logs_cobranca(envio_hash) where envio_hash is not null;
 create index if not exists idx_whatsapp_config_empresa_id on public.whatsapp_config(empresa_id);
 create index if not exists idx_whatsapp_cobranca_config_empresa_id on public.whatsapp_cobranca_config(empresa_id);
 create index if not exists idx_google_sheets_config_empresa_id on public.google_sheets_config(empresa_id);
@@ -746,6 +1046,7 @@ alter table public.registros_financeiros enable row level security;
 alter table public.importacoes enable row level security;
 alter table public.audit_logs enable row level security;
 alter table public.cobrancas_whatsapp enable row level security;
+alter table public.logs_cobranca enable row level security;
 alter table public.whatsapp_config enable row level security;
 alter table public.whatsapp_cobranca_config enable row level security;
 alter table public.google_sheets_config enable row level security;
@@ -1080,23 +1381,17 @@ for insert
 to authenticated
 with check (
   public.is_system_admin(auth.uid())
-  or company_id is null
-  or public.user_can_write_company(company_id)
-);
-
-create policy "audit_logs_delete_access"
-on public.audit_logs
-for delete
-to authenticated
-using (
-  public.is_system_admin(auth.uid())
-  or public.user_can_delete_company(company_id)
+  or public.user_has_company_access(company_id)
 );
 
 drop policy if exists "cobrancas_whatsapp_select_access" on public.cobrancas_whatsapp;
 drop policy if exists "cobrancas_whatsapp_insert_access" on public.cobrancas_whatsapp;
 drop policy if exists "cobrancas_whatsapp_update_access" on public.cobrancas_whatsapp;
 drop policy if exists "cobrancas_whatsapp_delete_access" on public.cobrancas_whatsapp;
+drop policy if exists "logs_cobranca_select_access" on public.logs_cobranca;
+drop policy if exists "logs_cobranca_insert_access" on public.logs_cobranca;
+drop policy if exists "logs_cobranca_update_access" on public.logs_cobranca;
+drop policy if exists "logs_cobranca_delete_access" on public.logs_cobranca;
 
 create policy "cobrancas_whatsapp_select_access"
 on public.cobrancas_whatsapp
@@ -1131,6 +1426,33 @@ for delete
 to authenticated
 using (
   public.user_can_delete_company(empresa_id)
+);
+
+create policy "logs_cobranca_select_access"
+on public.logs_cobranca
+for select
+to authenticated
+using (
+  public.user_has_company_access(company_id)
+);
+
+create policy "logs_cobranca_insert_access"
+on public.logs_cobranca
+for insert
+to authenticated
+with check (
+  public.user_can_write_company(company_id)
+);
+
+create policy "logs_cobranca_update_access"
+on public.logs_cobranca
+for update
+to authenticated
+using (
+  public.user_can_write_company(company_id)
+)
+with check (
+  public.user_can_write_company(company_id)
 );
 
 drop policy if exists "whatsapp_config_select_access" on public.whatsapp_config;

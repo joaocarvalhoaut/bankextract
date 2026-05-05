@@ -124,19 +124,7 @@ export default function ConfiguracoesScreen({
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
             <p className="text-sm font-semibold text-slate-900">Empresa ativa controlada</p>
             <p className="mt-1 text-xs text-slate-500">
-              Seleção por company_id com bloqueio de ações globais destrutivas.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-sm font-semibold text-slate-900">Convite pronto para onboarding</p>
-            <p className="mt-1 text-xs text-slate-500">
-              Use o invite code da empresa para entrada de novos usuários sem criar outra carteira.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-sm font-semibold text-slate-900">Permissões por role</p>
-            <p className="mt-1 text-xs text-slate-500">
-              Importação, exportação e limpeza seguem a role da empresa ativa.
+              Importacao, exportacao e limpeza seguem a role da empresa ativa.
             </p>
           </div>
         </div>

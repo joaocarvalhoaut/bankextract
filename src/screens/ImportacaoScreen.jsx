@@ -1,6 +1,6 @@
 import { FileImage, FileText, LoaderCircle, ScanSearch, UploadCloud, Wand2 } from 'lucide-react';
 import PreviewImportTable from '../components/PreviewImportTable';
-import { canUserPerformAction } from '../services/permissionsService';
+import { canUserPerformAction } from '../security/permissions';
 
 const importTypeOptions = [
   { value: 'vencidos', label: 'Vencidos', hint: 'Popula a carteira financeira da empresa ativa.' },
@@ -61,9 +61,9 @@ export default function ImportacaoScreen({
   onUpdatePreviewField,
   onDiscardPreview,
   onImportSelected,
-  userRole = 'membro',
+  userRole = 'operador',
 }) {
-  const canImport = canUserPerformAction(userRole, 'importar');
+  const canImport = canUserPerformAction(userRole, 'import_files');
   const activeCompany = companies.find((item) => item.id === activeCompanyId);
   const selectedType = importTypeOptions.find((item) => item.value === importType) || importTypeOptions[0];
 

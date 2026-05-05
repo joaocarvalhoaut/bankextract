@@ -17,7 +17,7 @@ const mockCompanies = [
     nome: 'Comercial Horizonte SA',
     cnpj: '98.765.432/0001-10',
     inviteCode: 'HORIZ-2026',
-    role: 'membro'
+    role: 'operador'
   }
 ];
 
@@ -33,7 +33,7 @@ const mockMemberships = [
     id: 'membership_2',
     user_id: mockUserId,
     company_id: 'emp2',
-    role: 'membro',
+    role: 'operador',
     created_at: new Date().toISOString()
   }
 ];
@@ -89,14 +89,14 @@ const mapCompanyToApp = (row, membership = null) => ({
   cnpj: row.cnpj || '',
   inviteCode: row.invite_code || row.inviteCode || '',
   createdAt: row.created_at || null,
-  role: membership?.role || row.role || 'membro'
+  role: membership?.role || row.role || 'operador'
 });
 
 const mapMembershipToApp = (row) => ({
   id: row.id,
   userId: row.user_id,
   companyId: row.company_id,
-  role: row.role || 'membro',
+  role: row.role || 'operador',
   createdAt: row.created_at || null
 });
 
@@ -189,7 +189,7 @@ export const companyService = {
           const membership = memberships.find((item) => item.companyId === company.id);
           return {
             ...company,
-            role: membership?.role || (isAdmin ? 'admin' : 'membro')
+            role: membership?.role || (isAdmin ? 'admin' : 'operador')
           };
         });
 
@@ -369,7 +369,7 @@ export const companyService = {
           id: `membership_${Date.now()}`,
           user_id: userId || mockUserId,
           company_id: company.id,
-          role: 'membro',
+          role: 'operador',
           created_at: new Date().toISOString()
         });
       }
@@ -377,7 +377,7 @@ export const companyService = {
       return {
         company: {
           ...company,
-          role: existingMembership?.role || 'membro'
+          role: existingMembership?.role || 'operador'
         },
         membership: existingMembership
           ? mapMembershipToApp(existingMembership)
@@ -385,7 +385,7 @@ export const companyService = {
               id: `membership_${Date.now()}_joined`,
               userId: userId || mockUserId,
               companyId: company.id,
-              role: 'membro',
+              role: 'operador',
               createdAt: new Date().toISOString()
             }
       };
@@ -406,12 +406,12 @@ export const companyService = {
     }
 
     return {
-      company: mapCompanyToApp(companyData, { role: 'membro' }),
+      company: mapCompanyToApp(companyData, { role: 'operador' }),
       membership: {
         id: `membership_${companyData.id}`,
         userId,
         companyId: companyData.id,
-        role: 'membro',
+        role: 'operador',
         createdAt: companyData.created_at || new Date().toISOString()
       }
     };

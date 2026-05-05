@@ -322,6 +322,17 @@ export default function WhatsAppAutoConfig({ empresaId, empresaNome, globalMode 
               </label>
 
               <label className="block">
+                <FieldLabel>Canal de envio</FieldLabel>
+                <select
+                  value={config.canal_envio || 'WhatsApp'}
+                  onChange={(event) => updateField('canal_envio', event.target.value)}
+                  className="input-premium w-full"
+                >
+                  <option value="WhatsApp">WhatsApp</option>
+                </select>
+              </label>
+
+              <label className="block">
                 <FieldLabel>Limite maximo de cobrancas por titulo</FieldLabel>
                 <input
                   type="number"
@@ -333,27 +344,29 @@ export default function WhatsAppAutoConfig({ empresaId, empresaNome, globalMode 
               </label>
             </div>
 
+            <label className="flex items-center justify-between gap-4 rounded-3xl border border-slate-200/80 bg-white px-4 py-4 shadow-sm">
+              <div>
+                <p className="text-sm font-semibold text-slate-950">Aplicar aviso de protesto após 5 dias</p>
+                <p className="text-xs text-slate-500">Inclui o aviso comercial no texto padrão da cobrança.</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={Boolean(config.protesto_apos_5_dias)}
+                onChange={(event) => updateField('protesto_apos_5_dias', event.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+            </label>
+
             <label className="block">
-              <FieldLabel>Template da mensagem</FieldLabel>
+              <FieldLabel>Modelo da mensagem</FieldLabel>
               <textarea
                 rows={10}
                 value={config.mensagem_template || ''}
                 onChange={(event) => updateField('mensagem_template', event.target.value)}
-                placeholder={[
-                  'Ola, {nome_cliente},',
-                  '',
-                  'Aqui e {sender_name}, do setor de cobranca da {empresa}.',
-                  '',
-                  'Documento: {numero_boleto}',
-                  'Vencimento: {data_vencimento}',
-                  'Valor original: {valor}',
-                  'Valor atualizado: {valor_atualizado}',
-                  'Dias em atraso: {dias_atraso}',
-                ].join('\n')}
                 className="input-premium min-h-[220px] w-full"
               />
               <p className="mt-2 text-xs text-slate-500">
-                Variaveis: {'{nome_cliente}'}, {'{sender_name}'}, {'{empresa}'}, {'{numero_boleto}'}, {'{data_vencimento}'}, {'{valor}'}, {'{valor_atualizado}'}, {'{dias_atraso}'}.
+                Variáveis: {'{{cliente}}'}, {'{{documento}}'}, {'{{vencimento}}'}, {'{{valor}}'}, {'{{telefone}}'}, {'{{dias_atraso}}'}, {'{{empresa}}'}.
               </p>
             </label>
 

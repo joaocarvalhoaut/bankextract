@@ -2,13 +2,15 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react
 import Header from './components/Header';
 import EmpresaModal from './components/EmpresaModal';
 import ErrorBoundary from './components/ErrorBoundary';
+import MessagePreviewModal from './components/MessagePreviewModal';
 import Sidebar from './components/Sidebar';
 import { useEmpresa } from './hooks/useEmpresa';
 import { useSupabaseAuth } from './hooks/useSupabaseAuth';
-import { financeService } from './services/financeService.ts';
+import { financeService, sanitizeSpreadsheetCell } from './services/financeService.ts';
 import LoginScreen from './screens/LoginScreen';
 import { GLOBAL_COMPANY_ID } from './services/companyService';
 import { auditLog } from './services/auditService';
+import { canUserPerformAction } from './security/permissions';
 
 const DashboardScreen = lazy(() => import('./screens/DashboardScreen'));
 const ImportacaoScreen = lazy(() => import('./screens/ImportacaoScreen'));
@@ -43,6 +45,55 @@ const normalizeText = (value) =>
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
+
+const formatCurrencyValue = (value) =>
+  new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(Number(value || 0));
+
+const formatDateValue = (value) => {
+  if (!value) return '';
+
+  try {
+    return new Intl.DateTimeFormat('pt-BR').format(new Date(`${value}T00:00:00`));
+  } catch {
+    return value;
+  }
+};
+
+const buildChargeMessage = (row, companyName) => {
+  const dueDate = row?.vencimento ? new Date(`${row.vencimento}T00:00:00`) : null;
+  const today = new Date();
+  const daysLate = dueDate ? Math.max(0, Math.floor((today - dueDate) / 86400000)) : 0;
+
+  const template = `Olá, {{cliente}},
+
+Entramos em contato para confirmar o pagamento da duplicata abaixo:
+
+Documento: {{documento}}
+Vencimento: {{vencimento}}
+Valor: {{valor}}
+
+Até o momento, identificamos {{dias_atraso}} dia(s) de atraso em nosso sistema.
+
+Solicitamos, por gentileza, a regularização do título ou o envio do comprovante de pagamento, caso já tenha sido quitado.
+
+Após 5 dias do vencimento, o boleto poderá estar sujeito a protesto e encargos adicionais.
+
+Ficamos à disposição.
+
+Caso o pagamento já tenha sido efetuado, desconsidere esta mensagem.`;
+
+  return template
+    .replaceAll('{{cliente}}', row?.cliente || '')
+    .replaceAll('{{documento}}', row?.documento || '')
+    .replaceAll('{{vencimento}}', formatDateValue(row?.vencimento))
+    .replaceAll('{{valor}}', formatCurrencyValue(row?.valor))
+    .replaceAll('{{telefone}}', row?.telefone || '')
+    .replaceAll('{{dias_atraso}}', String(daysLate))
+    .replaceAll('{{empresa}}', companyName || '');
+};
 
 const emptyMetrics = {
   kpis: [],
@@ -154,6 +205,8 @@ export default function App() {
   const [financialRecords, setFinancialRecords] = useState([]);
   const [historyRows, setHistoryRows] = useState([]);
   const [chargeRows, setChargeRows] = useState([]);
+  const [chargePreviewModal, setChargePreviewModal] = useState(null);
+  const [chargePreviewSending, setChargePreviewSending] = useState(false);
   const [automationRules, setAutomationRules] = useState(emptyAutomation);
   const [settingsOverview, setSettingsOverview] = useState(null);
   const [systemStatus, setSystemStatus] = useState(null);
@@ -191,6 +244,8 @@ export default function App() {
     () => empresa.companies.filter((company) => company.id !== GLOBAL_COMPANY_ID),
     [empresa.companies]
   );
+  const currentUserRole = empresa.userRole;
+  const currentUserId = auth.user?.id || '';
 
   useEffect(() => {
     financeService.setRuntimeContext({
@@ -329,6 +384,11 @@ export default function App() {
   }, [financialRecords]);
 
   const handleProcessImport = useCallback(async () => {
+    if (!canUserPerformAction(currentUserRole, 'import_files')) {
+      showToast('erro', 'Seu perfil atual nao pode processar importacoes.');
+      return;
+    }
+
     if (!currentCompanyId) {
       showToast('erro', 'Selecione uma empresa ativa para importar.');
       return;
@@ -358,9 +418,14 @@ export default function App() {
       setProcessing(false);
       setProcessingStage('');
     }
-  }, [currentCompanyId, globalMode, importType, selectedFile, showToast]);
+  }, [currentCompanyId, currentUserRole, globalMode, importType, selectedFile, showToast]);
 
   const handleImportSelected = useCallback(async () => {
+    if (!canUserPerformAction(currentUserRole, 'confirm_import')) {
+      showToast('erro', 'Seu perfil atual nao pode confirmar importacoes.');
+      return;
+    }
+
     if (!preview) return;
 
     try {
@@ -374,7 +439,7 @@ export default function App() {
         arquivo: preview.fileName,
         registros: (preview?.rows || []).filter((row) => row.selected !== false).length,
         tipo: importType,
-      });
+      }, currentUserId);
       setPreview(null);
       setSelectedFile(null);
       await refreshAllData();
@@ -383,7 +448,7 @@ export default function App() {
     } catch (error) {
       showToast('erro', error.message || 'Nao foi possivel importar os registros selecionados.');
     }
-  }, [currentCompanyId, currentCompanyName, importType, preview, refreshAllData, showToast]);
+  }, [currentCompanyId, currentCompanyName, currentUserRole, importType, preview, refreshAllData, showToast]);
 
   const handleUpdatePreviewField = useCallback((rowId, field, value) => {
     setPreview((prev) => {
@@ -427,8 +492,12 @@ export default function App() {
       if (!confirmed) return;
 
       try {
+        if (!canUserPerformAction(currentUserRole, 'delete_history')) {
+          throw new Error('Seu perfil atual nao pode excluir historico.');
+        }
+
         await financeService.deleteImportHistory(item);
-        await auditLog.historyDeleted(item.company_id, { count: 1, ids: [item.id] });
+        await auditLog.historyDeleted(item.company_id, { count: 1, ids: [item.id], batch_id: item.batch_id }, currentUserId);
         await refreshAllData();
         showToast('sucesso', 'Historico excluido com sucesso.');
       } catch (error) {
@@ -470,10 +539,14 @@ export default function App() {
 
   const handleConfirmClearOverview = useCallback(async () => {
     try {
+      if (!canUserPerformAction(currentUserRole, 'clear_overview')) {
+        throw new Error('Seu perfil atual nao pode limpar a visao geral.');
+      }
+
       setClearOverviewLoading(true);
       const affectedRecords = financialRecords.filter((row) => row.company_id === currentCompanyId).length;
       await financeService.clearOverview(currentCompanyId);
-      await auditLog.viewCleared(currentCompanyId, { count: affectedRecords });
+      await auditLog.viewCleared(currentCompanyId, { count: affectedRecords }, currentUserId);
       await refreshAllData();
       setClearOverviewOpen(false);
       showToast('sucesso', 'Visao geral limpa com sucesso.');
@@ -500,8 +573,13 @@ export default function App() {
       }
 
       try {
+        if (!canUserPerformAction(currentUserRole, 'manage_company_settings')) {
+          throw new Error('Seu perfil atual nao pode alterar configuracoes financeiras.');
+        }
+
         const saved = await financeService.saveFinancialConfig(currentCompanyId, payload);
         setFinancialConfig(saved);
+        await auditLog.financialConfigChanged(currentCompanyId, payload, currentUserId);
         await refreshAllData();
         showToast('sucesso', 'Configuracao financeira salva com sucesso.');
       } catch (error) {
@@ -513,6 +591,11 @@ export default function App() {
 
   const handleExport = useCallback(
     (format) => {
+      if (!canUserPerformAction(currentUserRole, 'export_data')) {
+        showToast('erro', 'Seu perfil atual nao pode exportar dados.');
+        return;
+      }
+
       if (!filteredFinancialRows.length) {
         showToast('erro', 'Nao ha registros para exportar.');
         return;
@@ -522,13 +605,13 @@ export default function App() {
       const header = ['Cliente', 'Documento', 'Vencimento', 'Valor', 'Telefone', 'Status', 'batch_id'];
       const lines = filteredFinancialRows.map((row) =>
         [
-          row.nome,
-          row.numero_boleto,
-          row.data_vencimento,
-          String(row.valor).replace('.', ','),
-          row.telefone || '',
-          row.status,
-          row.batch_id || '',
+          sanitizeSpreadsheetCell(row.nome),
+          sanitizeSpreadsheetCell(row.numero_boleto),
+          sanitizeSpreadsheetCell(row.data_vencimento),
+          sanitizeSpreadsheetCell(String(row.valor).replace('.', ',')),
+          sanitizeSpreadsheetCell(row.telefone || ''),
+          sanitizeSpreadsheetCell(row.status),
+          sanitizeSpreadsheetCell(row.batch_id || ''),
         ].join(separator)
       );
 
@@ -541,32 +624,63 @@ export default function App() {
       anchor.download = `bankextract-${activeTab}.${format === 'csv' ? 'csv' : 'xls'}`;
       anchor.click();
       URL.revokeObjectURL(url);
-      auditLog.exportCsv(currentCompanyId, { count: filteredFinancialRows.length, filters: viewFilters });
+      auditLog.exportData(currentCompanyId, { count: filteredFinancialRows.length, filters: viewFilters, format }, currentUserId);
     },
-    [activeTab, currentCompanyId, filteredFinancialRows, showToast, viewFilters]
+    [activeTab, currentCompanyId, currentUserId, currentUserRole, filteredFinancialRows, showToast, viewFilters]
   );
 
   const handleGenerateChargeMessage = useCallback(
     (row) => {
+      const message = row?._editedMessage ? row.mensagem : buildChargeMessage(row, currentCompanyName);
       setChargeRows((prev) =>
         prev.map((item) =>
           item.id === row.id
             ? {
                 ...item,
-                mensagem: `Ola, ${item.cliente}. Identificamos o titulo ${item.documento} em aberto no BankExtract. Poderia nos confirmar a programacao de pagamento?`,
+                mensagem: message,
+                _editedMessage: Boolean(item._editedMessage),
               }
             : item
         )
       );
-      showToast('sucesso', 'Mensagem base gerada para o cliente.');
+      setChargePreviewModal({
+        open: true,
+        row: {
+          ...row,
+          mensagem: message,
+        },
+        message,
+      });
     },
-    [showToast]
+    [currentCompanyName]
   );
 
   const handleSendCharge = useCallback(
     async (row) => {
       try {
-        const result = await financeService.sendWhatsAppCharge(row, 'manual');
+        if (!canUserPerformAction(currentUserRole, 'manage_charges')) {
+          throw new Error('Seu perfil atual nao pode enviar cobrancas.');
+        }
+
+        const latestRow =
+          chargeRows.find((item) => item.id === row.id) ||
+          chargeRows.find((item) => item.registro_id === (row.registro_id || row.id)) ||
+          row;
+
+        const payload = {
+          ...latestRow,
+          ...row,
+          mensagem: row.mensagem || latestRow.mensagem,
+          _editedMessage: Boolean(row._editedMessage || latestRow._editedMessage),
+        };
+
+        const result = await financeService.sendWhatsAppCharge(payload, 'manual');
+        await auditLog.whatsappSent(
+          payload.company_id || currentCompanyId,
+          result?.chargeId || payload.registro_id || payload.id,
+          { mocked: Boolean(result?.mocked), status: result?.status, mode: 'manual' },
+          currentUserId
+        );
         const nextCharges = await financeService.getCharges(currentCompanyId);
         setChargeRows(nextCharges);
         await refreshAllData();
@@ -581,21 +695,79 @@ export default function App() {
         showToast('erro', error.message || 'Falha ao enviar cobranca via WhatsApp.');
       }
     },
-    [currentCompanyId, refreshAllData, showToast]
+    [chargeRows, currentCompanyId, currentUserId, currentUserRole, refreshAllData, showToast]
   );
+
+  const handleChargePreviewMessageChange = useCallback((value) => {
+    setChargePreviewModal((prev) => (prev ? { ...prev, message: value } : prev));
+    setChargeRows((prev) =>
+      prev.map((item) =>
+        item.id === chargePreviewModal?.row?.id
+          ? { ...item, mensagem: value, _editedMessage: true }
+          : item
+      )
+    );
+  }, [chargePreviewModal?.row?.id]);
+
+  const handleCopyChargeMessage = useCallback(async () => {
+    if (!chargePreviewModal?.message) return;
+
+    try {
+      await navigator.clipboard.writeText(chargePreviewModal.message);
+      showToast('sucesso', 'Mensagem copiada com sucesso.');
+    } catch {
+      showToast('erro', 'Não foi possível copiar a mensagem.');
+    }
+  }, [chargePreviewModal, showToast]);
+
+  const handleSendChargeFromPreview = useCallback(async () => {
+    if (!chargePreviewModal?.row) return;
+
+    const nextRow = {
+      ...chargePreviewModal.row,
+      mensagem: chargePreviewModal.message,
+    };
+
+    setChargePreviewSending(true);
+    setChargeRows((prev) =>
+      prev.map((item) => (item.id === nextRow.id ? { ...item, mensagem: nextRow.mensagem } : item))
+    );
+
+    try {
+      await handleSendCharge(nextRow);
+      setChargePreviewModal(null);
+    } finally {
+      setChargePreviewSending(false);
+    }
+  }, [chargePreviewModal, handleSendCharge]);
 
   const handleToggleAutomationRule = useCallback((day) => {
     setAutomationRules((prev) => ({
       ...prev,
-      rules: prev.rules.map((rule) => (rule.day === day ? { ...rule, active: !rule.active } : rule)),
+      rules: prev.rules.map((rule, index) => {
+        const ruleKey = rule.id || rule.day || `rule-${index}`;
+        return ruleKey === day ? { ...rule, active: !rule.active } : rule;
+      }),
     }));
   }, []);
 
-  const handleSaveAutomationRules = useCallback(async () => {
-    await financeService.saveAutomationRules(currentCompanyId, automationRules);
+  const handleSaveAutomationRules = useCallback(async (nextRules = null) => {
+    if (!canUserPerformAction(currentUserRole, 'manage_automations')) {
+      showToast('erro', 'Seu perfil atual nao pode alterar automacoes.');
+      return;
+    }
+
+    const payload = nextRules || automationRules;
+    await financeService.saveAutomationRules(currentCompanyId, payload);
+    if (nextRules) {
+      setAutomationRules((prev) => ({
+        ...prev,
+        ...nextRules,
+      }));
+    }
     await refreshAllData();
     showToast('sucesso', 'Regras de automacao salvas.');
-  }, [automationRules, currentCompanyId, refreshAllData, showToast]);
+  }, [automationRules, currentCompanyId, currentUserRole, refreshAllData, showToast]);
 
   const handleOpenOnboardingStep = useCallback((step) => {
     if (step?.actionTab) {
@@ -692,6 +864,9 @@ export default function App() {
             onCloseClearOverview={() => setClearOverviewOpen(false)}
             onConfirmClearOverview={handleConfirmClearOverview}
             userRole={empresa.userRole}
+            onToast={showToast}
+            onRequestRefresh={refreshAllData}
+            currentUserId={currentUserId}
           />
         );
         break;
@@ -710,6 +885,7 @@ export default function App() {
             rows={chargeRows}
             onGenerateMessage={handleGenerateChargeMessage}
             onSend={handleSendCharge}
+            userRole={empresa.userRole}
           />
         );
         break;
@@ -717,11 +893,15 @@ export default function App() {
         currentContent = (
           <AutomacoesScreen
             companyId={globalMode ? GLOBAL_COMPANY_ID : currentCompanyId}
+            activeCompanyId={currentCompanyId}
+            activeCompany={empresa.activeCompany}
             companyName={currentCompanyName}
             globalMode={globalMode}
+            userRole={empresa.userRole}
             rules={automationRules}
             onToggleRule={handleToggleAutomationRule}
             onSaveRules={handleSaveAutomationRules}
+            onToast={showToast}
           />
         );
         break;
@@ -765,7 +945,7 @@ export default function App() {
         currentContent = <BillingScreen billing={billingOverview} onOpenPlans={() => setActiveTab('planos')} />;
         break;
       default:
-        currentContent = <DashboardScreen metrics={dashboardMetrics} />;
+        currentContent = <DashboardScreen metrics={dashboardMetrics} companyId={currentCompanyId} />;
         break;
     }
   }
@@ -905,23 +1085,32 @@ export default function App() {
               </ErrorBoundary>
             </Suspense>
           )}
+
+          <MessagePreviewModal
+            modal={chargePreviewModal}
+            sending={chargePreviewSending}
+            onClose={() => (chargePreviewSending ? null : setChargePreviewModal(null))}
+            onChangeMessage={handleChargePreviewMessageChange}
+            onCopy={handleCopyChargeMessage}
+            onSend={handleSendChargeFromPreview}
+          />
         </main>
       </div>
 
       <EmpresaModal
         isOpen={empresa.modalOpen}
         mode={empresa.modalMode}
-        setMode={empresa.setModalMode}
-        allowCreate={empresa.isSystemAdmin}
-        onClose={empresa.closeModal}
-        onContinueWithoutCompany={empresa.continueWithoutCompany}
-        form={empresa.modalForm}
-        setField={empresa.setModalField}
-        error={empresa.modalError}
-        saving={empresa.saving}
-        onCreate={empresa.createCompany}
-        onJoin={empresa.joinCompany}
-      />
+          setMode={empresa.setModalMode}
+          allowCreate={empresa.isSystemAdmin}
+          onClose={empresa.closeModal}
+          onContinueWithoutCompany={empresa.continueWithoutCompany}
+          form={empresa.modalForm}
+          setField={empresa.setModalField}
+          error={empresa.modalError}
+          saving={empresa.saving}
+          onCreate={empresa.createCompany}
+          onJoin={empresa.joinCompany}
+        />
     </div>
   );
 }

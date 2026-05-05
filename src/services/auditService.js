@@ -1,121 +1,167 @@
-/**
- * BankExtract Pro — Serviço de Audit Log
- *
- * Registra ações sensíveis na tabela audit_logs do Supabase.
- * Falhas de log são silenciosas — nunca devem quebrar a operação principal.
- *
- * Ações registradas:
- *   import_confirmed   — importação confirmada
- *   records_deleted    — registros financeiros excluídos
- *   history_deleted    — importações excluídas do histórico
- *   view_cleared       — visão geral limpa (todos os registros da empresa)
- *   export_csv         — exportação CSV/Excel
- *   record_edited      — célula de registro editada
- *   whatsapp_charges_sent — cobranças enviadas via WhatsApp
- */
+import { supabase, hasSupabaseConfig } from './supabaseClient';
 
-import { supabase } from './supabaseClient';
+const isProduction = import.meta.env.PROD;
 
-/**
- * Registra uma ação no audit_log.
- *
- * @param {Object} params
- * @param {string|null} params.companyId  - UUID da empresa
- * @param {string}      params.action     - Chave da ação (ex: 'import_confirmed')
- * @param {string}      params.entity     - Nome da entidade (ex: 'registros_financeiros')
- * @param {string|null} [params.entityId] - UUID da entidade afetada (se aplicável)
- * @param {Object|null} [params.metadata] - Dados extras serializáveis em JSON
- */
-export async function logAudit({ companyId, action, entity, entityId = null, metadata = null }) {
-  if (!supabase) return;
+const getBrowserMetadata = () => ({
+  ipAddress: null,
+  userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+});
+
+export async function logAuditEvent({
+  companyId,
+  userId = null,
+  action,
+  entity,
+  entityId = null,
+  metadata = null,
+  ipAddress = null,
+  userAgent = null,
+}) {
+  if (!action || !entity) return false;
+
+  if (!hasSupabaseConfig || !supabase) {
+    if (isProduction) {
+      // eslint-disable-next-line no-console
+      console.error('[AuditLog] Supabase nao configurado para producao.');
+    }
+    return false;
+  }
+
+  const browserMeta = getBrowserMetadata();
 
   try {
     const { error } = await supabase.from('audit_logs').insert({
       company_id: companyId || null,
+      user_id: userId || null,
       action,
       entity,
-      entity_id:  entityId  ? String(entityId)  : null,
-      metadata:   metadata  ? metadata           : null,
+      entity_id: entityId ? String(entityId) : null,
+      metadata: metadata || {},
+      ip_address: ipAddress || browserMeta.ipAddress,
+      user_agent: userAgent || browserMeta.userAgent,
     });
 
     if (error) {
       // eslint-disable-next-line no-console
       console.warn('[AuditLog] Falha ao registrar log:', error.message);
+      return false;
     }
-  } catch (err) {
-    // Silencioso — log failure nunca deve interromper a operação principal
+
+    return true;
+  } catch (error) {
     // eslint-disable-next-line no-console
-    console.warn('[AuditLog] Erro inesperado:', err?.message);
+    console.warn('[AuditLog] Erro inesperado:', error?.message);
+    return false;
   }
 }
 
-/**
- * Helpers pré-configurados para as ações mais comuns.
- * Chamados diretamente nos hooks de negócio.
- */
+export async function logAudit(params) {
+  return logAuditEvent(params);
+}
 
 export const auditLog = {
-  importConfirmed(companyId, { arquivo, registros, tipo }) {
-    return logAudit({
+  importConfirmed(companyId, metadata = {}, userId = null) {
+    return logAuditEvent({
       companyId,
-      action:   'import_confirmed',
-      entity:   'importacoes',
-      metadata: { arquivo, registros, tipo },
+      userId,
+      action: 'import_confirmed',
+      entity: 'importacoes',
+      metadata,
     });
   },
 
-  recordsDeleted(companyId, { count, ids }) {
-    return logAudit({
+  recordsDeleted(companyId, metadata = {}, userId = null) {
+    return logAuditEvent({
       companyId,
-      action:   'records_deleted',
-      entity:   'registros_financeiros',
-      metadata: { count, ids: ids?.slice(0, 50) }, // limita IDs para não explodir o JSON
+      userId,
+      action: 'records_deleted',
+      entity: 'registros_financeiros',
+      metadata,
     });
   },
 
-  historyDeleted(companyId, { count, ids }) {
-    return logAudit({
+  historyDeleted(companyId, metadata = {}, userId = null) {
+    return logAuditEvent({
       companyId,
-      action:   'history_deleted',
-      entity:   'importacoes',
-      metadata: { count, ids: ids?.slice(0, 50) },
+      userId,
+      action: 'history_deleted',
+      entity: 'importacoes',
+      metadata,
     });
   },
 
-  viewCleared(companyId, { count }) {
-    return logAudit({
+  viewCleared(companyId, metadata = {}, userId = null) {
+    return logAuditEvent({
       companyId,
-      action:   'view_cleared',
-      entity:   'registros_financeiros',
-      metadata: { count },
+      userId,
+      action: 'view_cleared',
+      entity: 'registros_financeiros',
+      metadata,
     });
   },
 
-  exportCsv(companyId, { count, filters }) {
-    return logAudit({
+  exportData(companyId, metadata = {}, userId = null) {
+    return logAuditEvent({
       companyId,
-      action:   'export_csv',
-      entity:   'registros_financeiros',
-      metadata: { count, filters },
+      userId,
+      action: 'export_data',
+      entity: 'registros_financeiros',
+      metadata,
     });
   },
 
-  recordEdited(companyId, { id, field, oldValue, newValue }) {
-    return logAudit({
+  exportCsv(companyId, metadata = {}, userId = null) {
+    return this.exportData(companyId, metadata, userId);
+  },
+
+  financialRecordEdited(companyId, entityId, metadata = {}, userId = null) {
+    return logAuditEvent({
       companyId,
-      action:   'record_edited',
-      entity:   'registros_financeiros',
-      entityId: id,
-      metadata: { field, oldValue, newValue },
+      userId,
+      action: 'record_edited',
+      entity: 'registros_financeiros',
+      entityId,
+      metadata,
     });
   },
 
-  whatsappChargesSent(companyId, { count, mocked }) {
-    return logAudit({
+  recordEdited(companyId, metadata = {}, userId = null) {
+    return this.financialRecordEdited(companyId, metadata.id || metadata.entityId || null, metadata, userId);
+  },
+
+  representativeChanged(companyId, entityId, metadata = {}, userId = null) {
+    return logAuditEvent({
       companyId,
-      action:   'whatsapp_charges_sent',
-      entity:   'cobrancas_whatsapp',
-      metadata: { count, mocked },
+      userId,
+      action: 'representative_changed',
+      entity: 'representantes',
+      entityId,
+      metadata,
     });
+  },
+
+  financialConfigChanged(companyId, metadata = {}, userId = null) {
+    return logAuditEvent({
+      companyId,
+      userId,
+      action: 'financial_config_changed',
+      entity: 'configuracoes_financeiras',
+      metadata,
+    });
+  },
+
+  whatsappSent(companyId, entityId, metadata = {}, userId = null) {
+    return logAuditEvent({
+      companyId,
+      userId,
+      action: 'whatsapp_sent',
+      entity: 'cobrancas_whatsapp',
+      entityId,
+      metadata,
+    });
+  },
+
+  whatsappChargesSent(companyId, metadata = {}, userId = null) {
+    return this.whatsappSent(companyId, metadata.chargeId || null, metadata, userId);
   },
 };

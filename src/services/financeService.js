@@ -9,6 +9,8 @@ import { GLOBAL_COMPANY_ID } from './companyService';
 
 const mockUserId = 'user_demo_1';
 const mockDefaultCompanyId = 'emp1';
+const isProduction = import.meta.env.PROD;
+const isDevelopment = import.meta.env.DEV;
 
 const fallbackTenantIds = getFallbackTenantIds();
 
@@ -80,10 +82,16 @@ const isUuid = (value) =>
 const requireSupabase = () => {
   const { hasSupabaseConfig: configured, supabaseConfigError } = getSupabaseConfigStatus();
   if (!configured || !supabase) {
-    throw new Error(supabaseConfigError || 'Supabase nao configurado.');
+    throw new Error(isProduction ? 'Supabase não configurado para produção.' : (supabaseConfigError || 'Supabase nao configurado.'));
   }
 
   return supabase;
+};
+
+const ensureMockAllowed = () => {
+  if (!isDevelopment) {
+    throw new Error('Supabase não configurado para produção.');
+  }
 };
 
 const buildError = (error, fallback) => {
@@ -112,6 +120,9 @@ const isSystemAdminUser = async (userId) => {
 
 const getSupabaseSessionState = async () => {
   if (!hasSupabaseConfig) {
+    if (isProduction) {
+      throw new Error('Supabase não configurado para produção.');
+    }
     return {
       enabled: false,
       user: null
@@ -156,6 +167,10 @@ const getEffectiveTenant = async ({ userId, companyId } = {}) => {
       isGlobalMode: false,
       isSystemAdmin: await isSystemAdminUser(resolvedUserId)
     };
+  }
+
+  if (!sessionState.enabled && isProduction) {
+    throw new Error('Supabase não configurado para produção.');
   }
 
   return {
@@ -681,78 +696,27 @@ export const financeService = {
 
     if (tenant.useSupabase) {
       const client = requireSupabase();
-      let selectedImportacoesQuery = client
-        .from('importacoes')
-        .select('id, company_id, created_at, tipo, batch_id')
-        .in('id', ids);
+      const targetCompanyId = isAdminGeral && empresaAtiva?.id === GLOBAL_COMPANY_ID
+        ? null
+        : tenant.companyId;
 
-      if (!(isAdminGeral && empresaAtiva?.id === GLOBAL_COMPANY_ID)) {
-        selectedImportacoesQuery = selectedImportacoesQuery.eq('company_id', tenant.companyId);
+      for (const historyId of ids) {
+        const payload = {
+          p_company_id: targetCompanyId,
+          p_history_id: historyId,
+        };
+
+        const { error } = await client.rpc('delete_import_batch', payload);
+
+        if (error) {
+          throw buildError(error, 'Falha ao excluir itens do historico via RPC transacional.');
+        }
       }
 
-      const { data: selectedImportacoes, error: importsError } = await selectedImportacoesQuery;
-      if (importsError) throw buildError(importsError, 'Falha ao localizar itens do historico.');
-
-      if (selectedImportacoes?.length) {
-        const batchPairs = selectedImportacoes
-          .filter((item) => item.tipo !== 'liquidacao' && item.batch_id)
-          .map((item) => ({
-            companyId: item.company_id,
-            batchId: item.batch_id
-          }))
-          .filter((item) => item.companyId && item.batchId);
-
-        await Promise.all(
-          batchPairs.map(async ({ companyId, batchId }) => {
-            const { error: batchDeleteError } = await client
-              .from('registros_financeiros')
-              .delete()
-              .eq('company_id', companyId)
-              .eq('batch_id', batchId);
-
-            if (batchDeleteError) {
-              throw buildError(batchDeleteError, 'Falha ao excluir registros financeiros vinculados ao lote de importacao.');
-            }
-          })
-        );
-
-        // Fallback temporario para lotes antigos sem batch_id persistido no banco.
-        const fallbackPairs = selectedImportacoes
-          .filter((item) => item.tipo !== 'liquidacao' && !item.batch_id)
-          .map((item) => ({
-            companyId: item.company_id,
-            createdAt: normalizeIsoDate(item.created_at)
-          }))
-          .filter((item) => item.companyId && item.createdAt);
-
-        await Promise.all(
-          fallbackPairs.map(async ({ companyId, createdAt }) => {
-            const { error: fallbackDeleteError } = await client
-              .from('registros_financeiros')
-              .delete()
-              .eq('company_id', companyId)
-              .eq('importado_em', createdAt);
-
-            if (fallbackDeleteError) {
-              throw buildError(fallbackDeleteError, 'Falha ao limpar registros financeiros vinculados pela data da importacao.');
-            }
-          })
-        );
-      }
-
-      let query = client
-        .from('importacoes')
-        .delete()
-        .in('id', ids);
-
-      if (!(isAdminGeral && empresaAtiva?.id === GLOBAL_COMPANY_ID)) {
-        query = query.eq('company_id', tenant.companyId);
-      }
-
-      const { error } = await query;
-      if (error) throw buildError(error, 'Falha ao excluir itens do historico.');
       return true;
     }
+
+    ensureMockAllowed();
 
     const selectedImportacoes = db.importacoes.filter((item) => {
       if (!ids.includes(item.id)) return false;
@@ -876,6 +840,68 @@ export const financeService = {
     });
 
     return { imported: inserted || [], historySaved: true, batch_id: batchId };
+  },
+
+  async updateConfiguracao(payload, tenantOptions = {}) {
+    const tenant = await getEffectiveTenant({
+      userId: tenantOptions.userId || payload.user_id,
+      companyId: tenantOptions.companyId || payload.company_id,
+    });
+
+    if (!tenant.companyId || tenant.companyId === GLOBAL_COMPANY_ID) {
+      throw new Error('Selecione uma empresa especifica para salvar a configuracao financeira.');
+    }
+
+    if (tenant.useSupabase) {
+      const client = requireSupabase();
+      const { data, error } = await client
+        .from('configuracoes_financeiras')
+        .upsert(mapConfiguracaoToDb({
+          ...payload,
+          company_id: tenant.companyId,
+          user_id: tenant.userId,
+        }))
+        .select()
+        .single();
+
+      if (error) throw buildError(error, 'Falha ao salvar configuracao financeira.');
+      return mapConfiguracaoToApp(data);
+    }
+
+    ensureMockAllowed();
+    db.configuracoes[tenant.companyId] = {
+      company_id: tenant.companyId,
+      user_id: tenant.userId,
+      multaPercentual: Number(payload.multaPercentual ?? 2),
+      jurosPercentualDia: Number(payload.jurosPercentualDia ?? 0.033),
+    };
+    return localDelay(db.configuracoes[tenant.companyId]);
+  },
+
+  async clearOverview(companyId, tenantOptions = {}) {
+    const tenant = await getEffectiveTenant({
+      userId: tenantOptions.userId,
+      companyId: tenantOptions.companyId || companyId,
+    });
+
+    if (!tenant.companyId || tenant.companyId === GLOBAL_COMPANY_ID) {
+      throw new Error('Selecione uma empresa especifica para limpar a visao geral.');
+    }
+
+    if (tenant.useSupabase) {
+      const client = requireSupabase();
+      const { error } = await client
+        .from('registros_financeiros')
+        .delete()
+        .eq('company_id', tenant.companyId);
+
+      if (error) throw buildError(error, 'Falha ao limpar a visao geral.');
+      return true;
+    }
+
+    ensureMockAllowed();
+    db.registros = db.registros.filter((item) => item.company_id !== tenant.companyId);
+    return localDelay(true);
   },
 };
 

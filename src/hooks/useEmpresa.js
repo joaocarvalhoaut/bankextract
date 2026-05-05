@@ -223,7 +223,7 @@ export const useEmpresa = ({ user, authEnabled }) => {
     activeCompanyId,
     setActiveCompanyId,
     activeCompany,
-    userRole: activeCompany?.role || (isSystemAdmin ? 'admin' : 'membro'),
+    userRole: activeCompany?.role || (isSystemAdmin ? 'admin' : 'operador'),
     modalOpen,
     modalMode,
     setModalMode,

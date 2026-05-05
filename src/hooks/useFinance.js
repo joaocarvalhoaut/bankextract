@@ -26,6 +26,12 @@ const makeUuid = () => {
   });
 };
 
+const sanitizeSpreadsheetCell = (value) => {
+  if (value === null || typeof value === 'undefined') return '';
+  const raw = String(value);
+  return /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+};
+
 const normalizeRecord = (row, companyId, userId) => ({
   company_id: companyId,
   user_id: userId,
@@ -1036,32 +1042,32 @@ Total Geral: 24.479,32`;
       const rep = activeRepresentatives.find((item) => item.id === row.representanteId);
       if (kind === 'csv') {
         return [
-          row.nome,
-          row.numeroBoleto,
-          row.dataVencimento,
-          row.valor.toFixed(2),
-          row.juros.toFixed(2),
-          row.multa.toFixed(2),
-          row.valorAtualizado.toFixed(2),
-          row.telefone || '',
-          row.observacao || '',
-          rep?.nome || '',
-          row.status
+          sanitizeSpreadsheetCell(row.nome),
+          sanitizeSpreadsheetCell(row.numeroBoleto),
+          sanitizeSpreadsheetCell(row.dataVencimento),
+          sanitizeSpreadsheetCell(row.valor.toFixed(2)),
+          sanitizeSpreadsheetCell(row.juros.toFixed(2)),
+          sanitizeSpreadsheetCell(row.multa.toFixed(2)),
+          sanitizeSpreadsheetCell(row.valorAtualizado.toFixed(2)),
+          sanitizeSpreadsheetCell(row.telefone || ''),
+          sanitizeSpreadsheetCell(row.observacao || ''),
+          sanitizeSpreadsheetCell(rep?.nome || ''),
+          sanitizeSpreadsheetCell(row.status)
         ].join(';');
       }
 
       return [
-        row.nome,
-        row.numeroBoleto,
-        row.dataVencimento,
-        row.valor.toFixed(2).replace('.', ','),
-        row.juros.toFixed(2).replace('.', ','),
-        row.multa.toFixed(2).replace('.', ','),
-        row.valorAtualizado.toFixed(2).replace('.', ','),
-        row.telefone || '',
-        row.observacao || '',
-        rep?.nome || '',
-        row.status
+        sanitizeSpreadsheetCell(row.nome),
+        sanitizeSpreadsheetCell(row.numeroBoleto),
+        sanitizeSpreadsheetCell(row.dataVencimento),
+        sanitizeSpreadsheetCell(row.valor.toFixed(2).replace('.', ',')),
+        sanitizeSpreadsheetCell(row.juros.toFixed(2).replace('.', ',')),
+        sanitizeSpreadsheetCell(row.multa.toFixed(2).replace('.', ',')),
+        sanitizeSpreadsheetCell(row.valorAtualizado.toFixed(2).replace('.', ',')),
+        sanitizeSpreadsheetCell(row.telefone || ''),
+        sanitizeSpreadsheetCell(row.observacao || ''),
+        sanitizeSpreadsheetCell(rep?.nome || ''),
+        sanitizeSpreadsheetCell(row.status)
       ].join('\t');
     });
 
