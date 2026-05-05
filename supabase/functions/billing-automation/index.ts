@@ -1108,6 +1108,7 @@ Deno.serve(async (req: Request) => {
 
   let action = 'overview';
   let companyId: string | null = null;
+  let manual = false;
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
@@ -1124,6 +1125,7 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     action = String(body?.action || 'overview');
     companyId = body?.company_id ? String(body.company_id) : null;
+    manual = body?.manual === true;
     console.log('billing-automation request', { action, company_id: companyId });
 
     if (action === 'get_drive_config' || action === 'save_drive_config' || action === 'test_drive_connection' || action === 'sync_drive') {
@@ -1307,6 +1309,7 @@ Deno.serve(async (req: Request) => {
     if (action === 'run' || action === 'reprocess_failures') {
       const companies = await resolveTargetCompanies(admin, companyId, auth.bypass);
       const nowTime = currentTimeInSaoPaulo();
+      const isManualRun = action === 'run' && manual === true && !cronSecret;
       let sent = 0;
       let ignored = 0;
       let errors = 0;
@@ -1329,6 +1332,9 @@ Deno.serve(async (req: Request) => {
           companyResults.push({ company_id: targetCompanyId, sent: 0, ignored: 0, errors: 0 });
           debugByCompany.push({
             company_id: targetCompanyId,
+            manual: isManualRun,
+            hora_atual: nowTime,
+            hora_configurada: null,
             total_registros_encontrados: 0,
             total_status_aberto: 0,
             total_com_telefone: 0,
@@ -1348,6 +1354,9 @@ Deno.serve(async (req: Request) => {
           companyResults.push({ company_id: targetCompanyId, sent: 0, ignored: 0, errors: 1 });
           debugByCompany.push({
             company_id: targetCompanyId,
+            manual: isManualRun,
+            hora_atual: nowTime,
+            hora_configurada: config?.hora_execucao || DEFAULT_EXECUTION_TIME,
             total_registros_encontrados: 0,
             total_status_aberto: 0,
             total_com_telefone: 0,
@@ -1375,6 +1384,9 @@ Deno.serve(async (req: Request) => {
           companyResults.push({ company_id: targetCompanyId, sent: 0, ignored: 0, errors: 1 });
           debugByCompany.push({
             company_id: targetCompanyId,
+            manual: isManualRun,
+            hora_atual: nowTime,
+            hora_configurada: config?.hora_execucao || DEFAULT_EXECUTION_TIME,
             total_registros_encontrados: 0,
             total_status_aberto: 0,
             total_com_telefone: 0,
@@ -1402,10 +1414,13 @@ Deno.serve(async (req: Request) => {
         }
 
         const scheduledTime = config?.hora_execucao || DEFAULT_EXECUTION_TIME;
-        if (action === 'run' && nowTime.slice(0, 2) !== scheduledTime.slice(0, 2)) {
+        if (action === 'run' && !isManualRun && nowTime.slice(0, 2) !== scheduledTime.slice(0, 2)) {
           companyResults.push({ company_id: targetCompanyId, sent: 0, ignored: 0, errors: 0 });
           debugByCompany.push({
             company_id: targetCompanyId,
+            manual: isManualRun,
+            hora_atual: nowTime,
+            hora_configurada: scheduledTime,
             total_registros_encontrados: 0,
             total_status_aberto: 0,
             total_com_telefone: 0,
@@ -1453,6 +1468,9 @@ Deno.serve(async (req: Request) => {
 
         debugByCompany.push({
           company_id: targetCompanyId,
+          manual: isManualRun,
+          hora_atual: nowTime,
+          hora_configurada: scheduledTime,
           total_registros_encontrados: (records || []).length,
           total_status_aberto: explainedRecords.filter((row) => row.status_aberto).length,
           total_com_telefone: explainedRecords.filter((row) => row.telefone_valido).length,

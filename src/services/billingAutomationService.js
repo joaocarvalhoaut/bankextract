@@ -54,6 +54,7 @@ export async function runBillingAutomationNow(companyId) {
     {
       action: 'run',
       company_id: companyId,
+      manual: true,
     },
     'Falha ao executar a régua de cobrança.'
   );
