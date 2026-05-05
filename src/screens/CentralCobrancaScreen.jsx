@@ -67,6 +67,7 @@ export default function CentralCobrancaScreen({
   const [loading, setLoading] = useState(false);
   const [runningAction, setRunningAction] = useState('');
   const [center, setCenter] = useState(null);
+  const [items, setItems] = useState([]);
   const [simulationResult, setSimulationResult] = useState(null);
 
   const canManageCharges = canUserPerformAction(userRole, 'manage_charges');
@@ -74,14 +75,19 @@ export default function CentralCobrancaScreen({
   const loadCenter = useCallback(async () => {
     if (!resolvedCompanyId || globalMode) {
       setCenter(null);
+      setItems([]);
       return;
     }
 
     setLoading(true);
     try {
-      const data = await getBillingCenter(resolvedCompanyId);
-      setCenter(data);
+      const response = await getBillingCenter(resolvedCompanyId);
+      console.log('CentralCobranca getBillingCenter response', response);
+      const nextItems = response?.items ?? response?.data?.items ?? [];
+      setItems(Array.isArray(nextItems) ? nextItems : []);
+      setCenter(response);
     } catch (error) {
+      setItems([]);
       onToast?.('erro', error.message || 'Falha ao carregar a central de cobranca.');
     } finally {
       setLoading(false);
@@ -127,7 +133,7 @@ export default function CentralCobrancaScreen({
     total_em_aberto: 0,
   };
 
-  const rows = center?.rows || [];
+  const rows = Array.isArray(items) ? items : [];
 
   const columns = useMemo(
     () => [
@@ -159,8 +165,8 @@ export default function CentralCobrancaScreen({
         key: 'status',
         label: 'Status',
         render: (row) => (
-          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${toneByStatus[row.status] || 'bg-slate-100 text-slate-700 ring-slate-200'}`}>
-            {row.status}
+          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${toneByStatus[row.status || 'pendente'] || 'bg-slate-100 text-slate-700 ring-slate-200'}`}>
+            {row.status || 'pendente'}
           </span>
         ),
       },
@@ -180,7 +186,7 @@ export default function CentralCobrancaScreen({
           ) : (
             <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
               <AlertCircle size={12} />
-              Nao
+              nao
             </span>
           ),
       },
