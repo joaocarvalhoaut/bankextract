@@ -69,6 +69,17 @@ const db = {
   whatsappCobrancaConfig
 };
 
+const defaultAutomationRules = {
+  active: false,
+  horario: '08:00',
+  canal: 'WhatsApp',
+  intervalo_dias: 5,
+  cobrar_apos_dias_vencido: 1,
+  protesto_apos_5_dias: true,
+  mensagem_template: '',
+  rules: []
+};
+
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 const localDelay = async (payload) => {
@@ -333,6 +344,19 @@ const mapDbPatchToRegistroPatch = (payload) => {
 };
 
 export const financeService = {
+  setRuntimeContext(nextContext = {}) {
+    this._runtimeContext = {
+      ...(this._runtimeContext || {}),
+      ...nextContext,
+    };
+    return this._runtimeContext;
+  },
+
+  async syncCompanyCatalog(companies = []) {
+    this._companies = Array.isArray(companies) ? companies : [];
+    return true;
+  },
+
   async fetchBootstrap({ userId } = {}) {
     const tenant = await getEffectiveTenant({ userId, companyId: defaultCompanyId });
 
@@ -483,6 +507,320 @@ export const financeService = {
     } catch {
       return [];
     }
+  },
+
+  async getDashboardMetrics(companyId, tenantOptions = {}) {
+    try {
+      const dataset = await this.fetchCompanyDataset({
+        companyId,
+        userId: tenantOptions.userId
+      });
+      const openRecords = (dataset.records || []).filter((item) => item.status !== 'liquidado');
+      const charges = db.cobrancasWhatsapp.filter((item) => item.empresa_id === companyId);
+      return {
+        kpis: [
+          { title: 'Total em aberto', value: openRecords.reduce((sum, item) => sum + Number(item.valor || 0), 0), tone: 'green', hint: 'Carteira ativa por empresa' },
+        ],
+        charts: { aging: [], importacoes: [] },
+        companyMode: companyId === GLOBAL_COMPANY_ID ? 'global' : 'company',
+        companyName: dataset.companies?.find((item) => item.id === companyId)?.nome || 'Empresa',
+        userRole: tenantOptions.userRole || 'operador',
+        isSystemAdmin: false,
+        googleSheetsConnected: false,
+        googleSheetsSheetName: '',
+        googleSheetsLastSync: null,
+        autoChargeActive: Boolean(db.whatsappCobrancaConfig[companyId]?.active),
+        autoChargeHour: db.whatsappCobrancaConfig[companyId]?.horario || '08:00',
+        whatsappMockMode: charges.some((item) => item.status === 'mock_enviado'),
+        lastAutoExecution: 'Nunca executada',
+        recentAuditLogs: [],
+        checklist: [],
+      };
+    } catch {
+      return {
+        kpis: [],
+        charts: { aging: [], importacoes: [] },
+        companyMode: 'company',
+        companyName: 'Empresa',
+        userRole: 'operador',
+        isSystemAdmin: false,
+        googleSheetsConnected: false,
+        googleSheetsSheetName: '',
+        googleSheetsLastSync: null,
+        autoChargeActive: false,
+        autoChargeHour: '08:00',
+        whatsappMockMode: true,
+        lastAutoExecution: 'Nunca executada',
+        recentAuditLogs: [],
+        checklist: [],
+      };
+    }
+  },
+
+  async getOnboardingStatus(companyId, tenantOptions = {}) {
+    try {
+      const dataset = await this.fetchCompanyDataset({
+        companyId,
+        userId: tenantOptions.userId
+      });
+      const auto = await this.getAutomationRules(companyId);
+      const completed = [
+        Boolean(companyId),
+        Boolean(dataset.config),
+        false,
+        Boolean(auto),
+        Boolean(auto?.horario),
+        dataset.history.length > 0,
+      ].filter(Boolean).length;
+
+      const steps = [
+        { id: 'empresa', title: 'Criar ou selecionar empresa', done: Boolean(companyId), actionTab: 'configuracoes' },
+        { id: 'dados-empresa', title: 'Configurar dados da empresa', done: Boolean(dataset.config), actionTab: 'configuracoes' },
+        { id: 'google-sheets', title: 'Conectar Google Sheets', done: false, actionTab: 'integracoes' },
+        { id: 'cobranca-auto', title: 'Configurar cobranca automatica', done: Boolean(auto), actionTab: 'automacoes' },
+        { id: 'horario', title: 'Escolher horario de cobranca', done: Boolean(auto?.horario), actionTab: 'automacoes' },
+        { id: 'primeiro-arquivo', title: 'Importar primeiro arquivo', done: dataset.history.length > 0, actionTab: 'importacao' },
+        { id: 'checklist', title: 'Ver checklist de prontidao', done: false, actionTab: 'status-sistema' },
+      ];
+
+      return {
+        progress: Math.round((completed / steps.length) * 100),
+        completed,
+        total: steps.length,
+        nextStep: steps.find((step) => !step.done) || null,
+        steps,
+      };
+    } catch {
+      return {
+        progress: 0,
+        completed: 0,
+        total: 0,
+        nextStep: null,
+        steps: [],
+      };
+    }
+  },
+
+  async getCharges(companyId, tenantOptions = {}) {
+    try {
+      const records = await this.getFinancialRecords(companyId, {}, tenantOptions);
+      return records
+        .filter((record) => record.status !== 'liquidado')
+        .map((record) => {
+          const latest = [...db.cobrancasWhatsapp]
+            .filter((item) => item.empresa_id === companyId && item.registro_id === record.id)
+            .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0];
+
+          return {
+            id: record.id,
+            company_id: record.company_id,
+            registro_id: record.id,
+            batch_id: record.batchId ?? record.batch_id ?? null,
+            cliente: record.nome,
+            documento: record.numeroBoleto ?? record.numero_boleto ?? '',
+            valor: Number(record.valor || 0),
+            vencimento: record.dataVencimento ?? record.data_vencimento ?? '',
+            telefone: latest?.telefone || record.telefone || '',
+            status: latest?.status === 'enviado' || latest?.status === 'mock_enviado' ? 'enviada' : (record.telefone ? 'pendente' : 'sem telefone'),
+            origem: 'manual',
+            mensagem: latest?.mensagem || `Olá, ${record.nome}. Identificamos um título em aberto e gostaríamos de confirmar a programação de pagamento.`,
+          };
+        });
+    } catch {
+      return [];
+    }
+  },
+
+  async getAutomationRules(companyId) {
+    return clone(db.whatsappCobrancaConfig[companyId] || defaultAutomationRules);
+  },
+
+  async saveAutomationRules(companyId, payload = {}) {
+    db.whatsappCobrancaConfig[companyId] = {
+      ...(db.whatsappCobrancaConfig[companyId] || defaultAutomationRules),
+      ...clone(payload),
+    };
+    return localDelay(db.whatsappCobrancaConfig[companyId]);
+  },
+
+  async getSettingsOverview(companyId, companies = []) {
+    return {
+      preferencias: {
+        exportacao: 'CSV e Excel',
+        timezone: 'America/Sao_Paulo'
+      },
+      usuarios: [
+        {
+          id: currentUserId,
+          nome: 'Usuário atual',
+          perfil: 'operador'
+        }
+      ],
+      companies
+    };
+  },
+
+  async getFinancialConfig(companyId, tenantOptions = {}) {
+    try {
+      const dataset = await this.fetchCompanyDataset({
+        companyId,
+        userId: tenantOptions.userId
+      });
+      return dataset.config || {
+        company_id: companyId,
+        multaPercentual: 2,
+        jurosPercentualDia: 0.033,
+      };
+    } catch {
+      return {
+        company_id: companyId,
+        multaPercentual: 2,
+        jurosPercentualDia: 0.033,
+      };
+    }
+  },
+
+  async saveFinancialConfig(companyId, payload = {}, tenantOptions = {}) {
+    return this.updateConfiguracao({
+      company_id: companyId,
+      user_id: tenantOptions.userId || currentUserId,
+      multaPercentual: Number(payload.multaPercentual ?? 2),
+      jurosPercentualDia: Number(payload.jurosPercentualDia ?? 0.033),
+    }, {
+      companyId,
+      userId: tenantOptions.userId || currentUserId,
+    });
+  },
+
+  async getSystemStatus(companyId, tenantOptions = {}) {
+    const metrics = await this.getDashboardMetrics(companyId, tenantOptions);
+    return {
+      companyMode: metrics.companyMode,
+      companyName: metrics.companyName,
+      userRole: metrics.userRole,
+      isSystemAdmin: metrics.isSystemAdmin,
+      googleSheetsConnected: metrics.googleSheetsConnected,
+      googleSheetsSheetName: metrics.googleSheetsSheetName,
+      googleSheetsLastSync: metrics.googleSheetsLastSync,
+      autoChargeActive: metrics.autoChargeActive,
+      autoChargeHour: metrics.autoChargeHour,
+      whatsappMockMode: metrics.whatsappMockMode,
+      lastAutoExecution: metrics.lastAutoExecution,
+      recentAuditLogs: metrics.recentAuditLogs || [],
+      checklist: metrics.checklist || [],
+    };
+  },
+
+  async getPlansCatalog() {
+    return [
+      { id: 'starter', name: 'Starter', price: 'R$ 97/mês' },
+      { id: 'pro', name: 'Pro', price: 'R$ 197/mês' },
+      { id: 'enterprise', name: 'Enterprise', price: 'Sob consulta' },
+    ];
+  },
+
+  async getBillingOverview(companyId, tenantOptions = {}) {
+    const dataset = await this.fetchCompanyDataset({
+      companyId,
+      userId: tenantOptions.userId
+    });
+    const plans = await this.getPlansCatalog();
+    return {
+      currentPlan: plans[0],
+      status: 'Ativa em modo comercial',
+      nextCharge: '15/05/2026',
+      usage: {
+        companies: 1,
+        importedRowsThisMonth: (dataset.history || []).reduce((sum, item) => sum + Number(item.quantidade_registros || item.registros || 0), 0),
+        records: (dataset.records || []).length,
+      },
+      limits: {
+        starter: { companies: 1, records: 500 },
+        pro: { companies: 5, records: 5000 },
+        enterprise: { companies: 'Ilimitado', records: 'Alto volume' },
+      },
+      supportLabel: 'Falar com suporte',
+    };
+  },
+
+  async processImportFile(file, tipo = 'vencidos', companyId) {
+    const baseDate = new Date();
+    const rows = Array.from({ length: 8 }).map((_, index) => {
+      const dueDate = new Date(baseDate);
+      dueDate.setDate(baseDate.getDate() + (index - 3));
+      return {
+        id: `preview-${index + 1}`,
+        nome: sampleNames[index % sampleNames.length],
+        documento: `${tipo === 'liquidacao' ? 'LQ' : 'DOC'}-${String(index + 1).padStart(4, '0')}`,
+        numero_boleto: `${String(index + 1).padStart(4, '0')}-${index + 2}`,
+        data_vencimento: dueDate.toISOString().slice(0, 10),
+        valor: Number((650 + index * 175.35).toFixed(2)),
+        status: tipo === 'liquidacao' ? 'liquidado' : (index < 3 ? 'vencido' : 'pendente'),
+        telefone: samplePhones[index % samplePhones.length] || '',
+        observacoes: '',
+        selected: true,
+        company_id: companyId,
+      };
+    });
+
+    return localDelay({
+      fileName: file?.name || 'importacao_ocr.pdf',
+      tipo,
+      rows
+    });
+  },
+
+  async deleteImportHistory(item, tenantOptions = {}) {
+    return this.deleteImportacoes(
+      [item.id],
+      {
+        id: item.company_id || item.companyId,
+        nome: item.empresa_nome || item.empresaNome || 'Empresa',
+      },
+      false,
+      {
+        companyId: item.company_id || item.companyId,
+        userId: tenantOptions.userId || currentUserId,
+      }
+    );
+  },
+
+  async getBatchRows(companyId, batchId, tenantOptions = {}) {
+    try {
+      const records = await this.fetchRegistros({
+        companyId,
+        userId: tenantOptions.userId
+      });
+      return (records || []).filter((row) => (row.batchId ?? row.batch_id ?? null) === batchId);
+    } catch {
+      return [];
+    }
+  },
+
+  async sendWhatsAppCharge(payload, mode = 'manual') {
+    const phone = String(payload.telefone || '').replace(/\D/g, '');
+    const chargeId = payload.registro_id || payload.id || `charge-${Date.now()}`;
+
+    if (!phone) {
+      return { chargeId, status: 'sem telefone', mocked: true, mode };
+    }
+
+    db.cobrancasWhatsapp.push({
+      id: chargeId,
+      empresa_id: payload.company_id,
+      registro_id: payload.registro_id || payload.id,
+      telefone: phone,
+      mensagem: payload.mensagem || '',
+      status: 'mock_enviado',
+      created_at: new Date().toISOString(),
+    });
+
+    return localDelay({
+      chargeId,
+      status: 'mock_enviado',
+      mocked: true,
+      mode,
+    });
   },
 
   async insertRegistros(items, tenantOptions = {}) {

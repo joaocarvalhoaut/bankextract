@@ -709,6 +709,291 @@ export const financeService = {
       supportLabel: planId === 'enterprise' ? 'Falar com time Enterprise' : 'Falar com suporte',
     };
   },
+
+  async getCharges(companyId = runtimeContext.companyId, overrides = {}) {
+    try {
+      const dataset = await loadDataset(companyId, overrides);
+      const context = dataset.context;
+      const rows = buildChargeRows(dataset.records || []);
+      const latestCharges = await safeSupabaseSelect(() =>
+        buildScopedQuery(
+          supabase.from('cobrancas_whatsapp').select('id, registro_id, telefone, mensagem, status, created_at').order('created_at', { ascending: false }),
+          context,
+          'empresa_id'
+        ),
+      []);
+
+      const byRecord = new Map();
+      for (const item of latestCharges || []) {
+        const key = item.registro_id || item.id;
+        if (key && !byRecord.has(key)) byRecord.set(key, item);
+      }
+
+      return rows.map((row) => {
+        const log = byRecord.get(row.registro_id || row.id);
+        if (!log) return row;
+        const draftKey = `${row.company_id}:${row.id}`;
+        return {
+          ...row,
+          telefone: log.telefone || row.telefone,
+          mensagem: chargeMessageDrafts.get(draftKey) || log.mensagem || row.mensagem,
+          status: log.status === 'enviado' || log.status === 'mock_enviado' ? 'enviada' : row.status,
+        };
+      });
+    } catch {
+      return [];
+    }
+  },
+
+  async getAutomationRules(companyId = runtimeContext.companyId) {
+    try {
+      const config = await getWhatsAppAutoConfig(companyId);
+      return {
+        active: Boolean(config.ativo),
+        horario: config.hora_envio || '08:00',
+        canal: config.canal_envio || 'WhatsApp',
+        intervalo_dias: Number(config.intervalo_dias || 5),
+        cobrar_apos_dias_vencido: Number(config.cobrar_apos_dias_vencido || 1),
+        protesto_apos_5_dias: Boolean(config.protesto_apos_5_dias ?? true),
+        mensagem_template: config.mensagem_template || '',
+        rules: Array.isArray(config.regras) ? config.regras : [],
+      };
+    } catch {
+      return {
+        active: false,
+        horario: '08:00',
+        canal: 'WhatsApp',
+        intervalo_dias: 5,
+        cobrar_apos_dias_vencido: 1,
+        protesto_apos_5_dias: true,
+        mensagem_template: '',
+        rules: [],
+      };
+    }
+  },
+
+  async saveAutomationRules(companyId = runtimeContext.companyId, payload = {}) {
+    const saved = await saveWhatsAppAutoConfig(companyId, {
+      ativo: Boolean(payload.active),
+      hora_envio: payload.horario || '08:00',
+      intervalo_dias: Number(payload.intervalo_dias || 5),
+      cobrar_apos_dias_vencido: Number(payload.cobrar_apos_dias_vencido || 1),
+      protesto_apos_5_dias: Boolean(payload.protesto_apos_5_dias ?? true),
+      canal_envio: payload.canal || 'WhatsApp',
+      mensagem_template: payload.mensagem_template || '',
+      regras: Array.isArray(payload.rules) ? payload.rules : [],
+    });
+    return saved;
+  },
+
+  async getSettingsOverview(companyId = runtimeContext.companyId, companies = runtimeContext.companies || []) {
+    const context = getContext({ companyId });
+    const users = await safeSupabaseSelect(() =>
+      buildScopedQuery(
+        supabase.from('usuarios_empresas').select('id, user_id, role, company_id').order('created_at', { ascending: true }),
+        context,
+        'company_id'
+      ),
+    []);
+
+    return {
+      preferencias: {
+        exportacao: 'CSV e Excel',
+        timezone: 'America/Sao_Paulo',
+      },
+      usuarios: (users || []).length
+        ? users.map((item, index) => ({
+            id: item.id || `${item.user_id}-${index}`,
+            nome: item.user_id === runtimeContext.userId ? 'Usuário atual' : `Usuário ${index + 1}`,
+            perfil: item.role || 'operador',
+          }))
+        : [
+            {
+              id: runtimeContext.userId || 'local-user',
+              nome: 'Usuário atual',
+              perfil: runtimeContext.userRole || 'operador',
+            },
+          ],
+      companies,
+    };
+  },
+
+  async getFinancialConfig(companyId = runtimeContext.companyId, overrides = {}) {
+    try {
+      const dataset = await loadDataset(companyId, overrides);
+      return dataset.config || {
+        company_id: companyId,
+        multaPercentual: 2,
+        jurosPercentualDia: 0.033,
+      };
+    } catch {
+      return {
+        company_id: companyId,
+        multaPercentual: 2,
+        jurosPercentualDia: 0.033,
+      };
+    }
+  },
+
+  async saveFinancialConfig(companyId = runtimeContext.companyId, payload = {}) {
+    const result = await legacyFinanceService.updateConfiguracao(
+      {
+        company_id: companyId,
+        user_id: runtimeContext.userId || null,
+        multaPercentual: Number(payload.multaPercentual ?? 2),
+        jurosPercentualDia: Number(payload.jurosPercentualDia ?? 0.033),
+      },
+      {
+        companyId,
+        userId: runtimeContext.userId || null,
+      },
+    );
+
+    return {
+      company_id: result.company_id,
+      multaPercentual: Number(result.multaPercentual ?? 2),
+      jurosPercentualDia: Number(result.jurosPercentualDia ?? 0.033),
+    };
+  },
+
+  async getSystemStatus(companyId = runtimeContext.companyId, overrides = {}) {
+    const metrics = await this.getDashboardMetrics(companyId, overrides);
+    return {
+      companyMode: metrics.companyMode,
+      companyName: metrics.companyName,
+      userRole: metrics.userRole,
+      isSystemAdmin: metrics.isSystemAdmin,
+      googleSheetsConnected: metrics.googleSheetsConnected,
+      googleSheetsSheetName: metrics.googleSheetsSheetName,
+      googleSheetsLastSync: metrics.googleSheetsLastSync,
+      autoChargeActive: metrics.autoChargeActive,
+      autoChargeHour: metrics.autoChargeHour,
+      whatsappMockMode: metrics.whatsappMockMode,
+      lastAutoExecution: metrics.lastAutoExecution,
+      recentAuditLogs: metrics.recentAuditLogs || [],
+      checklist: metrics.checklist || [],
+    };
+  },
+
+  async processImportFile(file, tipo = 'vencidos', companyId = runtimeContext.companyId) {
+    const baseDate = new Date();
+    const rows = Array.from({ length: 8 }).map((_, index) => {
+      const dueDate = new Date(baseDate);
+      dueDate.setDate(baseDate.getDate() + (index - 3));
+      return {
+        id: makeUuid(),
+        nome: sampleNames[index % sampleNames.length],
+        documento: `${tipo === 'liquidacao' ? 'LQ' : 'DOC'}-${String(index + 1).padStart(4, '0')}`,
+        numero_boleto: `${String(index + 1).padStart(4, '0')}-${index + 2}`,
+        data_vencimento: toIsoDate(dueDate),
+        valor: money(650 + index * 175.35),
+        status: tipo === 'liquidacao' ? 'liquidado' : (index < 3 ? 'vencido' : 'pendente'),
+        telefone: samplePhones[index % samplePhones.length] || '',
+        observacoes: '',
+        selected: true,
+        company_id: companyId,
+      };
+    });
+
+    return {
+      fileName: file?.name || 'importacao_ocr.pdf',
+      tipo,
+      rows,
+    };
+  },
+
+  async importSelectedRows(rows = [], batchId, companyId = runtimeContext.companyId, options = {}) {
+    return legacyFinanceService.importSelectedRows(rows, batchId, companyId, options);
+  },
+
+  async deleteImportHistory(item) {
+    return legacyFinanceService.deleteImportacoes(
+      [item.id],
+      {
+        id: item.company_id || item.companyId,
+        nome: item.empresa_nome || item.empresaNome || runtimeContext.companyName || 'Empresa',
+      },
+      Boolean(runtimeContext.isSystemAdmin),
+      {
+        companyId: item.company_id || item.companyId,
+        userId: runtimeContext.userId || null,
+      },
+    );
+  },
+
+  async getBatchRows(companyId, batchId, overrides = {}) {
+    try {
+      const dataset = await loadDataset(companyId, overrides);
+      return (dataset.records || []).filter((row) => row.company_id === companyId && row.batch_id === batchId);
+    } catch {
+      return [];
+    }
+  },
+
+  async clearOverview(companyId = runtimeContext.companyId) {
+    return legacyFinanceService.clearOverview(companyId, {
+      companyId,
+      userId: runtimeContext.userId || null,
+    });
+  },
+
+  async sendWhatsAppCharge(payload, mode = 'manual') {
+    const companyId = payload.company_id || runtimeContext.companyId;
+    const chargeId = payload.registro_id || payload.id || makeUuid();
+    const messageKey = `${companyId}:${payload.id || payload.registro_id || chargeId}`;
+    if (payload.mensagem) {
+      chargeMessageDrafts.set(messageKey, payload.mensagem);
+    }
+
+    const phone = String(payload.telefone || '').replace(/\D/g, '');
+    if (!phone) {
+      return {
+        chargeId,
+        status: 'sem telefone',
+        mocked: true,
+      };
+    }
+
+    if (hasSupabaseConfig && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('cobrancas_whatsapp')
+          .insert({
+            empresa_id: companyId,
+            registro_id: payload.registro_id || payload.id || null,
+            telefone: phone,
+            mensagem: payload.mensagem || '',
+            status: 'mock_enviado',
+            erro: null,
+          })
+          .select('id, status')
+          .single();
+
+        if (error) throw error;
+
+        return {
+          chargeId: data?.id || chargeId,
+          status: data?.status || 'mock_enviado',
+          mocked: true,
+          mode,
+        };
+      } catch {
+        return {
+          chargeId,
+          status: 'mock_enviado',
+          mocked: true,
+          mode,
+        };
+      }
+    }
+
+    return {
+      chargeId,
+      status: 'mock_enviado',
+      mocked: true,
+      mode,
+    };
+  },
 };
 
 export default financeService;
