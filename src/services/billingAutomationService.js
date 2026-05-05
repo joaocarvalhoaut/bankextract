@@ -187,6 +187,19 @@ export async function getBillingCenter(companyId) {
   );
 }
 
+export async function getBillingHistory(companyId, filters = {}, pagination = {}) {
+  return invokeBillingAutomation(
+    {
+      action: 'get_billing_history',
+      company_id: companyId,
+      filters,
+      page: pagination.page,
+      page_size: pagination.page_size,
+    },
+    'Falha ao carregar o historico de cobrancas.'
+  );
+}
+
 export async function simulateChargeItem(companyId, registroId) {
   return invokeBillingAutomation(
     {

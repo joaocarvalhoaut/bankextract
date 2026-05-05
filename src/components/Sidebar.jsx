@@ -26,6 +26,7 @@ const items = [
   { id: 'historico', label: 'Historico', icon: History, group: 'core' },
   { id: 'cobrancas', label: 'Cobrancas', icon: Sparkles, group: 'core' },
   { id: 'central-cobranca', label: 'Central de Cobranca', icon: Sparkles, group: 'core' },
+  { id: 'historico-cobranca', label: 'Historico de Cobrancas', icon: History, group: 'core' },
   { id: 'automacoes', label: 'Automacoes', icon: Settings2, group: 'ops' },
   { id: 'integracoes', label: 'Integracoes', icon: Link2, group: 'ops' },
   { id: 'configuracoes', label: 'Configuracoes', icon: Cog, group: 'ops' },

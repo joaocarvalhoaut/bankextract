@@ -18,6 +18,7 @@ const VisaoGeralScreen = lazy(() => import('./screens/VisaoGeralScreen'));
 const HistoricoScreen = lazy(() => import('./screens/HistoricoScreen'));
 const CobrancasScreen = lazy(() => import('./screens/CobrancasScreen'));
 const CentralCobrancaScreen = lazy(() => import('./screens/CentralCobrancaScreen'));
+const HistoricoCobrancaScreen = lazy(() => import('./screens/HistoricoCobrancaScreen'));
 const AutomacoesScreen = lazy(() => import('./screens/AutomacoesScreen'));
 const IntegracoesScreen = lazy(() => import('./screens/IntegracoesScreen'));
 const ConfiguracoesScreen = lazy(() => import('./screens/ConfiguracoesScreen'));
@@ -147,6 +148,10 @@ const headerMap = {
     title: 'Central de Cobranca',
     subtitle: 'Operacao por titulo com etapa da regua, status do boleto e simulacao individual por empresa.',
   },
+  'historico-cobranca': {
+    title: 'Historico de Cobrancas',
+    subtitle: 'Auditoria detalhada das simulacoes e eventos registrados em logs_cobranca por empresa.',
+  },
   automacoes: {
     title: 'Automacoes',
     subtitle: 'Cadencias de cobranca e motor automatico por atraso configuravel por empresa.',
@@ -173,7 +178,7 @@ const headerMap = {
   },
 };
 
-const companyDependentTabs = new Set(['importacao', 'visao-geral', 'historico', 'cobrancas', 'central-cobranca', 'automacoes', 'integracoes']);
+const companyDependentTabs = new Set(['importacao', 'visao-geral', 'historico', 'cobrancas', 'central-cobranca', 'historico-cobranca', 'automacoes', 'integracoes']);
 
 function ScreenFallback() {
   return (
@@ -897,6 +902,19 @@ export default function App() {
       case 'central-cobranca':
         currentContent = (
           <CentralCobrancaScreen
+            companyId={globalMode ? null : currentCompanyId}
+            activeCompanyId={currentCompanyId}
+            activeCompany={empresa.activeCompany}
+            companyName={currentCompanyName}
+            globalMode={globalMode}
+            userRole={empresa.userRole}
+            onToast={showToast}
+          />
+        );
+        break;
+      case 'historico-cobranca':
+        currentContent = (
+          <HistoricoCobrancaScreen
             companyId={globalMode ? null : currentCompanyId}
             activeCompanyId={currentCompanyId}
             activeCompany={empresa.activeCompany}

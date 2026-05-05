@@ -1295,6 +1295,135 @@ async function getBillingCenterData(
   };
 }
 
+function resolveHistoryFilterBoolean(value: unknown) {
+  if (value === true || value === 'true' || value === 'sim') return true;
+  if (value === false || value === 'false' || value === 'nao' || value === 'não') return false;
+  return null;
+}
+
+function buildHistoryCards(rows: Array<Record<string, unknown>>, todayIso: string) {
+  const startToday = `${todayIso}T00:00:00-03:00`;
+  const endToday = `${todayIso}T23:59:59-03:00`;
+  const sevenDaysAgoDate = parseDate(todayIso);
+  if (sevenDaysAgoDate) {
+    sevenDaysAgoDate.setUTCDate(sevenDaysAgoDate.getUTCDate() - 6);
+  }
+  const sevenDaysAgo = sevenDaysAgoDate ? `${sevenDaysAgoDate.toISOString().slice(0, 10)}T00:00:00-03:00` : startToday;
+  const successStatuses = new Set(['sucesso', 'sucesso_simulado', 'simulado']);
+
+  return {
+    simulacoes_hoje: rows.filter((row) => {
+      const when = String(row.data_hora || row.created_at || '');
+      return when >= startToday && when <= endToday && successStatuses.has(String(row.status_envio || ''));
+    }).length,
+    simulacoes_ultimos_7_dias: rows.filter((row) => {
+      const when = String(row.data_hora || row.created_at || '');
+      return when >= sevenDaysAgo && successStatuses.has(String(row.status_envio || ''));
+    }).length,
+    sucesso: rows.filter((row) => successStatuses.has(String(row.status_envio || ''))).length,
+    erros: rows.filter((row) => String(row.status_envio || '') === 'erro').length,
+    com_boleto: rows.filter((row) => Boolean(row.arquivo_encontrado)).length,
+    sem_boleto: rows.filter((row) => !Boolean(row.arquivo_encontrado)).length,
+    pendentes: rows.filter((row) => {
+      const status = String(row.status_envio || '');
+      return !successStatuses.has(status) && status !== 'erro';
+    }).length,
+    resolvidos: rows.filter((row) => successStatuses.has(String(row.status_envio || ''))).length,
+  };
+}
+
+async function getBillingHistoryData(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  filters: Record<string, unknown>,
+  page: number,
+  pageSize: number,
+  todayIso: string,
+) {
+  const dateFrom = String(filters?.date_from || '').trim();
+  const dateTo = String(filters?.date_to || '').trim();
+  const cliente = String(filters?.cliente || '').trim();
+  const numeroBoleto = String(filters?.numero_boleto || '').trim();
+  const tipoCobranca = String(filters?.tipo_cobranca || '').trim();
+  const statusEnvio = String(filters?.status_envio || '').trim();
+  const arquivoEncontrado = resolveHistoryFilterBoolean(filters?.arquivo_encontrado);
+  const fromIso = dateFrom ? `${dateFrom}T00:00:00-03:00` : '';
+  const toIso = dateTo ? `${dateTo}T23:59:59-03:00` : '';
+  const rangeFrom = Math.max(0, (page - 1) * pageSize);
+  const rangeTo = rangeFrom + pageSize - 1;
+
+  let cardsQuery = supabaseAdmin
+    .from('logs_cobranca')
+    .select('id, financeiro_id, company_id, data_hora, cliente_nome, telefone, documento, numero_boleto, numero_nf, valor, vencimento, tipo_cobranca, dias_atraso, arquivo_encontrado, drive_file_id, status_envio, erro, payload, created_at')
+    .eq('company_id', companyId);
+
+  if (fromIso) cardsQuery = cardsQuery.gte('data_hora', fromIso);
+  if (toIso) cardsQuery = cardsQuery.lte('data_hora', toIso);
+  if (cliente) cardsQuery = cardsQuery.ilike('cliente_nome', `%${cliente}%`);
+  if (numeroBoleto) cardsQuery = cardsQuery.ilike('numero_boleto', `%${numeroBoleto}%`);
+  if (tipoCobranca) cardsQuery = cardsQuery.eq('tipo_cobranca', tipoCobranca);
+  if (statusEnvio) cardsQuery = cardsQuery.eq('status_envio', statusEnvio);
+  if (arquivoEncontrado !== null) cardsQuery = cardsQuery.eq('arquivo_encontrado', arquivoEncontrado);
+
+  const { data: cardsData, error: cardsError } = await cardsQuery
+    .order('data_hora', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false, nullsFirst: false });
+
+  if (cardsError) throw new Error(cardsError.message);
+
+  let itemsQuery = supabaseAdmin
+    .from('logs_cobranca')
+    .select('id, financeiro_id, company_id, data_hora, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, vencimento, tipo_cobranca, dias_atraso, arquivo_encontrado, drive_file_id, status_envio, erro, payload, created_at', { count: 'exact' })
+    .eq('company_id', companyId);
+
+  if (fromIso) itemsQuery = itemsQuery.gte('data_hora', fromIso);
+  if (toIso) itemsQuery = itemsQuery.lte('data_hora', toIso);
+  if (cliente) itemsQuery = itemsQuery.ilike('cliente_nome', `%${cliente}%`);
+  if (numeroBoleto) itemsQuery = itemsQuery.ilike('numero_boleto', `%${numeroBoleto}%`);
+  if (tipoCobranca) itemsQuery = itemsQuery.eq('tipo_cobranca', tipoCobranca);
+  if (statusEnvio) itemsQuery = itemsQuery.eq('status_envio', statusEnvio);
+  if (arquivoEncontrado !== null) itemsQuery = itemsQuery.eq('arquivo_encontrado', arquivoEncontrado);
+
+  const { data: itemsData, error: itemsError, count } = await itemsQuery
+    .order('data_hora', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false, nullsFirst: false })
+    .range(rangeFrom, rangeTo);
+
+  if (itemsError) throw new Error(itemsError.message);
+
+  const items = (itemsData || []).map((row) => ({
+    id: row.id,
+    financeiro_id: row.financeiro_id || null,
+    company_id: row.company_id,
+    data_hora: row.data_hora || row.created_at || null,
+    cliente_nome: row.cliente_nome || 'Cliente',
+    cliente_numero: row.cliente_numero || null,
+    telefone: row.telefone || null,
+    documento: row.documento || null,
+    numero_boleto: row.numero_boleto || null,
+    numero_nf: row.numero_nf || null,
+    valor: Number(row.valor || 0),
+    vencimento: row.vencimento || null,
+    tipo_cobranca: row.tipo_cobranca || 'atraso',
+    dias_atraso: Number(row.dias_atraso || 0),
+    arquivo_encontrado: Boolean(row.arquivo_encontrado),
+    drive_file_id: row.drive_file_id || null,
+    status_envio: row.status_envio || 'pendente',
+    erro: row.erro || '',
+    payload: row.payload || null,
+  }));
+
+  return {
+    cards: buildHistoryCards(cardsData || [], todayIso),
+    items,
+    pagination: {
+      page,
+      page_size: pageSize,
+      total: Number(count || 0),
+    },
+  };
+}
+
 async function assertCompanyAccess(
   admin: AdminClient,
   authClient: AdminClient,
@@ -1389,7 +1518,7 @@ Deno.serve(async (req: Request) => {
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
     }
 
-    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'preview_template') {
+    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'preview_template') {
       requireCompanyId(companyId);
     }
 
@@ -1598,6 +1727,33 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'get_billing_center',
           error: String(error?.message || error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
+    }
+
+    if (action === 'get_billing_history') {
+      try {
+        const filters = body?.filters && typeof body.filters === 'object' ? body.filters : {};
+        const page = Math.max(1, Number(body?.page || 1) || 1);
+        const pageSize = Math.min(200, Math.max(1, Number(body?.page_size || 50) || 50));
+        const history = await getBillingHistoryData(admin, companyId || '', filters as Record<string, unknown>, page, pageSize, todayIso);
+
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'get_billing_history',
+          cards: history.cards,
+          items: history.items,
+          pagination: history.pagination,
+        }, 200);
+      } catch (error) {
+        console.error('get_billing_history error', error);
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'get_billing_history',
+          error: String(error instanceof Error ? error.message : error),
           details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
