@@ -285,10 +285,29 @@ function fillTemplate(
     .replaceAll('{empresa}', companyName || String(record.empresa || ''));
 }
 
+async function getCompanySnapshot(supabaseAdmin: AdminClient, companyId: string) {
+  if (!companyId) {
+    return {
+      nome: '',
+      cnpj: '',
+    };
+  }
+
+  const { data } = await supabaseAdmin
+    .from('empresas')
+    .select('nome, cnpj')
+    .eq('id', companyId)
+    .maybeSingle();
+
+  return {
+    nome: String(data?.nome || ''),
+    cnpj: String(data?.cnpj || ''),
+  };
+}
+
 async function getCompanyName(supabaseAdmin: AdminClient, companyId: string) {
-  if (!companyId) return '';
-  const { data } = await supabaseAdmin.from('empresas').select('nome').eq('id', companyId).maybeSingle();
-  return String(data?.nome || '');
+  const snapshot = await getCompanySnapshot(supabaseAdmin, companyId);
+  return snapshot.nome;
 }
 
 async function sha256Hex(value: string) {
@@ -674,6 +693,8 @@ async function getBillingConfigForCompany(
   companyId: string,
 ) {
   requireCompanyId(companyId);
+  // Regra operacional da regua: persiste em whatsapp_cobranca_config.
+  // cobrancas_whatsapp no schema real local e historico de envios/status por titulo.
   const { data, error } = await supabaseAdmin
     .from('whatsapp_cobranca_config')
     .select('empresa_id, ativo, hora_execucao, hora_envio, mensagem_template, template_preventiva, template_vencimento, template_atraso, regua_atraso, intervalo_dias, cobrar_apos_dias_vencido, limite_cobrancas_por_titulo, preventiva_dias_antes, enviar_no_vencimento, permitir_envio_sem_boleto')
@@ -690,6 +711,8 @@ async function saveBillingConfigForCompany(
   payload: Record<string, unknown>,
 ) {
   requireCompanyId(companyId);
+  // Mantemos a persistencia da regua em whatsapp_cobranca_config porque
+  // o schema real local consolidado usa cobrancas_whatsapp como historico.
   const existing = await getBillingConfigForCompany(supabaseAdmin, companyId);
   const horario = String(payload?.hora_execucao || payload?.hora_envio || existing?.hora_execucao || existing?.hora_envio || DEFAULT_EXECUTION_TIME).trim() || DEFAULT_EXECUTION_TIME;
 
@@ -781,7 +804,7 @@ async function syncDriveForCompany(supabaseAdmin: AdminClient, companyId: string
 
   const { data: rows, error } = await supabaseAdmin
     .from('registros_financeiros')
-    .select('id, company_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, status, drive_file_id')
+    .select('id, company_id, user_id, representante_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, observacao, status, drive_file_id, created_at, updated_at')
     .eq('company_id', companyId)
     .is('drive_file_id', null);
 
@@ -1163,27 +1186,31 @@ async function getBillingCenterData(
   companyId: string,
   todayIso: string,
 ) {
-  const config = await getBillingConfigForCompany(supabaseAdmin, companyId);
-  const companyName = await getCompanyName(supabaseAdmin, companyId);
+  console.log('get_billing_center before registros_financeiros query', { company_id: companyId });
   const { data: records, error: recordsError } = await supabaseAdmin
     .from('registros_financeiros')
-    .select('id, company_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, status, drive_file_id, preventiva_enviada, data_envio_preventiva, cobranca_vencimento_enviada, data_envio_vencimento, ultima_cobranca, tentativas_cobranca')
+    .select('id, company_id, nome, numero_boleto, data_vencimento, valor, telefone, status, created_at')
     .eq('company_id', companyId)
     .order('data_vencimento', { ascending: true });
 
   if (recordsError) throw new Error(recordsError.message);
+  console.log('get_billing_center after registros_financeiros query', { total_registros: (records || []).length });
 
-  const { data: logs, error: logsError } = await supabaseAdmin
+  console.log('get_billing_center before logs_cobranca query', { company_id: companyId });
+  const { data: logsData, error: logsError } = await supabaseAdmin
     .from('logs_cobranca')
-    .select('id, financeiro_id, company_id, data_hora, tipo_cobranca, status_envio, erro, arquivo_encontrado, drive_file_id, created_at')
+    .select('id, financeiro_id, company_id, data_hora, tipo_cobranca, status_envio, arquivo_encontrado, erro, created_at')
     .eq('company_id', companyId)
     .order('data_hora', { ascending: false })
     .limit(500);
-
-  if (logsError) throw new Error(logsError.message);
+  const logs = logsError ? [] : (logsData || []);
+  console.log('get_billing_center after logs_cobranca query', {
+    total_logs: logs.length,
+    logs_error: logsError?.message || null,
+  });
 
   const latestLogByFinanceiro = new Map<string, Record<string, unknown>>();
-  for (const log of logs || []) {
+  for (const log of logs) {
     const financeiroId = String(log.financeiro_id || '');
     if (!financeiroId || latestLogByFinanceiro.has(financeiroId)) continue;
     latestLogByFinanceiro.set(financeiroId, log as Record<string, unknown>);
@@ -1191,43 +1218,69 @@ async function getBillingCenterData(
 
   const start = `${todayIso}T00:00:00-03:00`;
   const end = `${todayIso}T23:59:59-03:00`;
-  const todayLogs = (logs || []).filter((row) => String(row.data_hora || row.created_at || '') >= start && String(row.data_hora || row.created_at || '') <= end);
+  const todayLogs = logs.filter((row) => String(row.data_hora || row.created_at || '') >= start && String(row.data_hora || row.created_at || '') <= end);
+
+  const resolveStage = (record, latestLog) => {
+    const normalizedStatus = normalizeText(record?.status);
+    if (!normalizedStatus || CLOSED_STATUSES.has(normalizedStatus) || !OPEN_STATUSES.has(normalizedStatus)) {
+      return 'fora_da_regua';
+    }
+
+    const diff = isoDaysDiff(String(record?.data_vencimento || ''), todayIso);
+    if (diff === null) return 'fora_da_regua';
+    if (diff === 1) return 'preventiva';
+    if (diff === 0) return 'vencimento';
+    if (diff < 0 && DEFAULT_RULES.includes(Math.abs(diff))) return 'atraso';
+    if (latestLog?.tipo_cobranca && ['preventiva', 'vencimento', 'atraso'].includes(String(latestLog.tipo_cobranca))) {
+      return String(latestLog.tipo_cobranca);
+    }
+    return 'fora_da_regua';
+  };
 
   const rows = (records || []).map((record) => {
-    const eligibility = explainRecordEligibility(record as FinancialRow, config as BillingConfigRow | null, todayIso);
     const latestLog = latestLogByFinanceiro.get(record.id);
-    const boletoEncontrado = Boolean(record.drive_file_id || latestLog?.arquivo_encontrado);
-    const telefoneValido = validatePhone(normalizePhone(record.telefone));
-    const resolvedDriveFileId = String(record.drive_file_id || latestLog?.drive_file_id || '');
+    const telefoneBruto = String(record?.telefone || latestLog?.telefone || '');
+    const telefoneValido = validatePhone(normalizePhone(telefoneBruto));
+    const boletoEncontrado = Boolean(latestLog?.arquivo_encontrado);
+    const dataVencimento = String(record?.data_vencimento || '');
+    const diasParaVencer = dataVencimento ? isoDaysDiff(dataVencimento, todayIso) : null;
+    const diasAtraso = diasParaVencer !== null && diasParaVencer < 0 ? Math.abs(diasParaVencer) : 0;
+    const etapaRegua = resolveStage(record, latestLog);
+
+    let motivoNaoElegivel = null;
+    if (!record?.status) motivoNaoElegivel = 'status_vazio';
+    else if (!OPEN_STATUSES.has(normalizeText(record.status)) || CLOSED_STATUSES.has(normalizeText(record.status))) motivoNaoElegivel = 'status_fora_da_regua';
+    else if (!telefoneBruto.trim()) motivoNaoElegivel = 'telefone_vazio';
+    else if (!telefoneValido) motivoNaoElegivel = 'telefone_invalido';
+    else if (!dataVencimento) motivoNaoElegivel = 'vencimento_vazio';
+    else if (diasParaVencer === null) motivoNaoElegivel = 'vencimento_invalido';
+    else if (etapaRegua === 'fora_da_regua') motivoNaoElegivel = 'fora_da_regua';
 
     return {
       id: record.id,
       company_id: record.company_id,
-      cliente_nome: record.cliente_nome || record.nome || 'Cliente',
+      cliente_nome: record.nome || 'Cliente',
       numero_boleto: record.numero_boleto || '-',
-      vencimento: record.data_vencimento,
-      valor: record.valor,
-      telefone: record.telefone || '',
-      status: normalizeChargeStatus(record.status),
-      etapa_regua: eligibility.etapa || 'fora_da_regua',
+      vencimento: dataVencimento || null,
+      valor: Number(record?.valor || 0),
+      telefone: telefoneBruto,
+      status: normalizeChargeStatus(record?.status),
+      etapa_regua: etapaRegua,
       boleto_encontrado: boletoEncontrado,
       telefone_valido: telefoneValido,
-      ultima_cobranca: latestLog?.data_hora || record.ultima_cobranca || null,
+      ultima_cobranca: latestLog?.data_hora || null,
       ultimo_status_envio: latestLog?.status_envio || null,
       ultimo_erro: latestLog?.erro || null,
-      drive_file_id: resolvedDriveFileId || null,
-      boleto_url: resolvedDriveFileId ? `https://drive.google.com/file/d/${resolvedDriveFileId}/view` : null,
-      dias_para_vencer: eligibility.dias_para_vencer,
-      dias_atraso: eligibility.dias_atraso,
-      motivo_nao_elegivel: eligibility.motivo_nao_elegivel,
-      empresa: companyName,
+      created_at: record?.created_at || null,
+      dias_para_vencer: diasParaVencer,
+      dias_atraso: diasAtraso,
+      motivo_nao_elegivel: motivoNaoElegivel,
     };
   });
 
   const isOpen = (status: string) => OPEN_STATUSES.has(normalizeText(status));
 
   return {
-    company_id: companyId,
     cards: {
       vencendo_amanha: rows.filter((row) => row.etapa_regua === 'preventiva').length,
       vencem_hoje: rows.filter((row) => row.etapa_regua === 'vencimento').length,
@@ -1238,7 +1291,7 @@ async function getBillingCenterData(
       erros: todayLogs.filter((row) => String(row.status_envio || '') === 'erro').length,
       total_em_aberto: rows.filter((row) => isOpen(row.status)).length,
     },
-    rows,
+    items: rows,
   };
 }
 
@@ -1512,11 +1565,42 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'get_billing_center') {
-      const center = await getBillingCenterData(admin, companyId || '', todayIso);
-      return jsonResponse({
-        ok: true,
-        ...center,
-      });
+      console.log('get_billing_center iniciou action');
+      try {
+        console.log('get_billing_center body validado', { company_id: companyId });
+        console.log('get_billing_center antes do select registros_financeiros');
+        const center = await getBillingCenterData(admin, companyId || '', todayIso);
+        console.log('get_billing_center depois do select registros_financeiros', { total_items: Array.isArray(center?.items) ? center.items.length : 0 });
+        console.log('get_billing_center antes do select logs_cobranca');
+        console.log('get_billing_center depois do select logs_cobranca', { total_logs_relacionados: Array.isArray(center?.items) ? center.items.filter((item) => item.ultima_cobranca).length : 0 });
+        console.log('get_billing_center antes de montar cards');
+        const response = {
+          ok: true,
+          success: true,
+          cards: center?.cards || {
+            vencendo_amanha: 0,
+            vencem_hoje: 0,
+            em_atraso: 0,
+            sem_boleto_encontrado: 0,
+            sem_telefone_valido: 0,
+            simulacoes_realizadas_hoje: 0,
+            erros: 0,
+            total_em_aberto: 0,
+          },
+          items: Array.isArray(center?.items) ? center.items : [],
+        };
+        console.log('get_billing_center antes do return final', { total_items: response.items.length });
+        return jsonResponse(response, 200);
+      } catch (error) {
+        console.error('get_billing_center error', error);
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'get_billing_center',
+          error: String(error?.message || error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
     }
 
     if (action === 'preview_template') {
@@ -1600,7 +1684,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: record, error: recordError } = await admin
         .from('registros_financeiros')
-        .select('id, company_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, status, drive_file_id, preventiva_enviada, data_envio_preventiva, cobranca_vencimento_enviada, data_envio_vencimento, ultima_cobranca, tentativas_cobranca')
+        .select('id, company_id, user_id, representante_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, observacao, status, drive_file_id, preventiva_enviada, data_envio_preventiva, cobranca_vencimento_enviada, data_envio_vencimento, ultima_cobranca, tentativas_cobranca, created_at, updated_at')
         .eq('id', registroId)
         .eq('company_id', companyId || '')
         .maybeSingle();
@@ -1784,7 +1868,7 @@ Deno.serve(async (req: Request) => {
 
         const { data: records, error } = await admin
           .from('registros_financeiros')
-          .select('id, company_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, status, drive_file_id, preventiva_enviada, data_envio_preventiva, cobranca_vencimento_enviada, data_envio_vencimento, ultima_cobranca, tentativas_cobranca')
+          .select('id, company_id, user_id, representante_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, observacao, status, drive_file_id, preventiva_enviada, data_envio_preventiva, cobranca_vencimento_enviada, data_envio_vencimento, ultima_cobranca, tentativas_cobranca, created_at, updated_at')
           .eq('company_id', targetCompanyId)
           .order('data_vencimento', { ascending: true });
 

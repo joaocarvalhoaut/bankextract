@@ -5,6 +5,25 @@ const buildError = (err, fallback) => {
   return new Error(err?.message || err?.error || fallback);
 };
 
+const formatEdgeError = (data, fallbackMessage) => {
+  const mainMessage = data?.error || data?.message || fallbackMessage;
+  const details = data?.details;
+
+  if (!details) {
+    return new Error(mainMessage);
+  }
+
+  if (typeof details === 'string') {
+    return new Error(`${mainMessage} | details: ${details}`);
+  }
+
+  try {
+    return new Error(`${mainMessage} | details: ${JSON.stringify(details)}`);
+  } catch {
+    return new Error(mainMessage);
+  }
+};
+
 const invokeBillingAutomation = async (body, fallbackMessage) => {
   if (!supabase) {
     throw new Error('Supabase nao configurado.');
@@ -16,8 +35,15 @@ const invokeBillingAutomation = async (body, fallbackMessage) => {
     throw buildError(error, fallbackMessage);
   }
 
-  if (!data?.ok) {
-    throw new Error(data?.error || fallbackMessage);
+  const isSuccess = data?.ok === true || data?.success === true;
+  const isFailure = data?.ok === false || data?.success === false;
+
+  if (isFailure) {
+    throw formatEdgeError(data, fallbackMessage);
+  }
+
+  if (!isSuccess) {
+    throw formatEdgeError(data, fallbackMessage);
   }
 
   return data;
