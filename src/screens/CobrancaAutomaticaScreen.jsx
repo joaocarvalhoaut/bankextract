@@ -5,6 +5,7 @@ import {
   getBillingConfig,
   getDriveConfig,
   getBillingAutomationOverview,
+  previewBillingTemplate,
   reprocessBillingFailures,
   runBillingAutomationNow,
   saveBillingConfig,
@@ -78,13 +79,21 @@ export default function CobrancaAutomaticaScreen({
   const [driveSaving, setDriveSaving] = useState(false);
   const [driveTesting, setDriveTesting] = useState(false);
   const [billingSaving, setBillingSaving] = useState(false);
+  const [templatePreviewLoading, setTemplatePreviewLoading] = useState(false);
   const [billingConfig, setBillingConfig] = useState({
     ativo: false,
     hora_execucao: '08:00',
     mensagem_template: '',
+    template_preventiva: '',
+    template_vencimento: '',
+    template_atraso: '',
     intervalo_dias: 5,
     cobrar_apos_dias_vencido: 1,
-    limite_cobrancas_por_titulo: 4,
+    limite_cobrancas_por_titulo: 6,
+    preventiva_dias_antes: 1,
+    enviar_no_vencimento: true,
+    permitir_envio_sem_boleto: false,
+    regua_atraso: [1, 3, 5, 10, 15, 30],
   });
 
   const canManage = canUserPerformAction(userRole, 'manage_automations');
@@ -150,9 +159,16 @@ export default function CobrancaAutomaticaScreen({
         ativo: false,
         hora_execucao: '08:00',
         mensagem_template: '',
+        template_preventiva: '',
+        template_vencimento: '',
+        template_atraso: '',
         intervalo_dias: 5,
         cobrar_apos_dias_vencido: 1,
-        limite_cobrancas_por_titulo: 4,
+        limite_cobrancas_por_titulo: 6,
+        preventiva_dias_antes: 1,
+        enviar_no_vencimento: true,
+        permitir_envio_sem_boleto: false,
+        regua_atraso: [1, 3, 5, 10, 15, 30],
       });
       return;
     }
@@ -163,9 +179,18 @@ export default function CobrancaAutomaticaScreen({
         ativo: Boolean(data?.config?.ativo),
         hora_execucao: data?.config?.hora_execucao || data?.config?.hora_envio || '08:00',
         mensagem_template: data?.config?.mensagem_template || '',
+        template_preventiva: data?.config?.template_preventiva || '',
+        template_vencimento: data?.config?.template_vencimento || '',
+        template_atraso: data?.config?.template_atraso || '',
         intervalo_dias: Number(data?.config?.intervalo_dias || 5),
         cobrar_apos_dias_vencido: Number(data?.config?.cobrar_apos_dias_vencido || 1),
-        limite_cobrancas_por_titulo: Number(data?.config?.limite_cobrancas_por_titulo || 4),
+        limite_cobrancas_por_titulo: Number(data?.config?.limite_cobrancas_por_titulo || 6),
+        preventiva_dias_antes: Number(data?.config?.preventiva_dias_antes || 1),
+        enviar_no_vencimento: Boolean(data?.config?.enviar_no_vencimento ?? true),
+        permitir_envio_sem_boleto: Boolean(data?.config?.permitir_envio_sem_boleto ?? false),
+        regua_atraso: Array.isArray(data?.config?.regua_atraso)
+          ? data.config.regua_atraso.map((item) => Number(item))
+          : [1, 3, 5, 10, 15, 30],
       });
     } catch (error) {
       onToast?.('erro', error.message || 'Falha ao carregar a configuração da régua.');
@@ -315,9 +340,18 @@ export default function CobrancaAutomaticaScreen({
         ativo: Boolean(data?.config?.ativo),
         hora_execucao: data?.config?.hora_execucao || data?.config?.hora_envio || '08:00',
         mensagem_template: data?.config?.mensagem_template || '',
+        template_preventiva: data?.config?.template_preventiva || '',
+        template_vencimento: data?.config?.template_vencimento || '',
+        template_atraso: data?.config?.template_atraso || '',
         intervalo_dias: Number(data?.config?.intervalo_dias || 5),
         cobrar_apos_dias_vencido: Number(data?.config?.cobrar_apos_dias_vencido || 1),
-        limite_cobrancas_por_titulo: Number(data?.config?.limite_cobrancas_por_titulo || 4),
+        limite_cobrancas_por_titulo: Number(data?.config?.limite_cobrancas_por_titulo || 6),
+        preventiva_dias_antes: Number(data?.config?.preventiva_dias_antes || 1),
+        enviar_no_vencimento: Boolean(data?.config?.enviar_no_vencimento ?? true),
+        permitir_envio_sem_boleto: Boolean(data?.config?.permitir_envio_sem_boleto ?? false),
+        regua_atraso: Array.isArray(data?.config?.regua_atraso)
+          ? data.config.regua_atraso.map((item) => Number(item))
+          : [1, 3, 5, 10, 15, 30],
       });
       await loadOverview();
       onToast?.('sucesso', data?.message || 'Configuração da régua salva com sucesso.');
@@ -327,6 +361,46 @@ export default function CobrancaAutomaticaScreen({
       setBillingSaving(false);
     }
   }, [billingConfig, canManage, globalMode, loadOverview, onToast, resolvedCompanyId]);
+
+  const toggleDelayRule = useCallback((day) => {
+    setBillingConfig((current) => {
+      const currentRules = Array.isArray(current.regua_atraso) ? current.regua_atraso.map((item) => Number(item)) : [];
+      const exists = currentRules.includes(day);
+      return {
+        ...current,
+        regua_atraso: exists ? currentRules.filter((item) => item !== day) : [...currentRules, day].sort((a, b) => a - b),
+      };
+    });
+  }, []);
+
+  const handlePreviewTemplate = useCallback(async () => {
+    if (!resolvedCompanyId || globalMode) {
+      onToast?.('erro', 'Selecione uma empresa especifica para testar o template.');
+      return;
+    }
+
+    setTemplatePreviewLoading(true);
+    try {
+      const data = await previewBillingTemplate(
+        resolvedCompanyId,
+        billingConfig.template_atraso || billingConfig.mensagem_template,
+        {
+          nome: companyName || 'Cliente Exemplo',
+          numero_boleto: '3001-2',
+          vencimento: '2026-05-10',
+          valor: 1250.5,
+          dias_atraso: 3,
+          telefone: '77999990000',
+          empresa: companyName || 'Empresa Exemplo',
+        }
+      );
+      onToast?.('sucesso', data?.message || 'Template testado com sucesso.');
+    } catch (error) {
+      onToast?.('erro', error.message || 'Falha ao testar o template.');
+    } finally {
+      setTemplatePreviewLoading(false);
+    }
+  }, [billingConfig.mensagem_template, billingConfig.template_atraso, companyName, globalMode, onToast, resolvedCompanyId]);
 
   if (globalMode || !resolvedCompanyId) {
     return (
@@ -405,6 +479,15 @@ export default function CobrancaAutomaticaScreen({
             {executingAction === 'sheet' ? <Loader2 size={15} className="animate-spin" /> : <Sheet size={15} />}
             Sincronizar Planilha
           </button>
+          <button
+            type="button"
+            onClick={handlePreviewTemplate}
+            disabled={templatePreviewLoading}
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-soft transition hover:bg-slate-50 disabled:opacity-50"
+          >
+            {templatePreviewLoading ? <Loader2 size={15} className="animate-spin" /> : <Sheet size={15} />}
+            Testar template
+          </button>
         </div>
       </div>
 
@@ -433,7 +516,14 @@ export default function CobrancaAutomaticaScreen({
       </div>
 
       <section className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5 shadow-soft">
-        <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="mb-5">
+          <p className="text-sm font-semibold text-slate-950">Configuracao da regua</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Ajuste preventiva, vencimento, atraso, limite por titulo e o comportamento da simulacao.
+          </p>
+        </div>
+
+        <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
           <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Ativar cobrança automática</span>
             <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -456,6 +546,109 @@ export default function CobrancaAutomaticaScreen({
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
             />
           </label>
+
+          <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Preventiva dias antes</span>
+            <input
+              type="number"
+              min="0"
+              value={billingConfig.preventiva_dias_antes}
+              onChange={(event) => setBillingConfig((current) => ({ ...current, preventiva_dias_antes: Number(event.target.value || 0) }))}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+            />
+          </label>
+        </div>
+
+        <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Enviar no vencimento</span>
+            <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <span className="text-sm font-medium text-slate-700">{billingConfig.enviar_no_vencimento ? 'Sim' : 'Nao'}</span>
+              <input
+                type="checkbox"
+                checked={Boolean(billingConfig.enviar_no_vencimento)}
+                onChange={(event) => setBillingConfig((current) => ({ ...current, enviar_no_vencimento: event.target.checked }))}
+                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+            </div>
+          </label>
+          <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Permitir envio sem boleto</span>
+            <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <span className="text-sm font-medium text-slate-700">{billingConfig.permitir_envio_sem_boleto ? 'Sim' : 'Nao'}</span>
+              <input
+                type="checkbox"
+                checked={Boolean(billingConfig.permitir_envio_sem_boleto)}
+                onChange={(event) => setBillingConfig((current) => ({ ...current, permitir_envio_sem_boleto: event.target.checked }))}
+                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+            </div>
+          </label>
+          <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Limite por titulo</span>
+            <input
+              type="number"
+              min="1"
+              value={billingConfig.limite_cobrancas_por_titulo}
+              onChange={(event) => setBillingConfig((current) => ({ ...current, limite_cobrancas_por_titulo: Number(event.target.value || 1) }))}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+            />
+          </label>
+        </div>
+
+        <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <span className="mb-3 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Dias de atraso para cobranca</span>
+          <div className="flex flex-wrap gap-2">
+            {[1, 3, 5, 10, 15, 30].map((day) => {
+              const active = Array.isArray(billingConfig.regua_atraso) && billingConfig.regua_atraso.includes(day);
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => toggleDelayRule(day)}
+                  className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                    active ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  D+{day}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Template preventiva</span>
+            <textarea
+              rows={8}
+              value={billingConfig.template_preventiva}
+              onChange={(event) => setBillingConfig((current) => ({ ...current, template_preventiva: event.target.value }))}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+            />
+          </label>
+          <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Template vencimento</span>
+            <textarea
+              rows={8}
+              value={billingConfig.template_vencimento}
+              onChange={(event) => setBillingConfig((current) => ({ ...current, template_vencimento: event.target.value }))}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+            />
+          </label>
+          <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Template atraso</span>
+            <textarea
+              rows={8}
+              value={billingConfig.template_atraso}
+              onChange={(event) => setBillingConfig((current) => ({ ...current, template_atraso: event.target.value }))}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+            />
+          </label>
+        </div>
+
+        <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 text-xs leading-relaxed text-slate-500 shadow-sm">
+          Variaveis disponiveis: {'{nome}'}, {'{numero_boleto}'}, {'{vencimento}'}, {'{valor}'}, {'{dias_atraso}'}, {'{empresa}'}, {'{telefone}'}.
         </div>
 
         <div className="mb-5 flex flex-wrap gap-2">

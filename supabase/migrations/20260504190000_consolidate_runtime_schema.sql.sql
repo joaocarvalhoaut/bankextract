@@ -147,7 +147,10 @@ create table if not exists public.whatsapp_cobranca_config (
   intervalo_dias integer not null default 5,
   hora_envio time not null default '08:00',
   cobrar_apos_dias_vencido integer not null default 1,
-  limite_cobrancas_por_titulo integer not null default 4,
+  limite_cobrancas_por_titulo integer not null default 6,
+  preventiva_dias_antes integer not null default 1,
+  enviar_no_vencimento boolean not null default true,
+  permitir_envio_sem_boleto boolean not null default false,
   protesto_apos_5_dias boolean not null default true,
   canal_envio text not null default 'WhatsApp',
   regras jsonb not null default '[]'::jsonb,
@@ -326,6 +329,18 @@ alter table public.whatsapp_cobranca_config
 alter table public.whatsapp_cobranca_config
   add column if not exists hora_execucao time not null default '08:00';
 
+alter table public.whatsapp_cobranca_config
+  add column if not exists preventiva_dias_antes integer not null default 1;
+
+alter table public.whatsapp_cobranca_config
+  add column if not exists enviar_no_vencimento boolean not null default true;
+
+alter table public.whatsapp_cobranca_config
+  add column if not exists permitir_envio_sem_boleto boolean not null default false;
+
+alter table public.whatsapp_cobranca_config
+  alter column limite_cobrancas_por_titulo set default 6;
+
 alter table public.google_sheets_config
   add column if not exists created_at timestamptz not null default timezone('utc', now());
 
@@ -410,7 +425,7 @@ $$;
 
 alter table public.registros_financeiros
   add constraint registros_financeiros_status_check
-  check (status in ('pendente', 'aberto', 'vencido', 'negociacao', 'promessa', 'liquidado', 'em_aberto', 'pago', 'cancelado', 'negociado'));
+  check (status in ('pendente', 'aberto', 'vencido', 'negociacao', 'promessa', 'liquidado', 'em_aberto', 'pago', 'cancelado', 'negociado', 'suspenso'));
 
 do $$
 begin

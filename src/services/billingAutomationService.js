@@ -7,7 +7,7 @@ const buildError = (err, fallback) => {
 
 const invokeBillingAutomation = async (body, fallbackMessage) => {
   if (!supabase) {
-    throw new Error('Supabase não configurado.');
+    throw new Error('Supabase nao configurado.');
   }
 
   const { data, error } = await supabase.functions.invoke('billing-automation', { body });
@@ -45,7 +45,7 @@ export async function getBillingAutomationOverview(companyId) {
       action: 'overview',
       company_id: companyId,
     },
-    'Falha ao carregar o painel de cobrança automática.'
+    'Falha ao carregar o painel de cobranca automatica.'
   );
 }
 
@@ -57,7 +57,7 @@ export async function runBillingAutomationNow(companyId, options = {}) {
       manual: true,
       simulate: options.simulate === true,
     },
-    'Falha ao executar a régua de cobrança.'
+    'Falha ao executar a regua de cobranca.'
   );
 }
 
@@ -67,7 +67,7 @@ export async function reprocessBillingFailures(companyId) {
       action: 'reprocess_failures',
       company_id: companyId,
     },
-    'Falha ao reprocessar falhas da cobrança.'
+    'Falha ao reprocessar falhas da cobranca.'
   );
 }
 
@@ -97,14 +97,14 @@ export async function getDriveConfig(companyId) {
       action: 'get_drive_config',
       company_id: companyId,
     },
-    'Falha ao carregar a configuração do Google Drive.'
+    'Falha ao carregar a configuracao do Google Drive.'
   );
 }
 
 export async function getBillingConfig(companyId) {
   return invokeBillingAutomation(
     {
-      action: 'get_billing_config',
+      action: 'get_billing_rules',
       company_id: companyId,
     },
     'Falha ao carregar a configuracao da regua.'
@@ -114,12 +114,20 @@ export async function getBillingConfig(companyId) {
 export async function saveBillingConfig(companyId, config) {
   return invokeBillingAutomation(
     {
-      action: 'save_billing_config',
+      action: 'save_billing_rules',
       company_id: companyId,
       config,
     },
     'Falha ao salvar a configuracao da regua.'
   );
+}
+
+export async function getBillingRules(companyId) {
+  return getBillingConfig(companyId);
+}
+
+export async function saveBillingRules(companyId, config) {
+  return saveBillingConfig(companyId, config);
 }
 
 export async function saveDriveConfig(companyId, driveRootFolderId) {
@@ -139,6 +147,51 @@ export async function testDriveConnection(companyId) {
       action: 'test_drive_connection',
       company_id: companyId,
     },
-    'Falha ao testar a conexão com o Google Drive.'
+    'Falha ao testar a conexao com o Google Drive.'
+  );
+}
+
+export async function getBillingCenter(companyId) {
+  return invokeBillingAutomation(
+    {
+      action: 'get_billing_center',
+      company_id: companyId,
+    },
+    'Falha ao carregar a central de cobranca.'
+  );
+}
+
+export async function simulateChargeItem(companyId, registroId) {
+  return invokeBillingAutomation(
+    {
+      action: 'simulate_charge_item',
+      company_id: companyId,
+      registro_id: registroId,
+    },
+    'Falha ao simular a cobranca do titulo.'
+  );
+}
+
+export async function updateChargeStatus(companyId, registroId, status) {
+  return invokeBillingAutomation(
+    {
+      action: 'update_charge_status',
+      company_id: companyId,
+      registro_id: registroId,
+      status,
+    },
+    'Falha ao atualizar o status da cobranca.'
+  );
+}
+
+export async function previewBillingTemplate(companyId, template, sample = {}) {
+  return invokeBillingAutomation(
+    {
+      action: 'preview_template',
+      company_id: companyId,
+      template,
+      sample,
+    },
+    'Falha ao testar o template da regua.'
   );
 }

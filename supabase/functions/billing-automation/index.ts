@@ -6,11 +6,18 @@ interface BillingConfigRow {
   empresa_id: string;
   ativo: boolean;
   hora_execucao: string | null;
+  hora_envio?: string | null;
   mensagem_template: string | null;
   template_preventiva: string | null;
   template_vencimento: string | null;
   template_atraso: string | null;
   regua_atraso: unknown;
+  intervalo_dias?: number | null;
+  cobrar_apos_dias_vencido?: number | null;
+  limite_cobrancas_por_titulo?: number | null;
+  preventiva_dias_antes?: number | null;
+  enviar_no_vencimento?: boolean | null;
+  permitir_envio_sem_boleto?: boolean | null;
 }
 
 interface SheetsConfigRow {
@@ -61,9 +68,13 @@ const corsHeaders = {
 };
 
 const OPEN_STATUSES = new Set(['em_aberto', 'aberto', 'pendente', 'vencido']);
-const CLOSED_STATUSES = new Set(['pago', 'liquidado', 'cancelado', 'negociado', 'negociacao']);
+const CLOSED_STATUSES = new Set(['pago', 'liquidado', 'cancelado', 'negociado', 'negociacao', 'suspenso']);
 const DEFAULT_RULES = [1, 3, 5, 10, 15, 30];
 const DEFAULT_EXECUTION_TIME = '08:00';
+const DEFAULT_PREVENTIVA_DAYS = 1;
+const DEFAULT_SEND_ON_DUE_DATE = true;
+const DEFAULT_ALLOW_WITHOUT_BOLETO = false;
+const DEFAULT_LIMIT_PER_TITLE = 6;
 function normalizeFinancialStatus(value: string | null | undefined) {
   const status = normalizeText(value);
   if (status === 'pago') return 'liquidado';
@@ -123,6 +134,18 @@ Caso já tenha efetuado o pagamento, desconsidere esta mensagem.
 
 Atenciosamente,
 Setor de Cobrança Orthomax`;
+
+const DEFAULT_TEMPLATE_SAMPLE = {
+  nome: 'Cliente Exemplo',
+  cliente_nome: 'Cliente Exemplo',
+  numero_boleto: '3001-2',
+  documento: '3001-2',
+  vencimento: '2026-05-10',
+  valor: 1299.9,
+  telefone: '77999990000',
+  dias_atraso: 3,
+  empresa: 'Empresa Exemplo',
+};
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -235,15 +258,37 @@ function resolveTemplate(config: BillingConfigRow | null, type: 'preventiva' | '
   return config?.template_atraso || generic || DEFAULT_ATRASO_TEMPLATE;
 }
 
-function fillTemplate(template: string, record: FinancialRow, diasAtraso: number) {
+function fillTemplate(
+  template: string,
+  record: Partial<FinancialRow> & Record<string, unknown>,
+  diasAtraso: number,
+  companyName = '',
+) {
+  const nome = String(record.cliente_nome || record.nome || 'Cliente');
+  const documento = String(record.documento || record.numero_boleto || '-');
+  const vencimento = String(record.data_vencimento || record.vencimento || '');
+  const valor = Number(record.valor || 0);
+  const telefone = String(record.telefone || '');
+  const numeroBoleto = String(record.numero_boleto || '');
+
   return template
-    .replaceAll('{cliente_nome}', record.cliente_nome || record.nome || 'Cliente')
-    .replaceAll('{documento}', record.documento || record.numero_boleto || '-')
-    .replaceAll('{vencimento}', formatDateBR(record.data_vencimento))
-    .replaceAll('{valor}', formatCurrency(record.valor))
+    .replaceAll('{cliente_nome}', nome)
+    .replaceAll('{nome}', nome)
+    .replaceAll('{cliente}', nome)
+    .replaceAll('{documento}', documento)
+    .replaceAll('{vencimento}', formatDateBR(vencimento))
+    .replaceAll('{valor}', formatCurrency(valor))
     .replaceAll('{dias_atraso}', String(diasAtraso))
-    .replaceAll('{numero_boleto}', record.numero_boleto || '-')
-    .replaceAll('{numero_nf}', record.numero_nf || '-');
+    .replaceAll('{numero_boleto}', numeroBoleto || '-')
+    .replaceAll('{numero_nf}', String(record.numero_nf || '-'))
+    .replaceAll('{telefone}', telefone)
+    .replaceAll('{empresa}', companyName || String(record.empresa || ''));
+}
+
+async function getCompanyName(supabaseAdmin: AdminClient, companyId: string) {
+  if (!companyId) return '';
+  const { data } = await supabaseAdmin.from('empresas').select('nome').eq('id', companyId).maybeSingle();
+  return String(data?.nome || '');
 }
 
 async function sha256Hex(value: string) {
@@ -631,7 +676,7 @@ async function getBillingConfigForCompany(
   requireCompanyId(companyId);
   const { data, error } = await supabaseAdmin
     .from('whatsapp_cobranca_config')
-    .select('empresa_id, ativo, hora_execucao, hora_envio, mensagem_template, template_preventiva, template_vencimento, template_atraso, regua_atraso, intervalo_dias, cobrar_apos_dias_vencido, limite_cobrancas_por_titulo')
+    .select('empresa_id, ativo, hora_execucao, hora_envio, mensagem_template, template_preventiva, template_vencimento, template_atraso, regua_atraso, intervalo_dias, cobrar_apos_dias_vencido, limite_cobrancas_por_titulo, preventiva_dias_antes, enviar_no_vencimento, permitir_envio_sem_boleto')
     .eq('empresa_id', companyId)
     .maybeSingle();
 
@@ -660,7 +705,10 @@ async function saveBillingConfigForCompany(
     regua_atraso: Array.isArray(payload?.regua_atraso) ? payload.regua_atraso : (existing?.regua_atraso ?? DEFAULT_RULES),
     intervalo_dias: Number(payload?.intervalo_dias ?? existing?.intervalo_dias ?? 5) || 5,
     cobrar_apos_dias_vencido: Number(payload?.cobrar_apos_dias_vencido ?? existing?.cobrar_apos_dias_vencido ?? 1) || 1,
-    limite_cobrancas_por_titulo: Number(payload?.limite_cobrancas_por_titulo ?? existing?.limite_cobrancas_por_titulo ?? 4) || 4,
+    limite_cobrancas_por_titulo: Number(payload?.limite_cobrancas_por_titulo ?? existing?.limite_cobrancas_por_titulo ?? DEFAULT_LIMIT_PER_TITLE) || DEFAULT_LIMIT_PER_TITLE,
+    preventiva_dias_antes: Number(payload?.preventiva_dias_antes ?? existing?.preventiva_dias_antes ?? DEFAULT_PREVENTIVA_DAYS) || DEFAULT_PREVENTIVA_DAYS,
+    enviar_no_vencimento: Boolean(payload?.enviar_no_vencimento ?? existing?.enviar_no_vencimento ?? DEFAULT_SEND_ON_DUE_DATE),
+    permitir_envio_sem_boleto: Boolean(payload?.permitir_envio_sem_boleto ?? existing?.permitir_envio_sem_boleto ?? DEFAULT_ALLOW_WITHOUT_BOLETO),
     updated_at: new Date().toISOString(),
   };
 
@@ -826,6 +874,7 @@ async function processChargeForRecord(
   todayIso: string,
   force = false,
   simulate = false,
+  companyName = '',
 ) {
   const normalizedStatus = normalizeText(record.status);
   if (CLOSED_STATUSES.has(normalizedStatus)) {
@@ -846,13 +895,18 @@ async function processChargeForRecord(
     return { status: 'ignorado', reason: 'vencimento_invalido' };
   }
 
+  const preventivaDiasAntes = Number(config?.preventiva_dias_antes ?? DEFAULT_PREVENTIVA_DAYS) || DEFAULT_PREVENTIVA_DAYS;
+  const enviarNoVencimento = Boolean(config?.enviar_no_vencimento ?? DEFAULT_SEND_ON_DUE_DATE);
+  const permitirEnvioSemBoleto = Boolean(config?.permitir_envio_sem_boleto ?? DEFAULT_ALLOW_WITHOUT_BOLETO);
+  const limiteCobrancas = Number(config?.limite_cobrancas_por_titulo ?? DEFAULT_LIMIT_PER_TITLE) || DEFAULT_LIMIT_PER_TITLE;
+
   let tipo: 'preventiva' | 'vencimento' | 'atraso' | null = null;
-  if (diff === 1 && !record.preventiva_enviada) tipo = 'preventiva';
-  if (diff === 0 && !record.cobranca_vencimento_enviada) tipo = 'vencimento';
+  if (diff === preventivaDiasAntes && !record.preventiva_enviada) tipo = 'preventiva';
+  if (diff === 0 && enviarNoVencimento && !record.cobranca_vencimento_enviada) tipo = 'vencimento';
   if (diff < 0) {
     const atraso = Math.abs(diff);
     const rules = extractRuleDays(config?.regua_atraso);
-    if (rules.includes(atraso)) tipo = 'atraso';
+    if (rules.includes(atraso) && Number(record.tentativas_cobranca || 0) < limiteCobrancas) tipo = 'atraso';
   }
 
   if (!tipo) {
@@ -860,7 +914,7 @@ async function processChargeForRecord(
   }
 
   const diasAtraso = diff < 0 ? Math.abs(diff) : 0;
-  const hash = await sha256Hex(`${record.cliente_numero || ''}|${record.documento || record.numero_boleto || ''}|${tipo}|${todayIso}`);
+  const hash = await sha256Hex(`${record.company_id}|${record.id}|${record.numero_boleto || ''}|${tipo}|${todayIso}`);
 
   if (!force) {
     const { data: duplicate } = await supabaseAdmin
@@ -878,7 +932,7 @@ async function processChargeForRecord(
   const candidates = await searchDriveFiles(token, folderId, record);
   const file = candidates[0];
 
-  if (!file?.id) {
+  if (!file?.id && !permitirEnvioSemBoleto) {
     await insertLog(supabaseAdmin, {
       financeiro_id: record.id,
       company_id: record.company_id,
@@ -902,7 +956,7 @@ async function processChargeForRecord(
     return { status: 'erro', reason: 'boleto_nao_encontrado' };
   }
 
-  const message = fillTemplate(resolveTemplate(config, tipo), record, diasAtraso);
+  const message = fillTemplate(resolveTemplate(config, tipo), record, diasAtraso, companyName);
 
   if (simulate) {
     await insertLog(supabaseAdmin, {
@@ -918,8 +972,8 @@ async function processChargeForRecord(
       vencimento: record.data_vencimento,
       tipo_cobranca: tipo,
       dias_atraso: diasAtraso,
-      arquivo_encontrado: true,
-      drive_file_id: file.id,
+      arquivo_encontrado: Boolean(file?.id),
+      drive_file_id: file?.id || null,
       status_envio: 'sucesso_simulado',
       erro: null,
       payload: {
@@ -927,7 +981,7 @@ async function processChargeForRecord(
         record_id: record.id,
         stage: tipo,
         simulate: true,
-        file_name: file.name || null,
+        file_name: file?.name || null,
         message_preview: message,
       },
       envio_hash: hash,
@@ -936,11 +990,15 @@ async function processChargeForRecord(
     return {
       status: 'sucesso',
       tipo,
-      fileId: file.id,
+      fileId: file?.id || null,
       simulated: true,
       message,
-      fileName: file.name || `${record.numero_boleto || record.documento || record.id}.pdf`,
+      fileName: file?.name || `${record.numero_boleto || record.documento || record.id}.pdf`,
     };
+  }
+
+  if (!file?.id) {
+    return { status: 'erro', reason: 'boleto_nao_encontrado' };
   }
 
   const base64 = await downloadDriveFileBase64(token, file.id);
@@ -1015,6 +1073,9 @@ function explainRecordEligibility(
   const phone = normalizePhone(record.telefone);
   const diff = isoDaysDiff(record.data_vencimento, todayIso);
   const rules = extractRuleDays(config?.regua_atraso);
+  const preventivaDiasAntes = Number(config?.preventiva_dias_antes ?? DEFAULT_PREVENTIVA_DAYS) || DEFAULT_PREVENTIVA_DAYS;
+  const enviarNoVencimento = Boolean(config?.enviar_no_vencimento ?? DEFAULT_SEND_ON_DUE_DATE);
+  const limiteCobrancas = Number(config?.limite_cobrancas_por_titulo ?? DEFAULT_LIMIT_PER_TITLE) || DEFAULT_LIMIT_PER_TITLE;
 
   let etapa: 'preventiva' | 'vencimento' | 'atraso' | null = null;
   let motivo = '';
@@ -1027,18 +1088,21 @@ function explainRecordEligibility(
     motivo = 'telefone_invalido';
   } else if (diff === null) {
     motivo = 'vencimento_invalido';
-  } else if (diff === 1 && record.preventiva_enviada) {
+  } else if (diff === preventivaDiasAntes && record.preventiva_enviada) {
     motivo = 'preventiva_ja_enviada';
-  } else if (diff === 0 && record.cobranca_vencimento_enviada) {
+  } else if (diff === 0 && enviarNoVencimento && record.cobranca_vencimento_enviada) {
     motivo = 'vencimento_ja_enviado';
-  } else if (diff === 1 && !record.preventiva_enviada) {
+  } else if (diff === preventivaDiasAntes && !record.preventiva_enviada) {
     etapa = 'preventiva';
-  } else if (diff === 0 && !record.cobranca_vencimento_enviada) {
+  } else if (diff === 0 && enviarNoVencimento && !record.cobranca_vencimento_enviada) {
     etapa = 'vencimento';
   } else if (diff < 0) {
     const atraso = Math.abs(diff);
-    if (rules.includes(atraso)) etapa = 'atraso';
+    if (Number(record.tentativas_cobranca || 0) >= limiteCobrancas) motivo = 'limite_cobrancas_atingido';
+    else if (rules.includes(atraso)) etapa = 'atraso';
     else motivo = 'fora_da_regua';
+  } else if (diff === 0 && !enviarNoVencimento) {
+    motivo = 'vencimento_desativado';
   } else {
     motivo = 'fora_da_regua';
   }
@@ -1081,6 +1145,100 @@ async function getOverview(supabaseAdmin: AdminClient, companyId: string, todayI
       boletos_nao_encontrados: allRows.filter((row) => row.erro === 'boleto_nao_encontrado').length,
     },
     rows: allRows,
+  };
+}
+
+function normalizeChargeStatus(value: string | null | undefined) {
+  const status = normalizeText(value);
+  if (status === 'pago') return 'pago';
+  if (status === 'negociado' || status === 'negociacao') return 'negociado';
+  if (status === 'suspenso') return 'suspenso';
+  if (status === 'cancelado') return 'cancelado';
+  if (status === 'liquidado') return 'liquidado';
+  return 'pendente';
+}
+
+async function getBillingCenterData(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  todayIso: string,
+) {
+  const config = await getBillingConfigForCompany(supabaseAdmin, companyId);
+  const companyName = await getCompanyName(supabaseAdmin, companyId);
+  const { data: records, error: recordsError } = await supabaseAdmin
+    .from('registros_financeiros')
+    .select('id, company_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, status, drive_file_id, preventiva_enviada, data_envio_preventiva, cobranca_vencimento_enviada, data_envio_vencimento, ultima_cobranca, tentativas_cobranca')
+    .eq('company_id', companyId)
+    .order('data_vencimento', { ascending: true });
+
+  if (recordsError) throw new Error(recordsError.message);
+
+  const { data: logs, error: logsError } = await supabaseAdmin
+    .from('logs_cobranca')
+    .select('id, financeiro_id, company_id, data_hora, tipo_cobranca, status_envio, erro, arquivo_encontrado, drive_file_id, created_at')
+    .eq('company_id', companyId)
+    .order('data_hora', { ascending: false })
+    .limit(500);
+
+  if (logsError) throw new Error(logsError.message);
+
+  const latestLogByFinanceiro = new Map<string, Record<string, unknown>>();
+  for (const log of logs || []) {
+    const financeiroId = String(log.financeiro_id || '');
+    if (!financeiroId || latestLogByFinanceiro.has(financeiroId)) continue;
+    latestLogByFinanceiro.set(financeiroId, log as Record<string, unknown>);
+  }
+
+  const start = `${todayIso}T00:00:00-03:00`;
+  const end = `${todayIso}T23:59:59-03:00`;
+  const todayLogs = (logs || []).filter((row) => String(row.data_hora || row.created_at || '') >= start && String(row.data_hora || row.created_at || '') <= end);
+
+  const rows = (records || []).map((record) => {
+    const eligibility = explainRecordEligibility(record as FinancialRow, config as BillingConfigRow | null, todayIso);
+    const latestLog = latestLogByFinanceiro.get(record.id);
+    const boletoEncontrado = Boolean(record.drive_file_id || latestLog?.arquivo_encontrado);
+    const telefoneValido = validatePhone(normalizePhone(record.telefone));
+    const resolvedDriveFileId = String(record.drive_file_id || latestLog?.drive_file_id || '');
+
+    return {
+      id: record.id,
+      company_id: record.company_id,
+      cliente_nome: record.cliente_nome || record.nome || 'Cliente',
+      numero_boleto: record.numero_boleto || '-',
+      vencimento: record.data_vencimento,
+      valor: record.valor,
+      telefone: record.telefone || '',
+      status: normalizeChargeStatus(record.status),
+      etapa_regua: eligibility.etapa || 'fora_da_regua',
+      boleto_encontrado: boletoEncontrado,
+      telefone_valido: telefoneValido,
+      ultima_cobranca: latestLog?.data_hora || record.ultima_cobranca || null,
+      ultimo_status_envio: latestLog?.status_envio || null,
+      ultimo_erro: latestLog?.erro || null,
+      drive_file_id: resolvedDriveFileId || null,
+      boleto_url: resolvedDriveFileId ? `https://drive.google.com/file/d/${resolvedDriveFileId}/view` : null,
+      dias_para_vencer: eligibility.dias_para_vencer,
+      dias_atraso: eligibility.dias_atraso,
+      motivo_nao_elegivel: eligibility.motivo_nao_elegivel,
+      empresa: companyName,
+    };
+  });
+
+  const isOpen = (status: string) => OPEN_STATUSES.has(normalizeText(status));
+
+  return {
+    company_id: companyId,
+    cards: {
+      vencendo_amanha: rows.filter((row) => row.etapa_regua === 'preventiva').length,
+      vencem_hoje: rows.filter((row) => row.etapa_regua === 'vencimento').length,
+      em_atraso: rows.filter((row) => row.dias_atraso > 0 && isOpen(row.status)).length,
+      sem_boleto_encontrado: rows.filter((row) => !row.boleto_encontrado).length,
+      sem_telefone_valido: rows.filter((row) => !row.telefone_valido).length,
+      simulacoes_realizadas_hoje: todayLogs.filter((row) => ['sucesso_simulado', 'simulado'].includes(String(row.status_envio || ''))).length,
+      erros: todayLogs.filter((row) => String(row.status_envio || '') === 'erro').length,
+      total_em_aberto: rows.filter((row) => isOpen(row.status)).length,
+    },
+    rows,
   };
 }
 
@@ -1178,7 +1336,7 @@ Deno.serve(async (req: Request) => {
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
     }
 
-    if (action === 'get_billing_config' || action === 'save_billing_config') {
+    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'preview_template') {
       requireCompanyId(companyId);
     }
 
@@ -1192,6 +1350,7 @@ Deno.serve(async (req: Request) => {
       'sync_sheet',
       'run',
       'reprocess_failures',
+      'simulate_charge_item',
     ].includes(action);
     const googleToken = needsGoogleToken ? await getGoogleAccessToken() : '';
 
@@ -1223,7 +1382,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    if (action === 'get_billing_config') {
+    if (action === 'get_billing_config' || action === 'get_billing_rules') {
       requireCompanyId(companyId);
       const config = await getBillingConfigForCompany(admin, companyId || '');
       return jsonResponse({
@@ -1234,14 +1393,21 @@ Deno.serve(async (req: Request) => {
           hora_execucao: config?.hora_execucao || config?.hora_envio || DEFAULT_EXECUTION_TIME,
           hora_envio: config?.hora_envio || config?.hora_execucao || DEFAULT_EXECUTION_TIME,
           mensagem_template: config?.mensagem_template || DEFAULT_ATRASO_TEMPLATE,
+          template_preventiva: config?.template_preventiva || DEFAULT_PREVENTIVA_TEMPLATE,
+          template_vencimento: config?.template_vencimento || DEFAULT_VENCIMENTO_TEMPLATE,
+          template_atraso: config?.template_atraso || DEFAULT_ATRASO_TEMPLATE,
+          regua_atraso: Array.isArray(config?.regua_atraso) ? config?.regua_atraso : DEFAULT_RULES,
           intervalo_dias: Number(config?.intervalo_dias || 5),
           cobrar_apos_dias_vencido: Number(config?.cobrar_apos_dias_vencido || 1),
-          limite_cobrancas_por_titulo: Number(config?.limite_cobrancas_por_titulo || 4),
+          limite_cobrancas_por_titulo: Number(config?.limite_cobrancas_por_titulo || DEFAULT_LIMIT_PER_TITLE),
+          preventiva_dias_antes: Number(config?.preventiva_dias_antes || DEFAULT_PREVENTIVA_DAYS),
+          enviar_no_vencimento: Boolean(config?.enviar_no_vencimento ?? DEFAULT_SEND_ON_DUE_DATE),
+          permitir_envio_sem_boleto: Boolean(config?.permitir_envio_sem_boleto ?? DEFAULT_ALLOW_WITHOUT_BOLETO),
         },
       });
     }
 
-    if (action === 'save_billing_config') {
+    if (action === 'save_billing_config' || action === 'save_billing_rules') {
       requireCompanyId(companyId);
       const savedConfig = await saveBillingConfigForCompany(admin, companyId || '', body?.config || {});
 
@@ -1265,9 +1431,16 @@ Deno.serve(async (req: Request) => {
           hora_execucao: savedConfig?.hora_execucao || savedConfig?.hora_envio || DEFAULT_EXECUTION_TIME,
           hora_envio: savedConfig?.hora_envio || savedConfig?.hora_execucao || DEFAULT_EXECUTION_TIME,
           mensagem_template: savedConfig?.mensagem_template || DEFAULT_ATRASO_TEMPLATE,
+          template_preventiva: savedConfig?.template_preventiva || DEFAULT_PREVENTIVA_TEMPLATE,
+          template_vencimento: savedConfig?.template_vencimento || DEFAULT_VENCIMENTO_TEMPLATE,
+          template_atraso: savedConfig?.template_atraso || DEFAULT_ATRASO_TEMPLATE,
+          regua_atraso: Array.isArray(savedConfig?.regua_atraso) ? savedConfig?.regua_atraso : DEFAULT_RULES,
           intervalo_dias: Number(savedConfig?.intervalo_dias || 5),
           cobrar_apos_dias_vencido: Number(savedConfig?.cobrar_apos_dias_vencido || 1),
-          limite_cobrancas_por_titulo: Number(savedConfig?.limite_cobrancas_por_titulo || 4),
+          limite_cobrancas_por_titulo: Number(savedConfig?.limite_cobrancas_por_titulo || DEFAULT_LIMIT_PER_TITLE),
+          preventiva_dias_antes: Number(savedConfig?.preventiva_dias_antes || DEFAULT_PREVENTIVA_DAYS),
+          enviar_no_vencimento: Boolean(savedConfig?.enviar_no_vencimento ?? DEFAULT_SEND_ON_DUE_DATE),
+          permitir_envio_sem_boleto: Boolean(savedConfig?.permitir_envio_sem_boleto ?? DEFAULT_ALLOW_WITHOUT_BOLETO),
         },
       });
     }
@@ -1338,6 +1511,132 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ ok: true, message: 'Drive sincronizado com sucesso.', result });
     }
 
+    if (action === 'get_billing_center') {
+      const center = await getBillingCenterData(admin, companyId || '', todayIso);
+      return jsonResponse({
+        ok: true,
+        ...center,
+      });
+    }
+
+    if (action === 'preview_template') {
+      const companyName = await getCompanyName(admin, companyId || '');
+      const sample = {
+        ...DEFAULT_TEMPLATE_SAMPLE,
+        ...body?.sample,
+        empresa: body?.sample?.empresa || companyName || DEFAULT_TEMPLATE_SAMPLE.empresa,
+      };
+      const message = fillTemplate(String(body?.template || DEFAULT_ATRASO_TEMPLATE), sample, Number(sample.dias_atraso || 0), String(sample.empresa || companyName || ''));
+      return jsonResponse({
+        ok: true,
+        company_id: companyId,
+        message,
+        sample,
+      });
+    }
+
+    if (action === 'update_charge_status') {
+      const registroId = String(body?.registro_id || '').trim();
+      const nextStatus = normalizeChargeStatus(body?.status);
+      if (!registroId) {
+        return jsonResponse({ ok: false, error: 'registro_id e obrigatorio.' }, 400);
+      }
+
+      const allowedStatuses = new Set(['pago', 'negociado', 'suspenso', 'pendente']);
+      if (!allowedStatuses.has(nextStatus)) {
+        return jsonResponse({ ok: false, error: 'status invalido para cobranca.' }, 400);
+      }
+
+      const dbStatusMap: Record<string, string> = {
+        pago: 'liquidado',
+        negociado: 'negociacao',
+        suspenso: 'suspenso',
+        pendente: 'pendente',
+      };
+
+      const { error: updateError } = await admin
+        .from('registros_financeiros')
+        .update({ status: dbStatusMap[nextStatus] || 'pendente', updated_at: new Date().toISOString() })
+        .eq('id', registroId)
+        .eq('company_id', companyId || '');
+
+      if (updateError) throw new Error(updateError.message);
+
+      await admin.from('audit_logs').insert({
+        company_id: companyId,
+        user_id: auth.userId,
+        action: 'billing_charge_status_updated',
+        entity: 'registros_financeiros',
+        entity_id: registroId,
+        metadata: { status: nextStatus },
+      }).then(() => {}).catch(() => {});
+
+      return jsonResponse({
+        ok: true,
+        company_id: companyId,
+        registro_id: registroId,
+        status: nextStatus,
+        message: 'Status do titulo atualizado com sucesso.',
+      });
+    }
+
+    if (action === 'simulate_charge_item') {
+      const registroId = String(body?.registro_id || '').trim();
+      if (!registroId) {
+        return jsonResponse({ ok: false, error: 'registro_id e obrigatorio.' }, 400);
+      }
+
+      const companyName = await getCompanyName(admin, companyId || '');
+      const config = await getBillingConfigForCompany(admin, companyId || '');
+      const driveConfig = await getSheetsDriveConfig(admin, companyId || '');
+      const folderId = requireDriveFolderId(driveConfig?.drive_root_folder_id);
+      await getDriveFolderInfo(googleToken, folderId).catch((error) => {
+        const message = error instanceof Error ? error.message : 'Falha ao acessar pasta do Google Drive.';
+        if (/File not found|insufficientFilePermissions|notFound|403|404/i.test(message)) {
+          throw new Error('A pasta nao esta acessivel. Compartilhe com a Service Account.');
+        }
+        throw error;
+      });
+
+      const { data: record, error: recordError } = await admin
+        .from('registros_financeiros')
+        .select('id, company_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, status, drive_file_id, preventiva_enviada, data_envio_preventiva, cobranca_vencimento_enviada, data_envio_vencimento, ultima_cobranca, tentativas_cobranca')
+        .eq('id', registroId)
+        .eq('company_id', companyId || '')
+        .maybeSingle();
+
+      if (recordError) throw new Error(recordError.message);
+      if (!record) {
+        return jsonResponse({ ok: false, error: 'Registro financeiro nao encontrado.' }, 404);
+      }
+
+      const eligibility = explainRecordEligibility(record as FinancialRow, config as BillingConfigRow | null, todayIso);
+      const simulated = await processChargeForRecord(
+        admin,
+        record as FinancialRow,
+        config as BillingConfigRow | null,
+        googleToken,
+        folderId,
+        todayIso,
+        true,
+        true,
+        companyName,
+      );
+
+      return jsonResponse({
+        ok: true,
+        company_id: companyId,
+        registro_id: registroId,
+        etapa_regua: eligibility.etapa || 'fora_da_regua',
+        mensagem_gerada: simulated.message || fillTemplate(resolveTemplate(config as BillingConfigRow | null, (eligibility.etapa || 'atraso') as 'preventiva' | 'vencimento' | 'atraso'), record as FinancialRow, eligibility.dias_atraso || 0, companyName),
+        arquivo_encontrado: Boolean(simulated.fileId),
+        drive_file_id: simulated.fileId || null,
+        file_name: simulated.fileName || null,
+        status: simulated.status,
+        reason: simulated.reason || null,
+      });
+    }
+
     if (action === 'send_preview') {
       const payload = body?.payload || {};
       const phone = normalizePhone(payload.phone || payload.telefone);
@@ -1365,6 +1664,7 @@ Deno.serve(async (req: Request) => {
       const debugByCompany: Array<Record<string, unknown>> = [];
 
       for (const targetCompanyId of companies) {
+        const companyName = await getCompanyName(admin, targetCompanyId);
         if (action === 'run') {
           await syncSheetForCompany(admin, targetCompanyId, googleToken).catch(() => null);
           await syncDriveForCompany(admin, targetCompanyId, googleToken).catch(() => null);
@@ -1372,7 +1672,7 @@ Deno.serve(async (req: Request) => {
 
         const { data: config } = await admin
           .from('whatsapp_cobranca_config')
-          .select('empresa_id, ativo, hora_execucao, mensagem_template, template_preventiva, template_vencimento, template_atraso, regua_atraso')
+          .select('empresa_id, ativo, hora_execucao, mensagem_template, template_preventiva, template_vencimento, template_atraso, regua_atraso, limite_cobrancas_por_titulo, preventiva_dias_antes, enviar_no_vencimento, permitir_envio_sem_boleto')
           .eq('empresa_id', targetCompanyId)
           .maybeSingle();
 
@@ -1540,6 +1840,7 @@ Deno.serve(async (req: Request) => {
             todayIso,
             action === 'reprocess_failures',
             simulate,
+            companyName,
           );
           if (outcome.status === 'sucesso') {
             companySent += 1;
