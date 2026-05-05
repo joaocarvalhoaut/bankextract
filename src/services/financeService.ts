@@ -619,6 +619,50 @@ export async function deleteFinancialRecords(recordIds = [], options = {}) {
   }
 }
 
+export async function fetchCobrancaDashboardMeta({ companyId = runtimeContext.companyId, userId = runtimeContext.userId } = {}) {
+  try {
+    if (typeof legacyFinanceService.fetchCobrancaDashboardMeta === 'function') {
+      return await legacyFinanceService.fetchCobrancaDashboardMeta({ companyId, userId });
+    }
+
+    const dataset = await loadDataset(companyId, { userId });
+    const charges = await safeSupabaseSelect(() =>
+      buildScopedQuery(
+        supabase.from('cobrancas_whatsapp').select('id, empresa_id, status, origem'),
+        getContext({ companyId, userId }),
+        'empresa_id',
+      ),
+    []);
+    const autoConfigs = await safeSupabaseSelect(() =>
+      buildScopedQuery(
+        supabase.from('whatsapp_cobranca_config').select('empresa_id, ativo'),
+        getContext({ companyId, userId }),
+        'empresa_id',
+      ),
+    []);
+
+    const activeAutoConfigsCount = (autoConfigs || []).filter((item) => Boolean(item.ativo)).length;
+
+    return {
+      totalWhatsAppCharges: (charges || []).length,
+      manualWhatsAppCharges: (charges || []).filter((item) => item.origem !== 'automatica').length,
+      autoWhatsAppCharges: (charges || []).filter((item) => item.origem === 'automatica').length,
+      autoChargeActive: activeAutoConfigsCount > 0,
+      activeAutoConfigsCount,
+      recordsCount: dataset.records?.length || 0,
+    };
+  } catch {
+    return {
+      totalWhatsAppCharges: 0,
+      manualWhatsAppCharges: 0,
+      autoWhatsAppCharges: 0,
+      autoChargeActive: false,
+      activeAutoConfigsCount: 0,
+      recordsCount: 0,
+    };
+  }
+}
+
 export const financeService = {
   setRuntimeContext(nextContext = {}) {
     Object.assign(runtimeContext, {
@@ -645,6 +689,10 @@ export const financeService = {
 
   async getRepresentatives(companyId = runtimeContext.companyId, overrides = {}) {
     return getRepresentatives(companyId, overrides);
+  },
+
+  async fetchCobrancaDashboardMeta({ companyId = runtimeContext.companyId, userId = runtimeContext.userId } = {}) {
+    return fetchCobrancaDashboardMeta({ companyId, userId });
   },
 
   async updateFinancialRecord(recordId, updates = {}, companyId = runtimeContext.companyId, options = {}) {
@@ -1052,6 +1100,46 @@ export const financeService = {
 
   async importSelectedRows(rows = [], batchId, companyId = runtimeContext.companyId, options = {}) {
     return legacyFinanceService.importSelectedRows(rows, batchId, companyId, options);
+  },
+
+  async fetchCompanyDataset({ companyId = runtimeContext.companyId, userId = runtimeContext.userId } = {}) {
+    return legacyFinanceService.fetchCompanyDataset({ companyId, userId });
+  },
+
+  async updateConfiguracao(payload, tenantOptions = {}) {
+    return legacyFinanceService.updateConfiguracao(payload, tenantOptions);
+  },
+
+  async confirmLiquidacaoManual(rows, tenantOptions = {}) {
+    return legacyFinanceService.confirmLiquidacaoManual(rows, tenantOptions);
+  },
+
+  async appendImportacao(entry, tenantOptions = {}) {
+    return legacyFinanceService.appendImportacao(entry, tenantOptions);
+  },
+
+  async insertRegistros(items, tenantOptions = {}) {
+    return legacyFinanceService.insertRegistros(items, tenantOptions);
+  },
+
+  async updateRegistro(recordId, payload, tenantOptions = {}) {
+    return legacyFinanceService.updateRegistro(recordId, payload, tenantOptions);
+  },
+
+  async deleteRegistros(ids, tenantOptions = {}) {
+    return legacyFinanceService.deleteRegistros(ids, tenantOptions);
+  },
+
+  async deleteImportacoes(ids, empresaAtiva, isAdminGeral = false, tenantOptions = {}) {
+    return legacyFinanceService.deleteImportacoes(ids, empresaAtiva, isAdminGeral, tenantOptions);
+  },
+
+  async upsertRepresentante(payload, tenantOptions = {}) {
+    return legacyFinanceService.upsertRepresentante(payload, tenantOptions);
+  },
+
+  async deleteRepresentante(representanteId, tenantOptions = {}) {
+    return legacyFinanceService.deleteRepresentante(representanteId, tenantOptions);
   },
 
   async deleteImportHistory(item) {

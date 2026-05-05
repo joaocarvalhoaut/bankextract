@@ -424,6 +424,41 @@ export async function deleteFinancialRecords(recordIds = [], tenantOptions = {})
   }
 }
 
+export async function fetchCobrancaDashboardMeta({ companyId, userId } = {}) {
+  try {
+    const dataset = await financeService.fetchCompanyDataset({ companyId, userId });
+    const charges = (db.cobrancasWhatsapp || []).filter((item) => {
+      if (companyId === GLOBAL_COMPANY_ID) return true;
+      return item.empresa_id === companyId;
+    });
+
+    const autoConfigEntries =
+      companyId === GLOBAL_COMPANY_ID
+        ? Object.entries(db.whatsappCobrancaConfig || {})
+        : [[companyId, db.whatsappCobrancaConfig?.[companyId]]];
+
+    const activeAutoConfigsCount = autoConfigEntries.filter(([, config]) => Boolean(config?.active || config?.ativo)).length;
+
+    return {
+      totalWhatsAppCharges: charges.length,
+      manualWhatsAppCharges: charges.filter((item) => item.origem !== 'automatica').length,
+      autoWhatsAppCharges: charges.filter((item) => item.origem === 'automatica').length,
+      autoChargeActive: activeAutoConfigsCount > 0,
+      activeAutoConfigsCount,
+      recordsCount: dataset.records?.length || 0,
+    };
+  } catch {
+    return {
+      totalWhatsAppCharges: 0,
+      manualWhatsAppCharges: 0,
+      autoWhatsAppCharges: 0,
+      autoChargeActive: false,
+      activeAutoConfigsCount: 0,
+      recordsCount: 0,
+    };
+  }
+}
+
 const mapDbPatchToRegistroPatch = (payload) => {
   const nextPayload = { ...payload };
 
@@ -1064,6 +1099,10 @@ export const financeService = {
 
   async getRepresentatives(companyId, tenantOptions = {}) {
     return getRepresentatives(companyId, tenantOptions);
+  },
+
+  async fetchCobrancaDashboardMeta({ companyId, userId } = {}) {
+    return fetchCobrancaDashboardMeta({ companyId, userId });
   },
 
   async updateFinancialRecord(recordId, updates = {}, companyId, tenantOptions = {}) {
