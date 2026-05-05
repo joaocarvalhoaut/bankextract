@@ -506,14 +506,23 @@ export const financeService = {
     return true;
   },
 
+  async getFinancialRecords(companyId = runtimeContext.companyId, filters = {}, overrides = {}) {
+    try {
+      const dataset = await loadDataset(companyId, overrides);
+      return filterRecords(dataset.records || [], filters || {});
+    } catch {
+      return [];
+    }
+  },
+
   async getDashboardMetrics(companyId = runtimeContext.companyId, overrides = {}) {
     const dataset = await loadDataset(companyId, overrides);
     const context = dataset.context;
 
-    const [chargeRows, autoConfigs, auditLogs] = await Promise.all([
+    const [googleSheetsConfig, autoConfigs, auditLogs, recentCharges] = await Promise.all([
       safeSupabaseSelect(() =>
         buildScopedQuery(
-          supabase.from('cobrancas_whatsapp').select('id, empresa_id, status, enviado_por, created_at'),
+          supabase.from('google_sheets_config').select('empresa_id, spreadsheet_id, sheet_name, ativo, updated_at'),
           context,
           'empresa_id'
         )

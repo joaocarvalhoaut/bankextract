@@ -462,6 +462,29 @@ export const financeService = {
     return dataset.records;
   },
 
+  async getFinancialRecords(companyId, filters = {}, tenantOptions = {}) {
+    try {
+      const records = await this.fetchRegistros({
+        companyId,
+        userId: tenantOptions.userId
+      });
+
+      return (records || []).filter((row) => {
+        if (filters.status && filters.status !== 'todos' && row.status !== filters.status) return false;
+        if (filters.tipo && filters.tipo !== 'todos' && (row.tipo || 'vencidos') !== filters.tipo) return false;
+        if (filters.dateStart && (row.dataVencimento || row.data_vencimento || '') < filters.dateStart) return false;
+        if (filters.dateEnd && (row.dataVencimento || row.data_vencimento || '') > filters.dateEnd) return false;
+        if (filters.search) {
+          const haystack = normalizeText(`${row.nome || ''} ${row.numeroBoleto || row.numero_boleto || ''}`);
+          if (!haystack.includes(normalizeText(filters.search))) return false;
+        }
+        return true;
+      });
+    } catch {
+      return [];
+    }
+  },
+
   async insertRegistros(items, tenantOptions = {}) {
     const tenant = await getEffectiveTenant({
       userId: tenantOptions.userId || items[0]?.user_id,
