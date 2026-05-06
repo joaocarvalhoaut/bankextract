@@ -298,6 +298,23 @@ export default function App() {
     window.__bankextractToastTimeout = window.setTimeout(() => setToast(null), 3200);
   }, []);
 
+  const handleViewPublicSite = useCallback(() => {
+    setPublicScreen('public-landing-auth');
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    try {
+      await auth.signOut();
+      setPublicScreen('landing');
+      setActiveTab('dashboard');
+      setPreview(null);
+      setChargePreviewModal(null);
+      showToast('sucesso', 'Sessao encerrada com sucesso.');
+    } catch (error) {
+      showToast('erro', error.message || 'Nao foi possivel sair da conta.');
+    }
+  }, [auth, showToast]);
+
   const refreshAllData = useCallback(async () => {
     if (empresa.loading) return;
 
@@ -1092,6 +1109,69 @@ export default function App() {
     );
   }
 
+  if (auth.authEnabled && auth.user && (publicScreen === 'public-landing-auth' || publicScreen === 'public-planos-auth')) {
+    if (publicScreen === 'public-landing-auth') {
+      return (
+        <div className="min-h-screen bg-[#F7F9FC] px-4 py-6 lg:px-6">
+          <div className="mx-auto max-w-7xl space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[28px] border border-slate-200 bg-white px-5 py-4 shadow-soft">
+              <div>
+                <h1 className="text-2xl font-semibold text-slate-900">Visualizando o site público</h1>
+                <p className="text-sm text-slate-500">Sua sessão continua ativa. Volte ao painel quando quiser.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPublicScreen('app')}
+                className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                Voltar ao painel
+              </button>
+            </div>
+            <Suspense fallback={<ScreenFallback />}>
+              <LandingPage
+                isAuthenticated
+                onStartNow={() => setPublicScreen('app')}
+                onOpenPlans={() => setPublicScreen('public-planos-auth')}
+              />
+            </Suspense>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-screen bg-[#F7F9FC] px-4 py-6 lg:px-6">
+        <div className="mx-auto max-w-6xl space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[28px] border border-slate-200 bg-white px-5 py-4 shadow-soft">
+            <div>
+              <h1 className="text-2xl font-semibold text-slate-900">Planos do BankExtract</h1>
+              <p className="text-sm text-slate-500">Compare os pacotes comerciais sem sair da sua sessão.</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setPublicScreen('public-landing-auth')}
+                className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Ver site público
+              </button>
+              <button
+                type="button"
+                onClick={() => setPublicScreen('app')}
+                className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                Voltar ao painel
+              </button>
+            </div>
+          </div>
+          <Suspense fallback={<ScreenFallback />}>
+            <PlanosScreen plans={plansCatalog} currentPlanId={billingOverview?.currentPlan?.id || null} onChoosePlan={() => setPublicScreen('app')} />
+          </Suspense>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F7F9FC] text-slate-900">
       <div className="flex min-h-screen flex-col lg:flex-row">
@@ -1108,7 +1188,15 @@ export default function App() {
         />
 
         <main className="flex-1 p-4 lg:p-6">
-          <Header title={sectionHeader.title} subtitle={sectionHeader.subtitle} companyName={currentCompanyName} />
+          <Header
+            title={sectionHeader.title}
+            subtitle={sectionHeader.subtitle}
+            companyName={currentCompanyName}
+            userEmail={auth.user?.email || ''}
+            onViewPublicSite={handleViewPublicSite}
+            onSignOut={handleSignOut}
+            signOutLoading={auth.submitting}
+          />
 
           {auth.authEnabled && auth.user ? (
             <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-soft">
