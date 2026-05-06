@@ -1149,16 +1149,28 @@ function scoreFinancialMatch(pdfData: ExtractedBoletoData, record: FinancialRow)
     reasons.push('due_date_match');
   }
 
+  const hasLinhaDigitavel = Boolean(String(pdfData.linha_digitavel || '').trim());
+  if (hasLinhaDigitavel) {
+    reasons.push('linha_digitavel_detected');
+  }
+
   const similarity = nameSimilarityScore(pdfData.nome_cliente, record.cliente_nome || record.nome);
   if (similarity >= 0.55) {
     score += 10;
     reasons.push('fuzzy_name_match');
   }
 
+  if (exactBoletoMatch) {
+    score = Math.max(score, 80);
+  }
+  if (exactBoletoMatch && hasLinhaDigitavel) {
+    score = Math.max(score, 90);
+  }
   if (exactBoletoMatch && valueMatch) {
-    score = Math.max(score, 85);
-  } else if (exactBoletoMatch) {
-    score = Math.max(score, 70);
+    score = Math.max(score, 90);
+  }
+  if (exactBoletoMatch && valueMatch && dueDateMatch) {
+    score = Math.max(score, 95);
   }
 
   return { record, score: Math.min(100, score), reasons };

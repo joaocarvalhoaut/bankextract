@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
   Copy,
   ExternalLink,
   Loader2,
+  MoreHorizontal,
   PhoneOff,
   Receipt,
   RefreshCcw,
@@ -48,6 +50,22 @@ const toneByStatus = {
   suspenso: 'bg-amber-50 text-amber-700 ring-amber-200',
 };
 
+const boletoStatusTone = {
+  encontrado: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  baixa_confianca: 'bg-amber-50 text-amber-700 ring-amber-200',
+  pendente: 'bg-slate-100 text-slate-700 ring-slate-200',
+  nao_encontrado: 'bg-orange-50 text-orange-700 ring-orange-200',
+  conflito: 'bg-red-50 text-red-700 ring-red-200',
+  erro: 'bg-red-50 text-red-700 ring-red-200',
+};
+
+function truncateLinhaDigitavel(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '-';
+  if (raw.length <= 12) return raw;
+  return `${raw.slice(0, 5)}...${raw.slice(-5)}`;
+}
+
 export default function CentralCobrancaScreen({
   companyId,
   activeCompanyId,
@@ -75,6 +93,7 @@ export default function CentralCobrancaScreen({
   const [previewResult, setPreviewResult] = useState(null);
   const [manualResult, setManualResult] = useState(null);
   const [selectedRows, setSelectedRows] = useState(() => new Set());
+  const [openMenuRowId, setOpenMenuRowId] = useState(null);
 
   const canManageCharges = canUserPerformAction(userRole, 'manage_charges');
 
@@ -104,6 +123,27 @@ export default function CentralCobrancaScreen({
   useEffect(() => {
     loadCenter();
   }, [loadCenter]);
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (!event.target.closest('[data-row-action-menu]')) {
+        setOpenMenuRowId(null);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setOpenMenuRowId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
 
   const runRowAction = useCallback(
     async (actionKey, fn, successMessage) => {
@@ -206,7 +246,7 @@ export default function CentralCobrancaScreen({
   const handlePrepareSelected = useCallback(async () => {
     const selectedIds = Array.from(selectedRows).slice(0, 20);
     if (!selectedIds.length) {
-      onToast?.('erro', 'Selecione pelo menos um titulo.');
+      onToast?.('erro', 'Selecione ao menos um titulo para preparar o lote.');
       return;
     }
 
@@ -311,17 +351,44 @@ export default function CentralCobrancaScreen({
       {
         key: 'boleto_status',
         label: 'Status boleto',
-        render: (row) => row.boleto_status || 'pendente',
+        render: (row) => (
+          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${boletoStatusTone[row.boleto_status || 'pendente'] || boletoStatusTone.pendente}`}>
+            {row.boleto_status || 'pendente'}
+          </span>
+        ),
       },
       {
         key: 'boleto_match_confidence',
         label: 'Confianca',
-        render: (row) => `${Number(row.boleto_match_confidence || 0).toFixed(0)}%`,
+        render: (row) => {
+          const confidence = Number(row.boleto_match_confidence || 0);
+          const tone =
+            confidence >= 80
+              ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+              : confidence >= 50
+                ? 'bg-amber-50 text-amber-700 ring-amber-200'
+                : 'bg-slate-100 text-slate-700 ring-slate-200';
+          return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${tone}`}>{confidence.toFixed(0)}%</span>;
+        },
       },
       {
         key: 'linha_digitavel',
         label: 'Linha digitavel',
-        render: (row) => row.linha_digitavel || '-',
+        render: (row) => (
+          <div className="flex items-center gap-2">
+            <span title={row.linha_digitavel || ''}>{truncateLinhaDigitavel(row.linha_digitavel)}</span>
+            {row.linha_digitavel ? (
+              <button
+                type="button"
+                onClick={() => copyText(row.linha_digitavel, 'Linha digitavel copiada com sucesso.')}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50"
+              >
+                <Copy size={11} />
+                Copiar
+              </button>
+            ) : null}
+          </div>
+        ),
       },
       {
         key: 'boleto_encontrado',
@@ -370,37 +437,7 @@ export default function CentralCobrancaScreen({
               className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
             >
               {runningAction === `prepare-${row.id}` ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-              Preparar manual
-            </button>
-            <button
-              type="button"
-              disabled={!canManageCharges || Boolean(runningAction)}
-              onClick={() =>
-                runRowAction(
-                  `simulate-${row.id}`,
-                  () => simulateChargeItem(resolvedCompanyId, row.id),
-                  'Simulacao registrada com sucesso.'
-                )
-              }
-              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-            >
-              {runningAction === `simulate-${row.id}` ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-              Simular cobranca
-            </button>
-            <button
-              type="button"
-              disabled={Boolean(runningAction)}
-              onClick={() =>
-                runRowAction(
-                  `preview-${row.id}`,
-                  () => previewChargePayload(resolvedCompanyId, row.id),
-                  'Previa do envio montada com sucesso.'
-                )
-              }
-              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-            >
-              {runningAction === `preview-${row.id}` ? <Loader2 size={12} className="animate-spin" /> : <Receipt size={12} />}
-              Previa do envio
+              Preparar cobranca
             </button>
             <button
               type="button"
@@ -411,71 +448,122 @@ export default function CentralCobrancaScreen({
               <ExternalLink size={12} />
               Abrir boleto
             </button>
-            <button
-              type="button"
-              disabled={!canManageCharges || Boolean(runningAction)}
-              onClick={() =>
-                runRowAction(
-                  `paid-${row.id}`,
-                  () => updateChargeStatus(resolvedCompanyId, row.id, 'pago'),
-                  'Titulo marcado como pago.'
-                )
-              }
-              className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
-            >
-              <CheckCircle2 size={12} />
-              Marcar como pago
-            </button>
-            <button
-              type="button"
-              disabled={!canManageCharges || Boolean(runningAction)}
-              onClick={() =>
-                runRowAction(
-                  `negotiated-${row.id}`,
-                  () => updateChargeStatus(resolvedCompanyId, row.id, 'negociado'),
-                  'Titulo marcado como negociado.'
-                )
-              }
-              className="inline-flex items-center gap-1 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
-            >
-              <Receipt size={12} />
-              Marcar como negociado
-            </button>
-            <button
-              type="button"
-              disabled={!canManageCharges || Boolean(runningAction)}
-              onClick={() =>
-                runRowAction(
-                  `suspend-${row.id}`,
-                  () => updateChargeStatus(resolvedCompanyId, row.id, 'suspenso'),
-                  'Cobranca suspensa para este titulo.'
-                )
-              }
-              className="inline-flex items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
-            >
-              <PhoneOff size={12} />
-              Suspender cobranca
-            </button>
-            <button
-              type="button"
-              disabled={Boolean(runningAction)}
-              onClick={() =>
-                runRowAction(
-                  `drive-${row.id}`,
-                  () => syncBillingDrive(resolvedCompanyId),
-                  'Busca de boletos reprocessada com sucesso.'
-                )
-              }
-              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-            >
-              <RefreshCcw size={12} />
-              Reprocessar boleto
-            </button>
+            <div className="relative" data-row-action-menu>
+              <button
+                type="button"
+                onClick={() => setOpenMenuRowId((current) => (current === row.id ? null : row.id))}
+                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                <MoreHorizontal size={12} />
+                Mais acoes
+                <ChevronDown size={12} />
+              </button>
+              {openMenuRowId === row.id ? (
+                <div className="absolute right-0 top-[calc(100%+8px)] z-[9999] min-w-[220px] rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                  <button
+                    type="button"
+                    disabled={!canManageCharges || Boolean(runningAction)}
+                    onClick={() => {
+                      setOpenMenuRowId(null);
+                      runRowAction(
+                        `simulate-${row.id}`,
+                        () => simulateChargeItem(resolvedCompanyId, row.id),
+                        'Simulacao registrada com sucesso.'
+                      );
+                    }}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <Send size={12} />
+                    Simular cobranca
+                  </button>
+                  <button
+                    type="button"
+                    disabled={Boolean(runningAction)}
+                    onClick={() => {
+                      setOpenMenuRowId(null);
+                      runRowAction(
+                        `preview-${row.id}`,
+                        () => previewChargePayload(resolvedCompanyId, row.id),
+                        'Previa do envio montada com sucesso.'
+                      );
+                    }}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <Receipt size={12} />
+                    Previa do envio
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canManageCharges || Boolean(runningAction)}
+                    onClick={() => {
+                      setOpenMenuRowId(null);
+                      runRowAction(
+                        `paid-${row.id}`,
+                        () => updateChargeStatus(resolvedCompanyId, row.id, 'pago'),
+                        'Titulo marcado como pago.'
+                      );
+                    }}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <CheckCircle2 size={12} />
+                    Marcar como pago
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canManageCharges || Boolean(runningAction)}
+                    onClick={() => {
+                      setOpenMenuRowId(null);
+                      runRowAction(
+                        `negotiated-${row.id}`,
+                        () => updateChargeStatus(resolvedCompanyId, row.id, 'negociado'),
+                        'Titulo marcado como negociado.'
+                      );
+                    }}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <Receipt size={12} />
+                    Marcar como negociado
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canManageCharges || Boolean(runningAction)}
+                    onClick={() => {
+                      setOpenMenuRowId(null);
+                      runRowAction(
+                        `suspend-${row.id}`,
+                        () => updateChargeStatus(resolvedCompanyId, row.id, 'suspenso'),
+                        'Cobranca suspensa para este titulo.'
+                      );
+                    }}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <PhoneOff size={12} />
+                    Suspender cobranca
+                  </button>
+                  <button
+                    type="button"
+                    disabled={Boolean(runningAction)}
+                    onClick={() => {
+                      setOpenMenuRowId(null);
+                      runRowAction(
+                        `drive-${row.id}`,
+                        () => syncBillingDrive(resolvedCompanyId),
+                        'Busca de boletos reprocessada com sucesso.'
+                      );
+                    }}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <RefreshCcw size={12} />
+                    Reprocessar boleto
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         ),
       },
     ],
-    [allSelected, canManageCharges, resolvedCompanyId, runRowAction, runningAction, selectedRows, toggleAllRows, toggleRowSelection]
+    [allSelected, canManageCharges, copyText, openMenuRowId, resolvedCompanyId, runRowAction, runningAction, selectedRows, toggleAllRows, toggleRowSelection]
   );
 
   if (globalMode || !resolvedCompanyId) {
@@ -523,7 +611,7 @@ export default function CentralCobrancaScreen({
             className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-soft transition hover:bg-slate-100"
           >
             <Send size={15} />
-            Preparar manual
+            Preparar cobranca
           </button>
           <button
             type="button"
@@ -532,7 +620,7 @@ export default function CentralCobrancaScreen({
             className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-soft transition hover:bg-slate-100 disabled:opacity-50"
           >
             {runningAction === 'prepare-selected' ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-            Preparar selecionados
+            Preparar lote
           </button>
         </div>
       </section>
