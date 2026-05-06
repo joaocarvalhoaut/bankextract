@@ -13,6 +13,7 @@ import {
 import DataTable from '../components/DataTable';
 import {
   getBillingCenter,
+  previewChargePayload,
   simulateChargeItem,
   syncBillingDrive,
   updateChargeStatus,
@@ -69,6 +70,7 @@ export default function CentralCobrancaScreen({
   const [center, setCenter] = useState(null);
   const [items, setItems] = useState([]);
   const [simulationResult, setSimulationResult] = useState(null);
+  const [previewResult, setPreviewResult] = useState(null);
 
   const canManageCharges = canUserPerformAction(userRole, 'manage_charges');
 
@@ -112,7 +114,10 @@ export default function CentralCobrancaScreen({
         if (result?.mensagem_gerada) {
           setSimulationResult(result);
         }
-        onToast?.('sucesso', result?.message || successMessage);
+        if (result?.payload && result?.message) {
+          setPreviewResult(result);
+        }
+        onToast?.('sucesso', result?.payload ? successMessage : result?.message || successMessage);
       } catch (error) {
         onToast?.('erro', error.message || 'Falha ao executar a acao da central.');
       } finally {
@@ -175,6 +180,21 @@ export default function CentralCobrancaScreen({
         label: 'Etapa da regua',
       },
       {
+        key: 'boleto_status',
+        label: 'Status boleto',
+        render: (row) => row.boleto_status || 'pendente',
+      },
+      {
+        key: 'boleto_match_confidence',
+        label: 'Confianca',
+        render: (row) => `${Number(row.boleto_match_confidence || 0).toFixed(0)}%`,
+      },
+      {
+        key: 'linha_digitavel',
+        label: 'Linha digitavel',
+        render: (row) => row.linha_digitavel || '-',
+      },
+      {
         key: 'boleto_encontrado',
         label: 'Boleto encontrado',
         render: (row) =>
@@ -222,6 +242,21 @@ export default function CentralCobrancaScreen({
             >
               {runningAction === `simulate-${row.id}` ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
               Simular cobranca
+            </button>
+            <button
+              type="button"
+              disabled={Boolean(runningAction)}
+              onClick={() =>
+                runRowAction(
+                  `preview-${row.id}`,
+                  () => previewChargePayload(resolvedCompanyId, row.id),
+                  'Previa do envio montada com sucesso.'
+                )
+              }
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+            >
+              {runningAction === `preview-${row.id}` ? <Loader2 size={12} className="animate-spin" /> : <Receipt size={12} />}
+              Previa do envio
             </button>
             <button
               type="button"
@@ -393,6 +428,42 @@ export default function CentralCobrancaScreen({
           emptyDescription="Assim que houver registros sincronizados, a central mostrara a etapa da regua e o status do boleto."
         />
       </section>
+
+      {previewResult ? (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/45 p-4">
+          <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[28px] border border-emerald-200 bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-emerald-900">Previa do envio</p>
+                <p className="mt-1 text-xs text-emerald-700">Simulacao - nao enviado.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewResult(null)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Mensagem</p>
+                <pre className="mt-3 whitespace-pre-wrap text-xs leading-relaxed text-slate-700">{previewResult.message || 'Nenhuma mensagem gerada.'}</pre>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+                <p><span className="font-semibold text-slate-900">Numero boleto:</span> {previewResult.payload?.numero_boleto || '-'}</p>
+                <p className="mt-2"><span className="font-semibold text-slate-900">Linha digitavel:</span> {previewResult.payload?.linha_digitavel || '-'}</p>
+                <p className="mt-2"><span className="font-semibold text-slate-900">Codigo barras:</span> {previewResult.payload?.codigo_barras || '-'}</p>
+                <p className="mt-2"><span className="font-semibold text-slate-900">Link boleto:</span> {previewResult.payload?.boleto_url || '-'}</p>
+                <p className="mt-2"><span className="font-semibold text-slate-900">PDF:</span> {previewResult.payload?.drive_file_id || '-'}</p>
+                <p className="mt-2"><span className="font-semibold text-slate-900">Status:</span> Simulacao - nao enviado</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

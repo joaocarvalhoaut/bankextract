@@ -46,6 +46,15 @@ interface FinancialRow {
   data_vencimento: string;
   status: string;
   drive_file_id: string | null;
+  linha_digitavel?: string | null;
+  codigo_barras?: string | null;
+  boleto_url?: string | null;
+  boleto_pdf_nome?: string | null;
+  boleto_match_confidence?: number | null;
+  boleto_extraido_em?: string | null;
+  boleto_status?: string | null;
+  boleto_match_strategy?: string | null;
+  boleto_erro?: string | null;
   preventiva_enviada: boolean | null;
   data_envio_preventiva: string | null;
   cobranca_vencimento_enviada: boolean | null;
@@ -59,6 +68,31 @@ interface DriveCandidate {
   name: string;
   mimeType?: string;
   parents?: string[];
+  webViewLink?: string;
+  webContentLink?: string;
+}
+
+interface ExtractedBoletoData {
+  pdf_nome: string;
+  drive_file_id: string;
+  boleto_url: string | null;
+  texto_extraido: string;
+  linha_digitavel: string | null;
+  codigo_barras: string | null;
+  numero_boleto: string | null;
+  documento: string | null;
+  numero_nf: string | null;
+  nosso_numero: string | null;
+  valor: number | null;
+  vencimento: string | null;
+  nome_cliente: string | null;
+  match_strategy: string;
+}
+
+interface MatchCandidate {
+  record: FinancialRow;
+  score: number;
+  reasons: string[];
 }
 
 const corsHeaders = {
@@ -75,6 +109,7 @@ const DEFAULT_PREVENTIVA_DAYS = 1;
 const DEFAULT_SEND_ON_DUE_DATE = true;
 const DEFAULT_ALLOW_WITHOUT_BOLETO = false;
 const DEFAULT_LIMIT_PER_TITLE = 6;
+const BOLETO_STATUS_VALUES = new Set(['pendente', 'encontrado', 'nao_encontrado', 'baixa_confianca', 'conflito', 'erro']);
 function normalizeFinancialStatus(value: string | null | undefined) {
   const status = normalizeText(value);
   if (status === 'pago') return 'liquidado';
@@ -145,6 +180,9 @@ const DEFAULT_TEMPLATE_SAMPLE = {
   telefone: '77999990000',
   dias_atraso: 3,
   empresa: 'Empresa Exemplo',
+  linha_digitavel: '34191.79001 01043.510047 91020.150008 8 92820000129990',
+  codigo_barras: '34198928200001299901790010104351004791020150',
+  link_boleto: 'https://drive.google.com/file/d/exemplo/view',
 };
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -171,6 +209,137 @@ function normalizeDriveName(value: string | null | undefined) {
     .replace(/\s+/g, '_')
     .replace(/_+/g, '_')
     .toUpperCase();
+}
+
+function normalizeDigits(value: string | null | undefined) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function normalizeDocumentoToken(value: string | null | undefined) {
+  return normalizeText(String(value || '').replace(/[^a-zA-Z0-9]/g, ''));
+}
+
+function normalizeLinhaDigitavel(value: string | null | undefined) {
+  const digits = normalizeDigits(value);
+  if (digits.length === 47) {
+    return `${digits.slice(0, 5)}.${digits.slice(5, 10)} ${digits.slice(10, 15)}.${digits.slice(15, 21)} ${digits.slice(21, 26)}.${digits.slice(26, 32)} ${digits.slice(32, 33)} ${digits.slice(33)}`;
+  }
+  if (digits.length === 48) {
+    return `${digits.slice(0, 11)} ${digits.slice(11, 22)} ${digits.slice(22, 33)} ${digits.slice(33)}`;
+  }
+  return digits || null;
+}
+
+function extractLinhaDigitavel(text: string) {
+  const match = text.match(/((?:\d[\s.\-]*){47,48})/);
+  if (!match) return null;
+  const digits = normalizeDigits(match[1]);
+  if (digits.length !== 47 && digits.length !== 48) return null;
+  return normalizeLinhaDigitavel(digits);
+}
+
+function extractCodigoBarras(text: string) {
+  const match = text.match(/\b\d{44}\b/);
+  return match ? match[0] : null;
+}
+
+function extractCurrencyValue(text: string) {
+  const currencyMatch = text.match(/R\$\s*([\d.]+,\d{2})/i) || text.match(/\b(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})\b/);
+  if (!currencyMatch) return null;
+  const normalized = currencyMatch[1].replace(/\./g, '').replace(',', '.');
+  const value = Number(normalized);
+  return Number.isFinite(value) ? value : null;
+}
+
+function extractDate(text: string) {
+  const match = text.match(/\b(\d{2}[\/-]\d{2}[\/-]\d{4}|\d{4}-\d{2}-\d{2})\b/);
+  if (!match) return null;
+  return toIsoDateString(match[1]);
+}
+
+function extractNames(text: string) {
+  const patterns = [
+    /(?:Sacado|Pagador|Cliente)\s*[:\-]\s*([A-ZÀ-Ý0-9][^\n\r]{3,80})/i,
+    /(?:Benefici[aá]rio|Cedente)\s*[:\-]\s*([A-ZÀ-Ý0-9][^\n\r]{3,80})/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) {
+      return match[1].trim();
+    }
+  }
+
+  return null;
+}
+
+function extractDocumento(text: string) {
+  const patterns = [
+    { key: 'documento', regex: /(?:Documento|Doc\.?)\s*[:\-]?\s*([A-Z0-9\-/.]{3,40})/i },
+    { key: 'numero_nf', regex: /(?:NF|Nota Fiscal|N[úu]mero NF)\s*[:\-]?\s*([A-Z0-9\-/.]{3,40})/i },
+    { key: 'nosso_numero', regex: /(?:Nosso N[úu]mero|Nosso Numero|Refer[êe]ncia)\s*[:\-]?\s*([A-Z0-9\-/.]{3,60})/i },
+  ];
+
+  const result: Record<string, string | null> = {
+    documento: null,
+    numero_nf: null,
+    nosso_numero: null,
+  };
+
+  for (const item of patterns) {
+    const match = text.match(item.regex);
+    if (match?.[1]) {
+      result[item.key] = match[1].trim();
+    }
+  }
+
+  return result;
+}
+
+function extractBoletoNumberFromName(name: string) {
+  const base = String(name || '').replace(/\.pdf$/i, '');
+  const tokens = base.split(/[_\s]+/).map((item) => item.trim()).filter(Boolean);
+  for (const token of tokens.reverse()) {
+    if (/^\d{2,}[-/A-Z0-9]*$/i.test(token)) {
+      return token;
+    }
+  }
+  return null;
+}
+
+function extractReadableTextFromBytes(bytes: Uint8Array) {
+  const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  const latin1 = new TextDecoder('latin1').decode(bytes);
+  const merged = `${utf8}\n${latin1}`
+    .replace(/\\r/g, '\n')
+    .replace(/[^\x20-\x7EÀ-ÿ\n]/g, ' ')
+    .replace(/\s{2,}/g, ' ');
+
+  return merged;
+}
+
+function compareNumbers(a: number | null | undefined, b: number | null | undefined, tolerance = 0.01) {
+  if (!Number.isFinite(Number(a)) || !Number.isFinite(Number(b))) return false;
+  return Math.abs(Number(a) - Number(b)) <= tolerance;
+}
+
+function compareIsoDates(a: string | null | undefined, b: string | null | undefined) {
+  const left = toIsoDateString(String(a || ''));
+  const right = toIsoDateString(String(b || ''));
+  return Boolean(left && right && left === right);
+}
+
+function nameSimilarityScore(a: string | null | undefined, b: string | null | undefined) {
+  const left = normalizeText(a);
+  const right = normalizeText(b);
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+  if (left.includes(right) || right.includes(left)) return 0.85;
+  const leftTokens = new Set(left.split(/\s+/).filter(Boolean));
+  const rightTokens = new Set(right.split(/\s+/).filter(Boolean));
+  const intersection = Array.from(leftTokens).filter((token) => rightTokens.has(token)).length;
+  const union = new Set([...Array.from(leftTokens), ...Array.from(rightTokens)]).size;
+  return union ? intersection / union : 0;
 }
 
 function normalizePhone(raw: string | null | undefined) {
@@ -270,6 +439,9 @@ function fillTemplate(
   const valor = Number(record.valor || 0);
   const telefone = String(record.telefone || '');
   const numeroBoleto = String(record.numero_boleto || '');
+  const linhaDigitavel = String(record.linha_digitavel || '').trim() || 'nao localizado';
+  const codigoBarras = String(record.codigo_barras || '').trim() || 'nao localizado';
+  const linkBoleto = String(record.boleto_url || record.link_boleto || '').trim() || 'nao localizado';
 
   return template
     .replaceAll('{cliente_nome}', nome)
@@ -282,6 +454,9 @@ function fillTemplate(
     .replaceAll('{numero_boleto}', numeroBoleto || '-')
     .replaceAll('{numero_nf}', String(record.numero_nf || '-'))
     .replaceAll('{telefone}', telefone)
+    .replaceAll('{linha_digitavel}', linhaDigitavel)
+    .replaceAll('{codigo_barras}', codigoBarras)
+    .replaceAll('{link_boleto}', linkBoleto)
     .replaceAll('{empresa}', companyName || String(record.empresa || ''));
 }
 
@@ -415,7 +590,7 @@ async function googleJson<T>(url: string, token: string): Promise<T> {
 
 async function getDriveFileMetadata(token: string, fileId: string) {
   return await googleJson<DriveCandidate>(
-    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,parents`,
+    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,parents,webViewLink,webContentLink`,
     token,
   );
 }
@@ -443,6 +618,26 @@ async function countPdfFilesInFolder(token: string, folderId: string) {
     token,
   );
   return data.files?.length || 0;
+}
+
+async function listPdfFilesInFolder(token: string, folderId: string, limit = 50) {
+  const files: DriveCandidate[] = [];
+  let pageToken = '';
+
+  while (files.length < limit) {
+    const query = encodeURIComponent(`'${folderId}' in parents and mimeType='application/pdf' and trashed=false`);
+    const suffix = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
+    const data = await googleJson<{ files?: DriveCandidate[]; nextPageToken?: string }>(
+      `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType,parents,webViewLink,webContentLink),nextPageToken&pageSize=${Math.min(100, limit - files.length)}${suffix}`,
+      token,
+    );
+
+    files.push(...(data.files || []));
+    if (!data.nextPageToken) break;
+    pageToken = data.nextPageToken;
+  }
+
+  return files.slice(0, limit);
 }
 
 async function searchDriveFiles(token: string, folderId: string, record: FinancialRow) {
@@ -513,6 +708,18 @@ async function downloadDriveFileBase64(token: string, fileId: string) {
     binary += String.fromCharCode(byte);
   });
   return btoa(binary);
+}
+
+async function downloadDriveFileBytes(token: string, fileId: string) {
+  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  return new Uint8Array(await response.arrayBuffer());
 }
 
 async function readSheetRows(token: string, spreadsheetId: string, sheetName: string) {
@@ -839,6 +1046,326 @@ async function syncDriveForCompany(supabaseAdmin: AdminClient, companyId: string
   }
 
   return { linked, not_found: notFound, folder_id: folderId };
+}
+
+function buildBoletoStatus(value: string | null | undefined) {
+  const normalized = normalizeText(value).replace(/[^\w]/g, '_');
+  if (BOLETO_STATUS_VALUES.has(normalized)) return normalized;
+  return 'pendente';
+}
+
+async function extractBoletoDataFromDriveFile(token: string, file: DriveCandidate): Promise<ExtractedBoletoData> {
+  const bytes = await downloadDriveFileBytes(token, file.id);
+  const text = extractReadableTextFromBytes(bytes);
+  const filenameText = String(file.name || '').replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ');
+  const mergedText = `${filenameText}\n${text}`;
+  const documento = extractDocumento(mergedText);
+  const linhaDigitavel = extractLinhaDigitavel(mergedText);
+  const codigoBarras = extractCodigoBarras(mergedText);
+
+  return {
+    pdf_nome: file.name || `${file.id}.pdf`,
+    drive_file_id: file.id,
+    boleto_url: file.webViewLink || file.webContentLink || `https://drive.google.com/file/d/${file.id}/view`,
+    texto_extraido: mergedText,
+    linha_digitavel: linhaDigitavel,
+    codigo_barras: codigoBarras,
+    numero_boleto: extractBoletoNumberFromName(file.name || '') || documento.documento || documento.nosso_numero || null,
+    documento: documento.documento,
+    numero_nf: documento.numero_nf,
+    nosso_numero: documento.nosso_numero,
+    valor: extractCurrencyValue(mergedText),
+    vencimento: extractDate(mergedText),
+    nome_cliente: extractNames(mergedText) || null,
+    match_strategy: 'regex_texto_pdf',
+  };
+}
+
+function scoreFinancialMatch(pdfData: ExtractedBoletoData, record: FinancialRow): MatchCandidate {
+  let score = 0;
+  const reasons: string[] = [];
+  const pdfTokens = [
+    pdfData.numero_boleto,
+    pdfData.documento,
+    pdfData.numero_nf,
+    pdfData.nosso_numero,
+  ]
+    .map((item) => normalizeDocumentoToken(item))
+    .filter(Boolean);
+  const recordTokens = [
+    record.numero_boleto,
+    record.documento,
+    record.numero_nf,
+  ]
+    .map((item) => normalizeDocumentoToken(item))
+    .filter(Boolean);
+
+  if (pdfTokens.length && recordTokens.length && pdfTokens.some((token) => recordTokens.includes(token))) {
+    score += 50;
+    reasons.push('documento');
+  }
+
+  if (compareNumbers(pdfData.valor, record.valor, 0.05)) {
+    score += 20;
+    reasons.push('valor');
+  }
+
+  if (compareIsoDates(pdfData.vencimento, record.data_vencimento)) {
+    score += 20;
+    reasons.push('vencimento');
+  }
+
+  const similarity = nameSimilarityScore(pdfData.nome_cliente, record.cliente_nome || record.nome);
+  if (similarity >= 0.55) {
+    score += 10;
+    reasons.push('nome');
+  }
+
+  return { record, score, reasons };
+}
+
+function shouldUpdateBoletoMatch(record: FinancialRow, nextConfidence: number) {
+  const currentConfidence = Number(record.boleto_match_confidence || 0);
+  const currentStatus = buildBoletoStatus(record.boleto_status);
+  if (!record.drive_file_id) return true;
+  if (currentStatus === 'erro' || currentStatus === 'pendente' || currentStatus === 'nao_encontrado') return true;
+  return nextConfidence >= currentConfidence;
+}
+
+async function upsertBoletoMatchResult(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  record: FinancialRow,
+  pdfData: ExtractedBoletoData,
+  status: string,
+  confidence: number,
+  strategy: string,
+  errorMessage: string | null,
+) {
+  if (!shouldUpdateBoletoMatch(record, confidence)) {
+    return false;
+  }
+
+  const payload: Record<string, unknown> = {
+    drive_file_id: pdfData.drive_file_id || record.drive_file_id || null,
+    numero_boleto: record.numero_boleto || pdfData.numero_boleto || null,
+    linha_digitavel: pdfData.linha_digitavel || record.linha_digitavel || null,
+    codigo_barras: pdfData.codigo_barras || record.codigo_barras || null,
+    boleto_url: pdfData.boleto_url || record.boleto_url || null,
+    boleto_pdf_nome: pdfData.pdf_nome || null,
+    boleto_match_confidence: Number(confidence.toFixed(2)),
+    boleto_extraido_em: new Date().toISOString(),
+    boleto_status: buildBoletoStatus(status),
+    boleto_match_strategy: strategy,
+    boleto_erro: errorMessage,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabaseAdmin
+    .from('registros_financeiros')
+    .update(payload)
+    .eq('id', record.id)
+    .eq('company_id', companyId);
+
+  if (error) throw new Error(error.message);
+  return true;
+}
+
+async function syncBoletoDriveIntelligentForCompany(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  token: string,
+  limit = 50,
+) {
+  requireCompanyId(companyId);
+  const config = await getSheetsDriveConfig(supabaseAdmin, companyId);
+  const folderId = requireDriveFolderId(await ensureConfiguredFolderId(config?.drive_root_folder_id, companyId));
+  await getDriveFolderInfo(token, folderId);
+
+  const pdfFiles = await listPdfFilesInFolder(token, folderId, limit);
+  const { data: rows, error } = await supabaseAdmin
+    .from('registros_financeiros')
+    .select('id, company_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, status, drive_file_id, linha_digitavel, codigo_barras, boleto_url, boleto_pdf_nome, boleto_match_confidence, boleto_extraido_em, boleto_status, boleto_match_strategy, boleto_erro, preventiva_enviada, data_envio_preventiva, cobranca_vencimento_enviada, data_envio_vencimento, ultima_cobranca, tentativas_cobranca')
+    .eq('company_id', companyId)
+    .order('updated_at', { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  const records = (rows || []) as FinancialRow[];
+  const summary = {
+    pdfs_analisados: 0,
+    vinculados: 0,
+    baixa_confianca: 0,
+    conflitos: 0,
+    nao_encontrados: 0,
+    erros: 0,
+  };
+  const items: Array<Record<string, unknown>> = [];
+
+  for (const file of pdfFiles) {
+    summary.pdfs_analisados += 1;
+    try {
+      const pdfData = await extractBoletoDataFromDriveFile(token, file);
+      const candidates = records
+        .map((record) => scoreFinancialMatch(pdfData, record))
+        .filter((candidate) => candidate.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+      const best = candidates[0];
+      const second = candidates[1];
+      let status = 'nao_encontrado';
+      let confidence = Number(best?.score || 0);
+      let matchedRecord: FinancialRow | null = null;
+      let errorMessage: string | null = null;
+
+      if (best && best.score >= 80 && second && second.score >= 80 && Math.abs(best.score - second.score) <= 5) {
+        status = 'conflito';
+        confidence = Number(best.score);
+        matchedRecord = best.record;
+        errorMessage = 'Mais de um registro financeiro apresentou score alto semelhante.';
+      } else if (best && best.score >= 80) {
+        status = 'encontrado';
+        matchedRecord = best.record;
+      } else if (best && best.score >= 50) {
+        status = 'baixa_confianca';
+        matchedRecord = best.record;
+      }
+
+      if (matchedRecord) {
+        const strategy = [pdfData.match_strategy, ...(best?.reasons || [])].join('|');
+        await upsertBoletoMatchResult(supabaseAdmin, companyId, matchedRecord, pdfData, status, confidence, strategy, errorMessage);
+      }
+
+      if (status === 'encontrado') summary.vinculados += 1;
+      else if (status === 'baixa_confianca') summary.baixa_confianca += 1;
+      else if (status === 'conflito') summary.conflitos += 1;
+      else summary.nao_encontrados += 1;
+
+      items.push({
+        pdf_nome: pdfData.pdf_nome,
+        drive_file_id: pdfData.drive_file_id,
+        registro_id: matchedRecord?.id || null,
+        cliente: matchedRecord?.cliente_nome || matchedRecord?.nome || pdfData.nome_cliente || null,
+        numero_boleto: matchedRecord?.numero_boleto || pdfData.numero_boleto || null,
+        linha_digitavel: pdfData.linha_digitavel,
+        valor: pdfData.valor,
+        vencimento: pdfData.vencimento,
+        confidence,
+        status,
+        erro: errorMessage,
+      });
+    } catch (error) {
+      summary.erros += 1;
+      items.push({
+        pdf_nome: file.name || `${file.id}.pdf`,
+        drive_file_id: file.id,
+        registro_id: null,
+        cliente: null,
+        numero_boleto: null,
+        linha_digitavel: null,
+        valor: null,
+        vencimento: null,
+        confidence: 0,
+        status: 'erro',
+        erro: error instanceof Error ? error.message : 'Falha ao analisar PDF do Drive.',
+      });
+    }
+  }
+
+  return {
+    folder_id: folderId,
+    summary,
+    items,
+  };
+}
+
+async function getBoletoSyncReportData(supabaseAdmin: AdminClient, companyId: string) {
+  requireCompanyId(companyId);
+  const { data: rows, error } = await supabaseAdmin
+    .from('registros_financeiros')
+    .select('id, company_id, nome, cliente_nome, documento, numero_boleto, valor, data_vencimento, linha_digitavel, codigo_barras, boleto_url, boleto_pdf_nome, boleto_match_confidence, boleto_status, boleto_match_strategy, boleto_erro, drive_file_id')
+    .eq('company_id', companyId)
+    .order('data_vencimento', { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  const records = rows || [];
+  return {
+    cards: {
+      total_titulos: records.length,
+      boletos_encontrados: records.filter((row) => buildBoletoStatus(row.boleto_status) === 'encontrado').length,
+      pendentes: records.filter((row) => buildBoletoStatus(row.boleto_status) === 'pendente').length,
+      baixa_confianca: records.filter((row) => buildBoletoStatus(row.boleto_status) === 'baixa_confianca').length,
+      conflitos: records.filter((row) => buildBoletoStatus(row.boleto_status) === 'conflito').length,
+      erros: records.filter((row) => buildBoletoStatus(row.boleto_status) === 'erro').length,
+      sem_linha_digitavel: records.filter((row) => !String(row.linha_digitavel || '').trim()).length,
+      com_linha_digitavel: records.filter((row) => Boolean(String(row.linha_digitavel || '').trim())).length,
+    },
+    items: records.map((row) => ({
+      id: row.id,
+      cliente: row.cliente_nome || row.nome || 'Cliente',
+      documento: row.documento || '-',
+      boleto: row.numero_boleto || '-',
+      linha_digitavel: row.linha_digitavel || null,
+      valor: Number(row.valor || 0),
+      vencimento: row.data_vencimento || null,
+      confidence: Number(row.boleto_match_confidence || 0),
+      status: buildBoletoStatus(row.boleto_status),
+      pdf: row.boleto_pdf_nome || null,
+      boleto_url: row.boleto_url || null,
+      drive_file_id: row.drive_file_id || null,
+      erro: row.boleto_erro || null,
+    })),
+  };
+}
+
+async function buildChargePayloadPreview(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  registroId: string,
+) {
+  const companyName = await getCompanyName(supabaseAdmin, companyId);
+  const config = await getBillingConfigForCompany(supabaseAdmin, companyId);
+  const { data: record, error } = await supabaseAdmin
+    .from('registros_financeiros')
+    .select('id, company_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, status, drive_file_id, linha_digitavel, codigo_barras, boleto_url, boleto_pdf_nome, boleto_status')
+    .eq('id', registroId)
+    .eq('company_id', companyId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!record) throw new Error('Registro financeiro nao encontrado.');
+
+  const eligibility = explainRecordEligibility({
+    ...record,
+    preventiva_enviada: false,
+    data_envio_preventiva: null,
+    cobranca_vencimento_enviada: false,
+    data_envio_vencimento: null,
+    ultima_cobranca: null,
+    tentativas_cobranca: 0,
+  } as FinancialRow, config as BillingConfigRow | null, todayInSaoPaulo());
+
+  const tipo = (eligibility.etapa || 'atraso') as 'preventiva' | 'vencimento' | 'atraso';
+  const message = fillTemplate(resolveTemplate(config as BillingConfigRow | null, tipo), record as Partial<FinancialRow> & Record<string, unknown>, eligibility.dias_atraso || 0, companyName);
+
+  return {
+    message,
+    payload: {
+      cliente: record.cliente_nome || record.nome || 'Cliente',
+      telefone: record.telefone || '',
+      documento: record.documento || 'nao localizado',
+      numero_boleto: record.numero_boleto || 'nao localizado',
+      linha_digitavel: record.linha_digitavel || 'nao localizado',
+      codigo_barras: record.codigo_barras || 'nao localizado',
+      boleto_url: record.boleto_url || 'nao localizado',
+      drive_file_id: record.drive_file_id || null,
+      arquivo_encontrado: Boolean(record.drive_file_id || record.boleto_url),
+      envio_real: false,
+      boleto_pdf_nome: record.boleto_pdf_nome || null,
+      boleto_status: buildBoletoStatus(record.boleto_status),
+    },
+  };
 }
 
 async function sendZapiDocument(phone: string, caption: string, fileName: string, base64: string) {
@@ -1189,7 +1716,7 @@ async function getBillingCenterData(
   console.log('get_billing_center before registros_financeiros query', { company_id: companyId });
   const { data: records, error: recordsError } = await supabaseAdmin
     .from('registros_financeiros')
-    .select('id, company_id, nome, numero_boleto, data_vencimento, valor, telefone, status, created_at')
+    .select('id, company_id, nome, documento, numero_boleto, data_vencimento, valor, telefone, status, created_at, linha_digitavel, codigo_barras, boleto_url, boleto_pdf_nome, boleto_match_confidence, boleto_status, drive_file_id')
     .eq('company_id', companyId)
     .order('data_vencimento', { ascending: true });
 
@@ -1260,6 +1787,7 @@ async function getBillingCenterData(
       id: record.id,
       company_id: record.company_id,
       cliente_nome: record.nome || 'Cliente',
+      documento: record.documento || '-',
       numero_boleto: record.numero_boleto || '-',
       vencimento: dataVencimento || null,
       valor: Number(record?.valor || 0),
@@ -1271,6 +1799,12 @@ async function getBillingCenterData(
       ultima_cobranca: latestLog?.data_hora || null,
       ultimo_status_envio: latestLog?.status_envio || null,
       ultimo_erro: latestLog?.erro || null,
+      linha_digitavel: record?.linha_digitavel || null,
+      codigo_barras: record?.codigo_barras || null,
+      boleto_url: record?.boleto_url || null,
+      boleto_pdf_nome: record?.boleto_pdf_nome || null,
+      boleto_status: buildBoletoStatus(record?.boleto_status),
+      boleto_match_confidence: Number(record?.boleto_match_confidence || 0),
       created_at: record?.created_at || null,
       dias_para_vencer: diasParaVencer,
       dias_atraso: diasAtraso,
@@ -1285,7 +1819,7 @@ async function getBillingCenterData(
       vencendo_amanha: rows.filter((row) => row.etapa_regua === 'preventiva').length,
       vencem_hoje: rows.filter((row) => row.etapa_regua === 'vencimento').length,
       em_atraso: rows.filter((row) => row.dias_atraso > 0 && isOpen(row.status)).length,
-      sem_boleto_encontrado: rows.filter((row) => !row.boleto_encontrado).length,
+      sem_boleto_encontrado: rows.filter((row) => !row.boleto_encontrado && row.boleto_status !== 'encontrado').length,
       sem_telefone_valido: rows.filter((row) => !row.telefone_valido).length,
       simulacoes_realizadas_hoje: todayLogs.filter((row) => ['sucesso_simulado', 'simulado'].includes(String(row.status_envio || ''))).length,
       erros: todayLogs.filter((row) => String(row.status_envio || '') === 'erro').length,
@@ -2214,13 +2748,13 @@ Deno.serve(async (req: Request) => {
     simulate = body?.simulate === true;
     console.log('billing-automation request', { action, company_id: companyId });
 
-    if (action === 'get_drive_config' || action === 'save_drive_config' || action === 'test_drive_connection' || action === 'sync_drive') {
+    if (action === 'get_drive_config' || action === 'save_drive_config' || action === 'test_drive_connection' || action === 'sync_drive' || action === 'sync_boleto_drive_intelligent') {
       requireCompanyId(companyId);
       requireEnvSecret('GOOGLE_CLIENT_EMAIL');
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
     }
 
-    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission') {
+    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission' || action === 'get_boleto_sync_report' || action === 'preview_charge_payload') {
       requireCompanyId(companyId);
     }
 
@@ -2232,6 +2766,7 @@ Deno.serve(async (req: Request) => {
       'test_drive_connection',
       'sync_drive',
       'sync_sheet',
+      'sync_boleto_drive_intelligent',
       'run',
       'reprocess_failures',
       'simulate_charge_item',
@@ -2393,6 +2928,88 @@ Deno.serve(async (req: Request) => {
         metadata: result,
       }).then(() => {}).catch(() => {});
       return jsonResponse({ ok: true, message: 'Drive sincronizado com sucesso.', result });
+    }
+
+    if (action === 'sync_boleto_drive_intelligent') {
+      try {
+        const limit = Math.min(200, Math.max(1, Number(body?.limit || 50) || 50));
+        const result = await syncBoletoDriveIntelligentForCompany(admin, companyId || '', googleToken, limit);
+        await admin.from('audit_logs').insert({
+          company_id: companyId,
+          user_id: auth.userId,
+          action: 'billing_boleto_drive_intelligent_sync',
+          entity: 'registros_financeiros',
+          metadata: result.summary,
+        }).then(() => {}).catch(() => {});
+
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'sync_boleto_drive_intelligent',
+          summary: result.summary,
+          items: result.items,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'sync_boleto_drive_intelligent',
+          error: String(error instanceof Error ? error.message : error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
+    }
+
+    if (action === 'get_boleto_sync_report') {
+      try {
+        const report = await getBoletoSyncReportData(admin, companyId || '');
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'get_boleto_sync_report',
+          cards: report.cards,
+          items: report.items,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'get_boleto_sync_report',
+          error: String(error instanceof Error ? error.message : error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
+    }
+
+    if (action === 'preview_charge_payload') {
+      try {
+        const registroId = String(body?.registro_id || '').trim();
+        if (!registroId) {
+          return jsonResponse({
+            ok: false,
+            success: false,
+            action: 'preview_charge_payload',
+            error: 'registro_id e obrigatorio.',
+          }, 200);
+        }
+
+        const preview = await buildChargePayloadPreview(admin, companyId || '', registroId);
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'preview_charge_payload',
+          message: preview.message,
+          payload: preview.payload,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'preview_charge_payload',
+          error: String(error instanceof Error ? error.message : error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
     }
 
     if (action === 'get_billing_center') {

@@ -251,6 +251,33 @@ alter table public.registros_financeiros
 alter table public.registros_financeiros
   add column if not exists tentativas_cobranca integer not null default 0;
 
+alter table public.registros_financeiros
+  add column if not exists linha_digitavel text;
+
+alter table public.registros_financeiros
+  add column if not exists codigo_barras text;
+
+alter table public.registros_financeiros
+  add column if not exists boleto_url text;
+
+alter table public.registros_financeiros
+  add column if not exists boleto_pdf_nome text;
+
+alter table public.registros_financeiros
+  add column if not exists boleto_match_confidence numeric(5,2);
+
+alter table public.registros_financeiros
+  add column if not exists boleto_extraido_em timestamptz;
+
+alter table public.registros_financeiros
+  add column if not exists boleto_status text default 'pendente';
+
+alter table public.registros_financeiros
+  add column if not exists boleto_match_strategy text;
+
+alter table public.registros_financeiros
+  add column if not exists boleto_erro text;
+
 alter table public.importacoes
   add column if not exists batch_id uuid;
 
@@ -426,6 +453,27 @@ $$;
 alter table public.registros_financeiros
   add constraint registros_financeiros_status_check
   check (status in ('pendente', 'aberto', 'vencido', 'negociacao', 'promessa', 'liquidado', 'em_aberto', 'pago', 'cancelado', 'negociado', 'suspenso'));
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conname = 'registros_financeiros_boleto_status_check'
+      and conrelid = 'public.registros_financeiros'::regclass
+  ) then
+    alter table public.registros_financeiros
+      drop constraint registros_financeiros_boleto_status_check;
+  end if;
+exception
+  when undefined_table then
+    null;
+end;
+$$;
+
+alter table public.registros_financeiros
+  add constraint registros_financeiros_boleto_status_check
+  check (boleto_status in ('pendente', 'encontrado', 'nao_encontrado', 'baixa_confianca', 'conflito', 'erro'));
 
 do $$
 begin

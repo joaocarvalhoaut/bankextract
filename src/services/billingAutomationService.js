@@ -107,6 +107,38 @@ export async function syncBillingDrive(companyId) {
   );
 }
 
+export async function syncBoletoDriveIntelligent(companyId, limit = 50) {
+  return invokeBillingAutomation(
+    {
+      action: 'sync_boleto_drive_intelligent',
+      company_id: companyId,
+      limit,
+    },
+    'Falha ao executar a varredura inteligente de boletos.'
+  );
+}
+
+export async function getBoletoSyncReport(companyId) {
+  return invokeBillingAutomation(
+    {
+      action: 'get_boleto_sync_report',
+      company_id: companyId,
+    },
+    'Falha ao carregar o relatorio do motor de boletos.'
+  );
+}
+
+export async function previewChargePayload(companyId, registroId) {
+  return invokeBillingAutomation(
+    {
+      action: 'preview_charge_payload',
+      company_id: companyId,
+      registro_id: registroId,
+    },
+    'Falha ao montar a previa do payload de cobranca.'
+  );
+}
+
 export async function syncBillingSheet(companyId) {
   return invokeBillingAutomation(
     {

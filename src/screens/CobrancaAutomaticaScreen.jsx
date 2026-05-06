@@ -18,6 +18,7 @@ import GoogleSheetsConfig from '../components/GoogleSheetsConfig';
 import LimitWarningModal from '../components/plans/LimitWarningModal';
 import UpgradeBanner from '../components/plans/UpgradeBanner';
 import {
+  getBoletoSyncReport,
   getBillingConfig,
   getDriveConfig,
   getBillingAutomationOverview,
@@ -27,6 +28,7 @@ import {
   runBillingAutomationNow,
   saveBillingConfig,
   saveDriveConfig,
+  syncBoletoDriveIntelligent,
   syncBillingDrive,
   syncBillingSheet,
   testDriveConnection,
@@ -188,6 +190,8 @@ export default function CobrancaAutomaticaScreen({
   const [templatePreviewLoading, setTemplatePreviewLoading] = useState(false);
   const [planInfo, setPlanInfo] = useState(null);
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [boletoSyncReport, setBoletoSyncReport] = useState(null);
+  const [boletoSyncSummary, setBoletoSyncSummary] = useState(null);
   const [billingConfig, setBillingConfig] = useState({
     ativo: false,
     hora_execucao: '08:00',
@@ -341,6 +345,24 @@ export default function CobrancaAutomaticaScreen({
     loadPlanInfo();
   }, [loadPlanInfo]);
 
+  const loadBoletoSyncReport = useCallback(async () => {
+    if (!resolvedCompanyId || globalMode) {
+      setBoletoSyncReport(null);
+      return;
+    }
+
+    try {
+      const data = await getBoletoSyncReport(resolvedCompanyId);
+      setBoletoSyncReport(data);
+    } catch {
+      setBoletoSyncReport(null);
+    }
+  }, [globalMode, resolvedCompanyId]);
+
+  useEffect(() => {
+    loadBoletoSyncReport();
+  }, [loadBoletoSyncReport]);
+
   const rows = overview?.rows || [];
   const normalizedPlanId = normalizePlanId(planInfo?.plan);
   const upgradeRecommendation = getUpgradeRecommendation(normalizedPlanId, {
@@ -355,6 +377,25 @@ export default function CobrancaAutomaticaScreen({
     atraso: 0,
     erros: 0,
     boletos_nao_encontrados: 0,
+  };
+  const boletoCards = boletoSyncReport?.cards || {
+    total_titulos: 0,
+    boletos_encontrados: 0,
+    pendentes: 0,
+    baixa_confianca: 0,
+    conflitos: 0,
+    erros: 0,
+    sem_linha_digitavel: 0,
+    com_linha_digitavel: 0,
+  };
+  const boletoRows = Array.isArray(boletoSyncReport?.items) ? boletoSyncReport.items : [];
+  const visibleBoletoSummary = boletoSyncSummary || {
+    pdfs_analisados: 0,
+    vinculados: boletoCards.boletos_encontrados,
+    baixa_confianca: boletoCards.baixa_confianca,
+    conflitos: boletoCards.conflitos,
+    nao_encontrados: boletoCards.pendentes,
+    erros: boletoCards.erros,
   };
 
   const ruleSummaryCards = [
@@ -406,6 +447,36 @@ export default function CobrancaAutomaticaScreen({
     []
   );
 
+  const boletoColumns = useMemo(
+    () => [
+      { key: 'pdf', label: 'PDF', render: (row) => row.pdf || '-' },
+      { key: 'cliente', label: 'Cliente', render: (row) => row.cliente || '-' },
+      { key: 'boleto', label: 'Numero boleto', render: (row) => row.boleto || '-' },
+      { key: 'linha_digitavel', label: 'Linha digitavel', render: (row) => row.linha_digitavel || '-' },
+      { key: 'valor', label: 'Valor', render: (row) => (Number.isFinite(Number(row.valor)) ? `R$ ${Number(row.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-') },
+      { key: 'vencimento', label: 'Vencimento', render: (row) => row.vencimento ? new Date(`${row.vencimento}T00:00:00`).toLocaleDateString('pt-BR') : '-' },
+      { key: 'confidence', label: 'Confianca', render: (row) => `${Number(row.confidence || 0).toFixed(0)}%` },
+      {
+        key: 'status',
+        label: 'Status',
+        render: (row) => (
+          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
+            row.status === 'encontrado'
+              ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+              : row.status === 'baixa_confianca'
+                ? 'bg-amber-50 text-amber-700 ring-amber-200'
+                : row.status === 'conflito' || row.status === 'erro'
+                  ? 'bg-red-50 text-red-700 ring-red-200'
+                  : 'bg-slate-100 text-slate-700 ring-slate-200'
+          }`}>
+            {row.status || '-'}
+          </span>
+        ),
+      },
+    ],
+    []
+  );
+
   const runAction = useCallback(
     async (action, fn, successMessage) => {
       if (!resolvedCompanyId || globalMode) {
@@ -424,6 +495,9 @@ export default function CobrancaAutomaticaScreen({
         if (action === 'drive') {
           await loadDriveConfig();
         }
+        if (action === 'boleto-intelligent' || action === 'drive') {
+          await loadBoletoSyncReport();
+        }
         onToast?.('sucesso', result?.message || successMessage);
       } catch (error) {
         onToast?.('erro', error.message || 'Falha ao executar a acao.');
@@ -431,8 +505,27 @@ export default function CobrancaAutomaticaScreen({
         setExecutingAction('');
       }
     },
-    [canManage, globalMode, loadDriveConfig, loadOverview, onToast, resolvedCompanyId]
+    [canManage, globalMode, loadBoletoSyncReport, loadDriveConfig, loadOverview, onToast, resolvedCompanyId]
   );
+
+  const handleRunBoletoIntelligent = useCallback(async () => {
+    if (!resolvedCompanyId || globalMode) {
+      onToast?.('erro', 'Selecione uma empresa especifica para executar a varredura inteligente.');
+      return;
+    }
+
+    setExecutingAction('boleto-intelligent');
+    try {
+      const result = await syncBoletoDriveIntelligent(resolvedCompanyId, 50);
+      setBoletoSyncSummary(result?.summary || null);
+      await loadBoletoSyncReport();
+      onToast?.('sucesso', 'Varredura inteligente concluida com sucesso.');
+    } catch (error) {
+      onToast?.('erro', error.message || 'Falha ao executar a varredura inteligente.');
+    } finally {
+      setExecutingAction('');
+    }
+  }, [globalMode, loadBoletoSyncReport, onToast, resolvedCompanyId]);
 
   const handleSaveDriveFolder = useCallback(async () => {
     if (!resolvedCompanyId || globalMode) {
@@ -566,6 +659,9 @@ export default function CobrancaAutomaticaScreen({
           dias_atraso: 3,
           telefone: '77999990000',
           empresa: companyName || 'Empresa Exemplo',
+          linha_digitavel: '34191.79001 01043.510047 91020.150008 8 92820000129990',
+          codigo_barras: '34198928200001299901790010104351004791020150',
+          link_boleto: 'https://drive.google.com/file/d/exemplo/view',
         }
       );
       onToast?.('sucesso', data?.message || 'Template testado com sucesso.');
@@ -873,7 +969,7 @@ export default function CobrancaAutomaticaScreen({
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Variaveis disponiveis</p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {['{nome}', '{numero_boleto}', '{vencimento}', '{valor}', '{dias_atraso}', '{empresa}', '{telefone}'].map((item) => (
+                    {['{nome}', '{numero_boleto}', '{vencimento}', '{valor}', '{dias_atraso}', '{empresa}', '{telefone}', '{linha_digitavel}', '{codigo_barras}', '{link_boleto}'].map((item) => (
                       <span key={item} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
                         {item}
                       </span>
@@ -1074,6 +1170,40 @@ export default function CobrancaAutomaticaScreen({
                 {executingAction === 'sheet' ? <Loader2 size={15} className="animate-spin" /> : <Sheet size={15} />}
                 Sincronizar planilha
               </button>
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            title="Motor de boletos"
+            description="Varredura inteligente dos PDFs da pasta da empresa para extrair linha digitavel, codigo de barras e vincular automaticamente aos titulos."
+            aside={
+              <button
+                type="button"
+                onClick={handleRunBoletoIntelligent}
+                disabled={Boolean(executingAction)}
+                className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {executingAction === 'boleto-intelligent' ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
+                Executar varredura inteligente
+              </button>
+            }
+          >
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
+              <StatCard label="PDFs analisados" value={visibleBoletoSummary.pdfs_analisados} helper="Ultima varredura inteligente" tone="slate" />
+              <StatCard label="Vinculados" value={visibleBoletoSummary.vinculados} helper="Match automatico confirmado" tone="emerald" />
+              <StatCard label="Pendentes" value={visibleBoletoSummary.nao_encontrados} helper="Ainda sem vinculo validado" tone="blue" />
+              <StatCard label="Baixa confianca" value={visibleBoletoSummary.baixa_confianca} helper="Exigem revisao" tone="amber" />
+              <StatCard label="Conflitos" value={visibleBoletoSummary.conflitos} helper="Mais de um titulo semelhante" tone="red" />
+              <StatCard label="Erros" value={visibleBoletoSummary.erros} helper="Falhas na leitura ou no match" tone="red" />
+            </div>
+
+            <div className="mt-5 rounded-[22px] border border-slate-200 bg-white p-4 shadow-sm">
+              <DataTable
+                columns={boletoColumns}
+                rows={boletoRows}
+                emptyTitle="Nenhum PDF analisado ainda."
+                emptyDescription="Execute a varredura inteligente para extrair e vincular boletos da pasta configurada."
+              />
             </div>
           </SectionCard>
 
