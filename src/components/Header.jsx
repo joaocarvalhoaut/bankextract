@@ -26,9 +26,9 @@ export default function Header({
   }, []);
 
   return (
-    <header className="accent-bar mb-6 overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-card">
-      <div className="px-5 py-4 lg:px-6 lg:py-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+    <header className="accent-bar relative z-20 mb-6 overflow-visible rounded-[30px] border border-slate-200 bg-white shadow-card">
+      <div className="overflow-visible px-5 py-4 lg:px-6 lg:py-5">
+        <div className="flex flex-col gap-4 overflow-visible xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
@@ -48,7 +48,7 @@ export default function Header({
             ) : null}
           </div>
 
-          <div className="flex flex-shrink-0 items-center gap-2">
+          <div className="flex flex-shrink-0 items-center gap-2 overflow-visible">
             {actions}
 
             <div className="hidden items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 sm:inline-flex">
@@ -69,7 +69,7 @@ export default function Header({
               <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-500 ring-1 ring-white" />
             </button>
 
-            <div ref={menuRef} className="relative">
+            <div ref={menuRef} className="relative overflow-visible">
               <button
                 type="button"
                 onClick={() => setMenuOpen((prev) => !prev)}
@@ -83,7 +83,7 @@ export default function Header({
               </button>
 
               {menuOpen ? (
-                <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl">
+                <div className="absolute right-0 top-[calc(100%+12px)] z-[9999] w-[220px] rounded-2xl border border-slate-200 bg-white p-2.5 shadow-[0_24px_60px_rgba(15,23,42,0.16)]">
                   <div className="border-b border-slate-100 px-3 py-2">
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Conta</p>
                     <p className="mt-1 truncate text-sm font-medium text-slate-700">{userEmail || 'Sessão ativa'}</p>
