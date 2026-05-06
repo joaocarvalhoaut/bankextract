@@ -1,250 +1,379 @@
 import {
+  Activity,
+  AlertCircle,
   ArrowRight,
   BadgeCheck,
   BarChart3,
   Building2,
   CheckCircle2,
   ChevronRight,
+  Clock3,
   FileSearch,
+  Link2,
+  ListChecks,
   MessageCircleMore,
+  Receipt,
   Shield,
-  Sheet,
+  ShieldCheck,
   Sparkles,
-  Zap,
+  Upload,
+  WalletCards,
 } from 'lucide-react';
 
-const stats = [
-  { value: 'Minutos', label: 'até carteira pronta' },
-  { value: '100%', label: 'multiempresa com RLS' },
-  { value: 'Zero', label: 'planilha manual' },
-  { value: 'WhatsApp', label: 'cobrança automática' },
+const painPoints = [
+  {
+    title: 'Carteira desorganizada',
+    description:
+      'Títulos espalhados, vencimentos perdidos e falta de visão clara do que precisa ser cobrado.',
+    icon: WalletCards,
+  },
+  {
+    title: 'Cobrança sem histórico',
+    description:
+      'Mensagens enviadas sem auditoria, sem rastreio e sem clareza sobre o que já foi feito.',
+    icon: Clock3,
+  },
+  {
+    title: 'Dados inconsistentes',
+    description:
+      'Telefone inválido, boleto ausente e informações incompletas atrasam toda a operação.',
+    icon: AlertCircle,
+  },
 ];
 
-const features = [
+const modules = [
   {
+    title: 'Cobrança Automática',
+    description: 'Configure sua régua, templates, horários e regras de simulação.',
+    icon: Activity,
+  },
+  {
+    title: 'Central Operacional',
+    description: 'Veja títulos em aberto, etapas da régua, boletos encontrados e ações por cliente.',
+    icon: Sparkles,
+  },
+  {
+    title: 'Auditoria de Cobranças',
+    description: 'Acompanhe simulações, mensagens, status, erros e histórico por empresa.',
+    icon: Receipt,
+  },
+  {
+    title: 'Auditoria de Dados',
+    description: 'Identifique telefones inválidos, boletos ausentes, valores zerados e duplicidades.',
     icon: FileSearch,
-    color: 'emerald',
-    title: 'OCR inteligente',
-    description: 'Importe PDF, PNG, JPG e JPEG. Revise os dados extraídos antes de gravar qualquer registro na carteira.',
   },
   {
-    icon: Building2,
-    color: 'blue',
-    title: 'Multiempresa',
-    description: 'Cada empresa tem sua carteira isolada. RLS no Supabase garante que dados nunca se misturem entre clientes.',
-  },
-  {
-    icon: MessageCircleMore,
-    color: 'green',
-    title: 'Cobranças automáticas',
-    description: 'Configure cadência por atraso, horário de envio e limite por título. WhatsApp em modo teste até ativar real.',
-  },
-  {
-    icon: Sheet,
-    color: 'teal',
-    title: 'Google Sheets sync',
-    description: 'Sincronize a carteira em uma planilha configurável. Cada empresa tem sua própria aba e schedule.',
-  },
-  {
-    icon: Shield,
-    color: 'purple',
-    title: 'Auditoria total',
-    description: 'Cada ação sensível é registrada em audit_logs com company_id, user_id e timestamp. Rastreabilidade completa.',
-  },
-  {
-    icon: BarChart3,
-    color: 'amber',
-    title: 'Dashboard executivo',
-    description: 'KPIs financeiros em tempo real: total em aberto, vencidos, taxa de contato e última execução automática.',
+    title: 'Checklist Pré-Envio',
+    description: 'Valide se a empresa está pronta antes de liberar qualquer envio real.',
+    icon: ShieldCheck,
   },
 ];
 
-const colorMap = {
-  emerald: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
-  blue: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
-  green: { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
-  teal: { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200' },
-  purple: { bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-200' },
-  amber: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
-};
+const workflow = [
+  {
+    step: '1',
+    title: 'Importe ou sincronize sua carteira',
+    description: 'Organize títulos, clientes, vencimentos, valores e telefones.',
+    icon: Upload,
+  },
+  {
+    step: '2',
+    title: 'Configure sua régua',
+    description: 'Defina preventiva, vencimento, atraso e templates personalizados.',
+    icon: ListChecks,
+  },
+  {
+    step: '3',
+    title: 'Simule cobranças',
+    description: 'Teste mensagens e localize boletos sem enviar WhatsApp real.',
+    icon: MessageCircleMore,
+  },
+  {
+    step: '4',
+    title: 'Valide e acompanhe',
+    description: 'Use histórico, auditoria, inconsistências e checklist antes do envio real.',
+    icon: Shield,
+  },
+];
+
+const outcomes = [
+  'Até 80% menos trabalho manual',
+  'Mais controle sobre títulos em aberto',
+  'Menos falhas antes do envio',
+  'Mensagens padronizadas por empresa',
+  'Auditoria completa da operação',
+  'Preparação segura para automação real',
+];
 
 const plans = [
   {
-    id: 'starter',
     name: 'Starter',
-    price: 'R$ 97',
-    period: '/mês',
-    emphasis: 'Para começar a operar',
-    features: ['1 empresa', 'Até 500 registros/mês', 'Cobrança manual', 'Google Sheets', 'Dashboard executivo'],
-    cta: 'Começar grátis',
+    price: 'R$149/mês',
+    description: 'Para pequenas operações que querem organizar a cobrança.',
+    features: [
+      '1 empresa',
+      'Importação de dados',
+      'Visão geral',
+      'Simulação de cobrança',
+      'Histórico básico',
+    ],
+    cta: 'Começar teste grátis',
     featured: false,
   },
   {
-    id: 'pro',
     name: 'Pro',
-    price: 'R$ 197',
-    period: '/mês',
-    emphasis: 'Para escalar a cobrança',
-    features: ['Até 5 empresas', 'Até 5.000 registros/mês', 'Cobrança automática WhatsApp', 'Histórico completo', 'Audit logs', 'Suporte prioritário'],
-    cta: 'Assinar Pro',
+    price: 'R$297/mês',
+    description: 'Para empresas que querem operar cobrança com auditoria.',
+    features: [
+      'Tudo do Starter',
+      'Central Operacional',
+      'Auditoria de Cobranças',
+      'Auditoria de Dados',
+      'Checklist Pré-Envio',
+      'Multiusuário básico',
+    ],
+    cta: 'Começar teste grátis',
     featured: true,
+    badge: 'Mais indicado',
   },
   {
-    id: 'enterprise',
-    name: 'Enterprise',
-    price: 'Sob consulta',
-    period: '',
-    emphasis: 'Para alto volume',
-    features: ['Empresas ilimitadas', 'Alto volume', 'Integrações personalizadas', 'SLA dedicado', 'Onboarding guiado'],
-    cta: 'Falar com time',
+    name: 'Business',
+    price: 'R$597/mês',
+    description: 'Para operações com maior volume e controle.',
+    features: [
+      'Tudo do Pro',
+      'Multiempresa',
+      'Relatórios avançados',
+      'Permissões por usuário',
+      'Suporte prioritário',
+      'Integrações sob demanda',
+    ],
+    cta: 'Falar com especialista',
     featured: false,
   },
 ];
 
-const steps = [
-  { n: '01', title: 'Envie o arquivo', desc: 'PDF, PNG, JPG ou JPEG do relatório financeiro ou extrato bancário.' },
-  { n: '02', title: 'Revise a prévia', desc: 'Confira os dados extraídos pelo OCR antes de gravar qualquer registro.' },
-  { n: '03', title: 'Organize a carteira', desc: 'Registros importados por empresa, lote e status, vencido ou a vencer.' },
-  { n: '04', title: 'Acione cobranças', desc: 'WhatsApp manual ou automático com cadência configurável por empresa.' },
-];
-
-function FeatureCard({ icon: Icon, color, title, description }) {
-  const c = colorMap[color] || colorMap.emerald;
+function SectionBadge({ children }) {
   return (
-    <article className={`group rounded-[22px] border ${c.border} bg-white p-5 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lifted`}>
-      <div className={`mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl ${c.bg}`}>
-        <Icon size={20} className={c.text} />
+    <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+      <Sparkles size={12} />
+      {children}
+    </span>
+  );
+}
+
+function PainCard({ icon: Icon, title, description }) {
+  return (
+    <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-soft">
+      <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+        <Icon size={20} />
       </div>
-      <h3 className="mb-2 text-base font-semibold text-slate-900">{title}</h3>
-      <p className="text-sm leading-relaxed text-slate-600">{description}</p>
+      <h3 className="text-lg font-semibold text-slate-950">{title}</h3>
+      <p className="mt-2 text-sm leading-relaxed text-slate-600">{description}</p>
     </article>
   );
 }
 
+function ModuleCard({ icon: Icon, title, description }) {
+  return (
+    <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-soft transition hover:-translate-y-0.5 hover:shadow-card">
+      <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+        <Icon size={20} />
+      </div>
+      <h3 className="text-lg font-semibold text-slate-950">{title}</h3>
+      <p className="mt-2 text-sm leading-relaxed text-slate-600">{description}</p>
+    </article>
+  );
+}
+
+function PlanCard({ plan, onPrimaryClick }) {
+  return (
+    <article
+      className={`relative rounded-[28px] border p-7 shadow-soft transition hover:-translate-y-1 hover:shadow-card ${
+        plan.featured ? 'border-emerald-300 bg-white ring-1 ring-emerald-100' : 'border-slate-200 bg-white'
+      }`}
+    >
+      {plan.badge ? (
+        <span className="absolute right-5 top-5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-700">
+          {plan.badge}
+        </span>
+      ) : null}
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{plan.name}</p>
+      <h3 className="mt-3 text-4xl font-bold tracking-tight text-slate-950">{plan.price}</h3>
+      <p className="mt-3 text-sm leading-relaxed text-slate-600">{plan.description}</p>
+      <ul className="mt-6 space-y-3">
+        {plan.features.map((feature) => (
+          <li key={feature} className="flex items-center gap-2 text-sm text-slate-700">
+            <BadgeCheck size={15} className="text-emerald-600" />
+            <span>{feature}</span>
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        onClick={onPrimaryClick}
+        className={`mt-7 w-full rounded-2xl px-4 py-3.5 text-sm font-bold transition ${
+          plan.featured
+            ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+            : 'border border-slate-200 bg-white text-slate-800 hover:bg-slate-50'
+        }`}
+      >
+        {plan.cta}
+      </button>
+    </article>
+  );
+}
+
+function PublicButton({ children, onClick, primary = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        primary
+          ? 'inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition hover:-translate-y-0.5 hover:bg-emerald-600 active:scale-[0.98]'
+          : 'inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-6 py-3.5 text-sm font-semibold text-slate-700 shadow-soft transition hover:-translate-y-0.5 hover:bg-slate-50'
+      }
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated = false }) {
+  const handleStart = onStartNow || (() => {});
+  const handlePlans = onOpenPlans || (() => {});
+
   return (
     <div className="space-y-10">
-      <section className="hero-mesh dot-grid relative overflow-hidden rounded-[36px] border border-slate-200 bg-white p-8 shadow-card lg:p-14">
-        <div className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full border border-slate-200/70" />
-        <div className="pointer-events-none absolute -right-12 -top-12 h-64 w-64 rounded-full border border-slate-200/70" />
-        <div className="pointer-events-none absolute -left-16 bottom-0 h-72 w-72 rounded-full border border-emerald-200/80" />
-
-        <div className="relative grid grid-cols-1 gap-12 xl:grid-cols-[1.15fr_0.85fr]">
-          <div className="space-y-7">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-semibold tracking-widest text-emerald-700 shadow-soft">
-              <Sparkles size={12} />
-              SaaS financeiro pronto para operar
+      <header className="rounded-[30px] border border-slate-200 bg-white px-5 py-4 shadow-soft lg:px-7">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-900/15">
+              <WalletCards size={20} />
             </div>
-
             <div>
-              <h1 className="text-4xl font-bold leading-[1.08] tracking-tight text-slate-950 lg:text-5xl xl:text-[3.4rem]">
-                Transforme relatórios
-                <br />
-                bancários em carteira
-                <br />
-                <span className="text-gradient">financeira inteligente.</span>
+              <p className="text-base font-bold tracking-tight text-slate-950">BankExtract Pro</p>
+              <p className="text-xs text-slate-500">Gestão Financeira & Cobrança</p>
+            </div>
+          </div>
+
+          <nav className="flex flex-wrap items-center gap-5 text-sm font-medium text-slate-600">
+            <a href="#recursos" className="transition hover:text-slate-950">Recursos</a>
+            <a href="#como-funciona" className="transition hover:text-slate-950">Como funciona</a>
+            <a href="#planos" className="transition hover:text-slate-950">Planos</a>
+            <a href="#clientes" className="transition hover:text-slate-950">Clientes</a>
+            <button type="button" onClick={handleStart} className="transition hover:text-slate-950">
+              Entrar
+            </button>
+          </nav>
+
+          <PublicButton primary onClick={handleStart}>
+            Teste grátis
+            <ArrowRight size={16} />
+          </PublicButton>
+        </div>
+      </header>
+
+      <section className="hero-mesh rounded-[36px] border border-slate-200 bg-white px-6 py-8 shadow-card lg:px-10 lg:py-12">
+        <div className="grid gap-10 xl:grid-cols-[1.05fr_0.95fr] xl:items-center">
+          <div className="space-y-7">
+            <SectionBadge>Plataforma de cobrança inteligente</SectionBadge>
+
+            <div className="space-y-4">
+              <h1 className="max-w-3xl text-4xl font-bold leading-[1.05] tracking-tight text-slate-950 lg:text-5xl xl:text-[3.5rem]">
+                Cobrança automática por WhatsApp para{' '}
+                <span className="bg-gradient-to-r from-emerald-600 to-blue-600 bg-clip-text text-transparent">
+                  reduzir inadimplência
+                </span>
               </h1>
-              <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-600 lg:text-lg">
-                O BankExtract importa documentos financeiros, organiza vencidos, automatiza cobranças via WhatsApp e entrega visão clara da sua carteira por empresa.
+              <p className="max-w-2xl text-lg leading-relaxed text-slate-600">
+                Organize sua carteira, encontre inconsistências, simule cobranças e acompanhe tudo antes do envio real.
               </p>
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={onStartNow}
-                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:-translate-y-0.5 hover:from-emerald-600 hover:to-emerald-700 active:scale-[0.98]"
-              >
-                {isAuthenticated ? 'Acessar produto' : 'Começar agora'}
+              <PublicButton primary onClick={handleStart}>
+                {isAuthenticated ? 'Acessar plataforma' : 'Começar teste grátis'}
                 <ArrowRight size={16} />
-              </button>
-              <a
-                href="mailto:comercial@bankextract.app?subject=Demonstração%20BankExtract"
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-6 py-3.5 text-sm font-semibold text-slate-700 shadow-soft transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50"
-              >
-                Agendar demonstração
-              </a>
-              <button
-                type="button"
-                onClick={onOpenPlans}
-                className="inline-flex items-center gap-1.5 rounded-2xl px-4 py-3.5 text-sm font-semibold text-slate-600 transition hover:text-slate-900"
-              >
-                Ver planos <ChevronRight size={14} />
-              </button>
+              </PublicButton>
+              <PublicButton onClick={handlePlans}>
+                Ver demonstração
+                <ChevronRight size={16} />
+              </PublicButton>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {stats.map((s) => (
-                <div key={s.label} className="rounded-2xl border border-slate-200 bg-white px-4 py-3.5 shadow-soft">
-                  <p className="text-lg font-extrabold text-slate-950">{s.value}</p>
-                  <p className="mt-1 text-[11px] font-medium leading-tight text-slate-500">{s.label}</p>
-                </div>
-              ))}
+            <div className="flex flex-wrap gap-3 text-sm font-medium text-slate-600">
+              <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2">
+                <CheckCircle2 size={15} className="text-emerald-600" />
+                14 dias grátis
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2">
+                <CheckCircle2 size={15} className="text-emerald-600" />
+                Sem cartão de crédito
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2">
+                <ShieldCheck size={15} className="text-emerald-600" />
+                Ambiente seguro de simulação
+              </span>
             </div>
           </div>
 
-          <div className="space-y-3">
-            <div className="rounded-[22px] border border-slate-200 bg-white p-4 shadow-card">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">Dashboard executivo</p>
-              <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-[30px] border border-slate-200 bg-slate-50 p-4 shadow-soft lg:p-5">
+            <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-soft">
+              <div className="mb-5 flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Painel operacional</p>
+                  <h3 className="mt-1 text-lg font-semibold text-slate-950">Cobrança em simulação</h3>
+                </div>
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700">
+                  Simulação ativa
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 {[
-                  { label: 'Em aberto', value: 'R$ 48.290', color: 'text-emerald-600' },
-                  { label: 'Vencido', value: 'R$ 12.740', color: 'text-red-600' },
-                  { label: 'Cobranças', value: '148', color: 'text-blue-600' },
-                  { label: 'Sem tel.', value: '19', color: 'text-amber-600' },
-                ].map((k) => (
-                  <div key={k.label} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                    <p className="text-[11px] uppercase tracking-wider text-slate-500">{k.label}</p>
-                    <p className={`mt-1.5 text-xl font-bold ${k.color}`}>{k.value}</p>
+                  { label: 'Total em aberto', value: 'R$ 182.540', tone: 'text-slate-950' },
+                  { label: 'Telefones válidos', value: '84%', tone: 'text-emerald-700' },
+                  { label: 'Boletos encontrados', value: '88%', tone: 'text-blue-700' },
+                  { label: 'Simulações hoje', value: '37', tone: 'text-emerald-700' },
+                ].map((card) => (
+                  <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
+                    <p className={`mt-2 text-2xl font-bold ${card.tone}`}>{card.value}</p>
                   </div>
                 ))}
               </div>
-            </div>
 
-            <div className="rounded-[22px] border border-slate-200 bg-white p-4 shadow-card">
-              <div className="mb-3 flex items-center gap-2">
-                <FileSearch size={14} className="text-emerald-500" />
-                <p className="text-xs font-semibold text-slate-700">Pipeline OCR</p>
-              </div>
-              <div className="space-y-1.5">
-                {['Enviando arquivo', 'Executando OCR', 'Estruturando dados', 'Validando registros'].map((item, i) => (
-                  <div key={item} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                    <span className="text-xs font-medium text-slate-700">{item}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${i < 3 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
-                      {i < 3 ? '✓' : '…'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-[22px] border border-slate-200 bg-white p-4 shadow-card">
-              <div className="mb-3 flex items-center gap-2">
-                <Zap size={14} className="text-amber-500" />
-                <p className="text-xs font-semibold text-slate-700">Cobrança automática</p>
-                <span className="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">Modo teste</span>
-              </div>
-              <div className="space-y-1.5">
+              <div className="mt-4 rounded-[22px] border border-slate-200 bg-white shadow-soft">
+                <div className="grid grid-cols-[1.4fr_1fr_1fr_0.9fr] gap-3 border-b border-slate-200 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  <span>Cliente</span>
+                  <span>Boleto</span>
+                  <span>Vencimento</span>
+                  <span>Status</span>
+                </div>
                 {[
-                  { name: 'CONSTRUTORA PARQUE REAL', status: 'enviado', valor: 'R$ 4.200' },
-                  { name: 'CLÍNICA SANTA LUZIA', status: 'pendente', valor: 'R$ 1.850' },
-                  { name: 'LOJAS CENTRO SUL', status: 'sem tel.', valor: 'R$ 990' },
-                ].map((r) => (
-                  <div key={r.name} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                    <div>
-                      <p className="text-[11px] font-semibold text-slate-900">{r.name}</p>
-                      <p className="text-[10px] text-slate-500">{r.valor}</p>
-                    </div>
+                  { cliente: 'Distribuidora Atlas', boleto: '3001-2', vencimento: '10/05/2026', status: 'Simulado' },
+                  { cliente: 'Indústria Norte', boleto: '8841-9', vencimento: '11/05/2026', status: 'Em análise' },
+                  { cliente: 'Clínica Central', boleto: '1208-4', vencimento: '12/05/2026', status: 'Sem boleto' },
+                ].map((row, index) => (
+                  <div
+                    key={`${row.cliente}-${index}`}
+                    className="grid grid-cols-[1.4fr_1fr_1fr_0.9fr] gap-3 px-4 py-3 text-sm text-slate-700"
+                  >
+                    <span className="font-medium text-slate-900">{row.cliente}</span>
+                    <span>{row.boleto}</span>
+                    <span>{row.vencimento}</span>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        r.status === 'enviado'
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : r.status === 'pendente'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-slate-200 text-slate-600'
+                      className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                        row.status === 'Simulado'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : row.status === 'Em análise'
+                            ? 'bg-blue-50 text-blue-700'
+                            : 'bg-amber-50 text-amber-700'
                       }`}
                     >
-                      {r.status}
+                      {row.status}
                     </span>
                   </div>
                 ))}
@@ -255,165 +384,221 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
       </section>
 
       <section className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-soft lg:p-10">
-        <div className="mb-8 text-center">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-emerald-600">Como funciona</p>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900 lg:text-3xl">
-            De arquivo solto a carteira acionável em 4 etapas
+        <div className="max-w-3xl">
+          <SectionBadge>Problema</SectionBadge>
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
+            Cobrar manualmente custa tempo, dinheiro e controle
           </h2>
         </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {steps.map((s, idx) => (
-            <div key={s.n} className="relative rounded-[20px] border border-slate-200 bg-slate-50 p-5">
-              {idx < steps.length - 1 ? (
-                <div className="absolute right-0 top-1/2 hidden h-px w-4 -translate-y-1/2 translate-x-full bg-slate-200 xl:block" />
-              ) : null}
-              <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-sm font-bold text-white">
-                {s.n}
-              </div>
-              <h3 className="mb-1.5 text-sm font-semibold text-slate-900">{s.title}</h3>
-              <p className="text-xs leading-relaxed text-slate-500">{s.desc}</p>
-            </div>
+        <div className="mt-8 grid gap-4 lg:grid-cols-3">
+          {painPoints.map((item) => (
+            <PainCard key={item.title} {...item} />
           ))}
         </div>
       </section>
 
-      <section>
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-emerald-600">Funcionalidades</p>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Tudo que sua operação precisa</h2>
-          </div>
-          <button
-            type="button"
-            onClick={onOpenPlans}
-            className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-soft transition hover:bg-slate-50"
-          >
-            Ver planos <ChevronRight size={14} />
-          </button>
+      <section id="recursos" className="rounded-[32px] border border-slate-200 bg-slate-50 px-8 py-10 shadow-soft lg:px-10">
+        <div className="max-w-3xl">
+          <SectionBadge>Solução em módulos</SectionBadge>
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
+            Uma plataforma completa para operar sua cobrança
+          </h2>
+          <p className="mt-3 text-base leading-relaxed text-slate-600">
+            Do monitoramento da carteira à auditoria de envio, tudo em um fluxo seguro antes da ativação real.
+          </p>
         </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {features.map((f) => (
-            <FeatureCard key={f.title} {...f} />
+        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          {modules.map((item) => (
+            <ModuleCard key={item.title} {...item} />
           ))}
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[28px] border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-6 lg:p-8">
-        <div className="mb-5">
-          <h2 className="text-xl font-bold text-slate-900">Para times financeiros e comerciais</h2>
-          <p className="mt-1 text-sm text-slate-500">Estrutura pronta para vender, operar e crescer sem depender de planilhas soltas.</p>
-        </div>
-        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">
-          {[
-            'Importação rápida de PDF, JPG, PNG e JPEG',
-            'Organização financeira por empresa com RLS',
-            'Histórico por lote com batch_id rastreável',
-            'Cobrança automática com cadência configurável',
-            'Integração com Google Sheets por empresa',
-            'Audit logs e permissões por role',
-          ].map((b) => (
-            <div key={b} className="flex items-start gap-3 rounded-2xl bg-white px-4 py-3.5 shadow-soft">
-              <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0 text-emerald-600" />
-              <p className="text-sm font-semibold text-slate-800">{b}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section>
-        <div className="mb-6 text-center">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-emerald-600">Planos</p>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900 lg:text-3xl">Escolha o plano ideal</h2>
-          <p className="mt-2 text-sm text-slate-500">Comece pequeno e escale conforme crescer. Sem custos ocultos.</p>
-        </div>
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          {plans.map((plan) => (
-            <article
-              key={plan.id}
-              className={`relative overflow-hidden rounded-[28px] border p-7 transition-all duration-200 hover:-translate-y-1 hover:shadow-lifted ${
-                plan.featured
-                  ? 'border-emerald-300 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 text-white shadow-lifted'
-                  : 'border-slate-200 bg-white shadow-soft'
-              }`}
-            >
-              {plan.featured ? (
-                <>
-                  <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-emerald-400 to-blue-500" />
-                  <div className="absolute right-4 top-4">
-                    <span className="rounded-full border border-emerald-400/30 bg-emerald-500/20 px-3 py-1 text-[11px] font-bold tracking-widest text-emerald-300">
-                      MAIS POPULAR
-                    </span>
+      <section id="clientes" className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-soft lg:p-10">
+        <div className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr] xl:items-center">
+          <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5 shadow-soft">
+            <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-soft">
+              <div className="grid gap-5 lg:grid-cols-[240px_1fr]">
+                <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Sidebar resumida</p>
+                  <div className="mt-4 space-y-2">
+                    {['Dashboard', 'Cobrança Automática', 'Central Operacional', 'Auditoria de Dados', 'Checklist Pré-Envio'].map((item, index) => (
+                      <div
+                        key={item}
+                        className={`rounded-xl px-3 py-2 text-sm font-medium ${
+                          index === 1 ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'text-slate-600'
+                        }`}
+                      >
+                        {item}
+                      </div>
+                    ))}
                   </div>
-                </>
-              ) : null}
-
-              <div className="mb-5">
-                <p className={`text-xs font-bold uppercase tracking-widest ${plan.featured ? 'text-emerald-400' : 'text-slate-400'}`}>
-                  {plan.name}
-                </p>
-                <div className="mt-3 flex items-baseline gap-1">
-                  <span className={`text-4xl font-extrabold tracking-tight ${plan.featured ? 'text-white' : 'text-slate-900'}`}>
-                    {plan.price}
-                  </span>
-                  {plan.period ? (
-                    <span className="text-sm text-slate-400">{plan.period}</span>
-                  ) : null}
                 </div>
-                <p className={`mt-1.5 text-xs ${plan.featured ? 'text-slate-400' : 'text-slate-500'}`}>{plan.emphasis}</p>
+
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: 'Carteira ativa', value: 'R$ 92.440' },
+                      { label: 'Em cobrança', value: '126 títulos' },
+                      { label: 'Com inconsistência', value: '9 itens' },
+                      { label: 'Auditoria', value: 'Ativa' },
+                    ].map((card) => (
+                      <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
+                        <p className="mt-2 text-xl font-bold text-slate-950">{card.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="rounded-[22px] border border-slate-200 bg-white shadow-soft">
+                    <div className="grid grid-cols-[1.3fr_1fr_1fr_1fr] gap-3 border-b border-slate-200 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      <span>Cliente</span>
+                      <span>Etapa</span>
+                      <span>Boleto</span>
+                      <span>Status</span>
+                    </div>
+                    {[
+                      ['Atacado Norte', 'Preventiva', 'Encontrado', 'Simulado'],
+                      ['Oficina Brasil', 'Atraso', 'Pendente', 'Inconsistência'],
+                      ['Distribuidora Vale', 'Vencimento', 'Encontrado', 'Auditoria'],
+                    ].map((row) => (
+                      <div key={row.join('-')} className="grid grid-cols-[1.3fr_1fr_1fr_1fr] gap-3 px-4 py-3 text-sm text-slate-700">
+                        <span className="font-medium text-slate-900">{row[0]}</span>
+                        <span>{row[1]}</span>
+                        <span>{row[2]}</span>
+                        <span>{row[3]}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
+            </div>
+          </div>
 
-              <ul className="mb-6 space-y-2">
-                {plan.features.map((f) => (
-                  <li key={f} className="flex items-center gap-2.5 text-sm">
-                    <BadgeCheck size={15} className={plan.featured ? 'text-emerald-400' : 'text-emerald-600'} />
-                    <span className={plan.featured ? 'text-slate-300' : 'text-slate-700'}>{f}</span>
-                  </li>
-                ))}
-              </ul>
+          <div>
+            <SectionBadge>Preview do produto</SectionBadge>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
+              Visão completa para decidir antes de cobrar
+            </h2>
+            <p className="mt-3 text-base leading-relaxed text-slate-600">
+              O BankExtract mostra sua operação com clareza antes de qualquer envio real.
+            </p>
 
-              <button
-                type="button"
-                onClick={onStartNow}
-                className={`w-full rounded-2xl px-4 py-3.5 text-sm font-bold transition active:scale-[0.98] ${
-                  plan.featured
-                    ? 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-lg shadow-emerald-900/40'
-                    : 'bg-slate-900 text-white hover:bg-slate-800'
-                }`}
-              >
-                {plan.cta}
-              </button>
+            <div className="mt-6 space-y-3">
+              {[
+                'Simulação antes do envio real',
+                'Isolamento por empresa',
+                'Histórico auditável',
+                'Painel de inconsistências',
+                'Checklist de prontidão',
+                'Preparado para integração WhatsApp',
+              ].map((item) => (
+                <div key={item} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-soft">
+                  <CheckCircle2 size={16} className="text-emerald-600" />
+                  <span className="text-sm font-medium text-slate-700">{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="como-funciona" className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-soft lg:p-10">
+        <div className="max-w-3xl">
+          <SectionBadge>Como funciona</SectionBadge>
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">Como funciona</h2>
+        </div>
+        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {workflow.map((item) => (
+            <article key={item.step} className="rounded-[24px] border border-slate-200 bg-slate-50 p-6">
+              <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500 text-white">
+                <item.icon size={18} />
+              </div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Etapa {item.step}</p>
+              <h3 className="mt-2 text-lg font-semibold text-slate-950">{item.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.description}</p>
             </article>
           ))}
         </div>
       </section>
 
-      <section className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-gradient-to-br from-slate-950 to-blue-950 p-8 text-center text-white shadow-card lg:p-12">
-        <div className="pointer-events-none absolute inset-0 dot-grid opacity-30" />
-        <div className="relative">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-emerald-400">Pronto para começar?</p>
-          <h2 className="mx-auto max-w-2xl text-2xl font-bold leading-snug text-white lg:text-3xl">
-            BankExtract transforma documentos financeiros em operação controlada.
+      <section className="rounded-[32px] border border-slate-200 bg-slate-50 px-8 py-10 shadow-soft lg:px-10">
+        <div className="max-w-3xl">
+          <SectionBadge>Resultados e benefícios</SectionBadge>
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
+            Menos cobrança manual. Mais controle financeiro.
           </h2>
-          <p className="mx-auto mt-3 max-w-xl text-sm text-slate-300">
-            Configure em minutos. Sem cartão. Sem burocracia. Comece no plano Starter e escale quando precisar.
+        </div>
+        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {outcomes.map((item) => (
+            <div key={item} className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-soft">
+              <CheckCircle2 size={18} className="text-emerald-600" />
+              <p className="mt-4 text-base font-semibold text-slate-950">{item}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section id="planos" className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-soft lg:p-10">
+        <div className="max-w-3xl">
+          <SectionBadge>Planos</SectionBadge>
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
+            Planos para cada fase da sua operação
+          </h2>
+        </div>
+        <div className="mt-8 grid gap-4 xl:grid-cols-3">
+          {plans.map((plan) => (
+            <PlanCard
+              key={plan.name}
+              plan={plan}
+              onPrimaryClick={plan.cta === 'Falar com especialista' ? handlePlans : handleStart}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-[32px] border border-slate-200 bg-white px-8 py-10 shadow-card lg:px-10">
+        <div className="mx-auto max-w-3xl text-center">
+          <SectionBadge>Próximo passo</SectionBadge>
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
+            Pronto para transformar sua cobrança em processo?
+          </h2>
+          <p className="mt-3 text-base leading-relaxed text-slate-600">
+            Comece com simulação segura, organize sua carteira e prepare sua empresa para cobrança automática.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <button
-              type="button"
-              onClick={onStartNow}
-              className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/50 transition hover:bg-emerald-400 active:scale-[0.98]"
-            >
-              Começar agora grátis <ArrowRight size={16} />
-            </button>
-            <a
-              href="mailto:comercial@bankextract.app?subject=Contato%20BankExtract"
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white px-6 py-3.5 text-sm font-semibold text-slate-900 shadow-soft transition hover:-translate-y-0.5 hover:bg-slate-100"
-            >
-              Falar com time comercial
-            </a>
+            <PublicButton primary onClick={handleStart}>
+              Começar teste grátis
+              <ArrowRight size={16} />
+            </PublicButton>
+            <PublicButton onClick={handlePlans}>
+              Ver demonstração
+              <ChevronRight size={16} />
+            </PublicButton>
           </div>
         </div>
       </section>
+
+      <footer className="rounded-[28px] border border-slate-200 bg-white px-6 py-6 shadow-soft">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-base font-bold text-slate-950">BankExtract Pro</p>
+            <p className="text-sm text-slate-500">Gestão Financeira & Cobrança</p>
+          </div>
+
+          <div className="flex flex-wrap gap-5 text-sm font-medium text-slate-600">
+            <a href="#recursos" className="transition hover:text-slate-950">Recursos</a>
+            <a href="#planos" className="transition hover:text-slate-950">Planos</a>
+            <button type="button" onClick={handleStart} className="transition hover:text-slate-950">
+              Entrar
+            </button>
+            <a href="mailto:contato@bankextract.pro" className="transition hover:text-slate-950">Contato</a>
+          </div>
+        </div>
+        <div className="mt-5 border-t border-slate-200 pt-4 text-sm text-slate-500">
+          © BankExtract Pro. Todos os direitos reservados.
+        </div>
+      </footer>
     </div>
   );
 }
