@@ -10,6 +10,7 @@ import {
   Settings2,
   Sheet,
   ShieldAlert,
+  ShieldCheck,
   UploadCloud,
 } from 'lucide-react';
 import DataTable from '../components/DataTable';
@@ -924,15 +925,21 @@ export default function CobrancaAutomaticaScreen({
             }
           >
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">E-mail da Service Account</span>
-                <input
-                  type="text"
-                  value={driveConfig.service_account_email}
-                  readOnly
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none"
-                />
-              </label>
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-emerald-700 shadow-soft">
+                    <ShieldCheck size={18} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">Credencial Google Drive</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-950">Configurada com seguranca</p>
+                    <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-700">
+                      <CheckCircle2 size={13} />
+                      Conectada
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">ID da pasta do Google Drive</span>

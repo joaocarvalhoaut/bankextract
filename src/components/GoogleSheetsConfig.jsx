@@ -287,7 +287,7 @@ export default function GoogleSheetsConfig({ empresaId, empresaNome, globalMode 
             </div>
 
             <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 shadow-sm">
-              Compartilhe a planilha com a service account configurada no backend para permitir escrita segura durante a sincronizacao.
+              Compartilhe a planilha com a credencial tecnica configurada do sistema para permitir escrita segura durante a sincronizacao.
             </div>
 
             {status ? <StatusBadge type={status.type} message={status.message} /> : null}
