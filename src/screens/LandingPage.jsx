@@ -3,7 +3,6 @@ import {
   AlertCircle,
   ArrowRight,
   BadgeCheck,
-  Building2,
   CheckCircle2,
   ChevronRight,
   Clock3,
@@ -67,29 +66,23 @@ const modules = [
   },
 ];
 
-const workflow = [
+const practicalFlow = [
   {
     step: '1',
-    title: 'Importe ou sincronize sua carteira',
-    description: 'Organize títulos, clientes, vencimentos, valores e telefones.',
+    title: 'Importe sua carteira',
+    description: 'Upload de planilhas e organização automática.',
     icon: Upload,
   },
   {
     step: '2',
-    title: 'Configure sua régua',
-    description: 'Defina preventiva, vencimento, atraso e templates personalizados.',
+    title: 'Sistema valida tudo',
+    description: 'Telefone, boleto, inconsistências e regras.',
     icon: ListChecks,
   },
   {
     step: '3',
-    title: 'Simule cobranças',
-    description: 'Teste mensagens e localize boletos sem enviar WhatsApp real.',
-    icon: MessageCircleMore,
-  },
-  {
-    step: '4',
-    title: 'Valide e acompanhe',
-    description: 'Use histórico, auditoria, inconsistências e checklist antes do envio real.',
+    title: 'Simule antes de ativar',
+    description: 'Audite toda operação antes do envio real.',
     icon: Shield,
   },
 ];
@@ -151,7 +144,12 @@ const plans = [
   },
 ];
 
-const socialLogos = ['Construtora', 'Distribuidora', 'Industria', 'Atacado', 'Servicos', 'B2B'];
+const socialLogos = ['Construtora', 'Distribuidora', 'Indústria', 'Atacado', 'Serviços', 'B2B'];
+const trustMetrics = [
+  { value: '+87%', label: 'Boletos localizados automaticamente' },
+  { value: '3x', label: 'Mais produtividade operacional' },
+  { value: '100%', label: 'Operação auditável por título' },
+];
 
 function SectionBadge({ children }) {
   return (
@@ -169,8 +167,8 @@ function PublicButton({ children, onClick, primary = false, fullWidth = false })
       onClick={onClick}
       className={
         primary
-          ? `inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition hover:-translate-y-0.5 hover:bg-emerald-600 active:scale-[0.98] ${fullWidth ? 'w-full' : ''}`
-          : `inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-6 py-3.5 text-sm font-semibold text-slate-700 shadow-soft transition hover:-translate-y-0.5 hover:bg-slate-50 ${fullWidth ? 'w-full' : ''}`
+          ? `inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-7 py-4 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(5,150,105,0.22)] transition duration-200 hover:-translate-y-1 hover:scale-[1.02] hover:bg-emerald-600 hover:shadow-[0_24px_48px_rgba(5,150,105,0.26)] active:scale-[0.99] ${fullWidth ? 'w-full' : ''}`
+          : `inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-7 py-4 text-sm font-semibold text-slate-700 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-slate-50 ${fullWidth ? 'w-full' : ''}`
       }
     >
       {children}
@@ -178,9 +176,9 @@ function PublicButton({ children, onClick, primary = false, fullWidth = false })
   );
 }
 
-function PainCard({ icon: Icon, title, description }) {
+function PainCard({ icon: Icon, title, description, className = '' }) {
   return (
-    <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-soft">
+    <article className={`fade-up rounded-[24px] border border-slate-200 bg-white p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card ${className}`}>
       <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-600">
         <Icon size={20} />
       </div>
@@ -190,9 +188,9 @@ function PainCard({ icon: Icon, title, description }) {
   );
 }
 
-function ModuleCard({ icon: Icon, title, description }) {
+function ModuleCard({ icon: Icon, title, description, className = '' }) {
   return (
-    <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-soft transition hover:-translate-y-0.5 hover:shadow-card">
+    <article className={`fade-up rounded-[24px] border border-slate-200 bg-white p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card ${className}`}>
       <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
         <Icon size={20} />
       </div>
@@ -205,7 +203,7 @@ function ModuleCard({ icon: Icon, title, description }) {
 function PlanCard({ plan, onPrimaryClick }) {
   return (
     <article
-      className={`relative rounded-[28px] border p-7 shadow-soft transition hover:-translate-y-1 hover:shadow-card ${
+      className={`fade-up relative rounded-[28px] border p-7 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card ${
         plan.featured ? 'border-emerald-300 bg-white ring-1 ring-emerald-100' : 'border-slate-200 bg-white'
       }`}
     >
@@ -246,9 +244,9 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
 
   return (
     <div className="pb-28 md:pb-10">
-      <div className="mx-auto flex max-w-[1440px] flex-col gap-10 px-4 py-4 md:px-6 xl:px-8">
-        <header className="sticky top-0 z-40 -mx-4 border-b border-slate-200/80 bg-white/80 px-4 py-3 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur-md transition-all md:-mx-6 md:px-6 xl:-mx-8 xl:px-8">
-          <div className="mx-auto flex max-w-[1440px] flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="mx-auto flex max-w-[1540px] flex-col gap-12 px-4 py-4 md:px-6 xl:px-8">
+        <header className="sticky top-0 z-40 -mx-4 border-b border-slate-200/80 bg-white/82 px-4 py-2.5 shadow-[0_12px_28px_rgba(15,23,42,0.06)] backdrop-blur-xl transition-all md:-mx-6 md:px-6 xl:-mx-8 xl:px-8">
+          <div className="mx-auto flex max-w-[1540px] flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-900/15">
                 <WalletCards size={20} />
@@ -284,19 +282,19 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
           </div>
         </header>
 
-        <section className="hero-mesh rounded-[36px] border border-slate-200 bg-white px-8 py-10 shadow-card md:px-10 xl:px-14 xl:py-14">
-          <div className="grid gap-10 xl:grid-cols-[1.08fr_0.92fr] xl:items-center">
-            <div className="space-y-8">
+        <section className="hero-mesh overflow-hidden rounded-[38px] border border-slate-200 bg-white px-8 py-12 shadow-[0_30px_80px_rgba(15,23,42,0.10)] md:px-10 md:py-14 xl:px-14 xl:py-20">
+          <div className="grid gap-12 xl:grid-cols-[1.08fr_0.92fr] xl:items-center">
+            <div className="fade-up space-y-8">
               <SectionBadge>Plataforma de cobrança inteligente</SectionBadge>
 
               <div className="space-y-5">
-                <h1 className="max-w-4xl text-4xl font-bold leading-[0.98] tracking-tight text-slate-950 md:text-5xl xl:text-6xl">
+                <h1 className="max-w-4xl text-5xl font-bold leading-[0.92] tracking-[-0.04em] text-slate-950 md:text-6xl xl:text-7xl">
                   Cobrança automática por WhatsApp para{' '}
-                  <span className="bg-gradient-to-r from-emerald-600 to-blue-600 bg-clip-text text-transparent">
+                  <span className="bg-gradient-to-r from-emerald-600 via-emerald-500 to-blue-600 bg-clip-text text-transparent">
                     reduzir inadimplência
                   </span>
                 </h1>
-                <p className="max-w-2xl text-base leading-relaxed text-slate-600 md:text-lg">
+                <p className="max-w-2xl text-base leading-8 text-slate-600 md:text-lg">
                   Organize sua carteira, encontre inconsistências, simule cobranças e acompanhe tudo antes do envio
                   real.
                 </p>
@@ -313,80 +311,87 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                 </PublicButton>
               </div>
 
-              <div className="flex flex-wrap gap-3 text-sm font-medium text-slate-600">
-                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2">
-                  <CheckCircle2 size={15} className="text-emerald-600" />
-                  14 dias grátis
-                </span>
-                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2">
-                  <CheckCircle2 size={15} className="text-emerald-600" />
-                  Sem cartão de crédito
-                </span>
-                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2">
-                  <ShieldCheck size={15} className="text-emerald-600" />
-                  Ambiente seguro de simulação
-                </span>
+              <p className="text-sm font-medium text-slate-500">
+                Sem instalação • Ambiente seguro • Comece em minutos
+              </p>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                {trustMetrics.map((metric, index) => (
+                  <article
+                    key={metric.label}
+                    className={`fade-up rounded-[22px] border border-slate-200 bg-white/92 p-4 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card stagger-${index + 1}`}
+                  >
+                    <p className="text-2xl font-bold tracking-tight text-slate-950">{metric.value}</p>
+                    <p className="mt-1 text-sm leading-relaxed text-slate-600">{metric.label}</p>
+                  </article>
+                ))}
               </div>
             </div>
 
-            <div className="scale-100 rounded-[32px] border border-slate-200 bg-slate-50 p-4 shadow-soft md:p-5 xl:scale-110 xl:origin-right">
-              <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft">
-                <div className="mb-5 flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Painel operacional</p>
-                    <h3 className="mt-1 text-lg font-semibold text-slate-950">Cobrança em simulação</h3>
-                  </div>
-                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700">
-                    Simulação ativa
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { label: 'Total em aberto', value: 'R$ 182.540', tone: 'text-slate-950' },
-                    { label: 'Telefones válidos', value: '84%', tone: 'text-emerald-700' },
-                    { label: 'Boletos encontrados', value: '88%', tone: 'text-blue-700' },
-                    { label: 'Simulações hoje', value: '37', tone: 'text-emerald-700' },
-                  ].map((card) => (
-                    <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
-                      <p className={`mt-2 text-2xl font-bold ${card.tone}`}>{card.value}</p>
+            <div className="relative fade-up xl:scale-[1.16] xl:origin-right">
+              <div className="absolute -left-10 top-10 h-40 w-40 rounded-full bg-emerald-200/45 blur-3xl" />
+              <div className="absolute -right-6 bottom-6 h-40 w-40 rounded-full bg-blue-200/45 blur-3xl" />
+              <div className="relative rounded-[34px] border border-slate-200 bg-slate-50 p-4 shadow-[0_34px_90px_rgba(15,23,42,0.14)] md:p-5">
+                <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft">
+                  <div className="mb-5 flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        Painel operacional
+                      </p>
+                      <h3 className="mt-1 text-lg font-semibold text-slate-950">Cobrança em simulação</h3>
                     </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 rounded-[22px] border border-slate-200 bg-white shadow-soft">
-                  <div className="grid grid-cols-[1.45fr_1fr_1fr_0.95fr] gap-3 border-b border-slate-200 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    <span>Cliente</span>
-                    <span>Boleto</span>
-                    <span>Vencimento</span>
-                    <span>Status</span>
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700">
+                      Simulação ativa
+                    </span>
                   </div>
-                  {[
-                    { cliente: 'Distribuidora Atlas', boleto: '3001-2', vencimento: '10/05/2026', status: 'Simulado' },
-                    { cliente: 'Industria Norte', boleto: '8841-9', vencimento: '11/05/2026', status: 'Em análise' },
-                    { cliente: 'Clinica Central', boleto: '1208-4', vencimento: '12/05/2026', status: 'Sem boleto' },
-                  ].map((row, index) => (
-                    <div
-                      key={`${row.cliente}-${index}`}
-                      className="grid grid-cols-[1.45fr_1fr_1fr_0.95fr] gap-3 px-4 py-3 text-sm text-slate-700"
-                    >
-                      <span className="font-medium text-slate-900">{row.cliente}</span>
-                      <span>{row.boleto}</span>
-                      <span>{row.vencimento}</span>
-                      <span
-                        className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                          row.status === 'Simulado'
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : row.status === 'Em análise'
-                              ? 'bg-blue-50 text-blue-700'
-                              : 'bg-amber-50 text-amber-700'
-                        }`}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: 'Total em aberto', value: 'R$ 182.540', tone: 'text-slate-950' },
+                      { label: 'Telefones válidos', value: '84%', tone: 'text-emerald-700' },
+                      { label: 'Boletos encontrados', value: '88%', tone: 'text-blue-700' },
+                      { label: 'Simulações hoje', value: '37', tone: 'text-emerald-700' },
+                    ].map((card) => (
+                      <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
+                        <p className={`mt-2 text-2xl font-bold ${card.tone}`}>{card.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 rounded-[22px] border border-slate-200 bg-white shadow-soft">
+                    <div className="grid grid-cols-[1.45fr_1fr_1fr_0.95fr] gap-3 border-b border-slate-200 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      <span>Cliente</span>
+                      <span>Boleto</span>
+                      <span>Vencimento</span>
+                      <span>Status</span>
+                    </div>
+                    {[
+                      { cliente: 'Distribuidora Atlas', boleto: '3001-2', vencimento: '10/05/2026', status: 'Simulado' },
+                      { cliente: 'Indústria Norte', boleto: '8841-9', vencimento: '11/05/2026', status: 'Em análise' },
+                      { cliente: 'Clínica Central', boleto: '1208-4', vencimento: '12/05/2026', status: 'Sem boleto' },
+                    ].map((row, index) => (
+                      <div
+                        key={`${row.cliente}-${index}`}
+                        className="grid grid-cols-[1.45fr_1fr_1fr_0.95fr] gap-3 px-4 py-3 text-sm text-slate-700"
                       >
-                        {row.status}
-                      </span>
-                    </div>
-                  ))}
+                        <span className="font-medium text-slate-900">{row.cliente}</span>
+                        <span>{row.boleto}</span>
+                        <span>{row.vencimento}</span>
+                        <span
+                          className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                            row.status === 'Simulado'
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : row.status === 'Em análise'
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'bg-amber-50 text-amber-700'
+                          }`}
+                        >
+                          {row.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -395,7 +400,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
 
         <section className="rounded-[32px] border border-slate-200 bg-white px-8 py-8 shadow-soft md:px-10 xl:px-14">
           <div className="grid gap-6 xl:grid-cols-[1fr_auto] xl:items-end">
-            <div>
+            <div className="fade-up">
               <h2 className="text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">
                 Empresas organizando sua cobrança com BankExtract Pro
               </h2>
@@ -403,17 +408,17 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                 Mais controle operacional, menos inadimplência e mais previsibilidade financeira.
               </p>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+            <div className="fade-up inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
               <ShieldCheck size={14} className="text-emerald-600" />
               Ambiente seguro • Operação auditável • Simulação antes do envio real
             </div>
           </div>
 
           <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-            {socialLogos.map((logo) => (
+            {socialLogos.map((logo, index) => (
               <div
                 key={logo}
-                className="flex h-16 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold uppercase tracking-[0.22em] text-slate-400 transition hover:border-slate-300 hover:bg-white hover:text-slate-500"
+                className={`fade-up flex h-16 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold uppercase tracking-[0.22em] text-slate-400 transition duration-200 hover:border-slate-300 hover:bg-white hover:text-slate-500 stagger-${(index % 6) + 1}`}
               >
                 {logo}
               </div>
@@ -422,21 +427,21 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
         </section>
 
         <section className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-soft lg:p-10">
-          <div className="max-w-3xl">
+          <div className="max-w-3xl fade-up">
             <SectionBadge>Problema</SectionBadge>
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
               Cobrar manualmente custa tempo, dinheiro e controle
             </h2>
           </div>
           <div className="mt-8 grid gap-4 lg:grid-cols-3">
-            {painPoints.map((item) => (
-              <PainCard key={item.title} {...item} />
+            {painPoints.map((item, index) => (
+              <PainCard key={item.title} {...item} className={`stagger-${index + 1}`} />
             ))}
           </div>
         </section>
 
         <section id="recursos" className="rounded-[32px] border border-slate-200 bg-slate-50 px-8 py-10 shadow-soft lg:px-10">
-          <div className="max-w-3xl">
+          <div className="max-w-3xl fade-up">
             <SectionBadge>Solução em módulos</SectionBadge>
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
               Uma plataforma completa para operar sua cobrança
@@ -446,21 +451,62 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
             </p>
           </div>
           <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            {modules.map((item) => (
-              <ModuleCard key={item.title} {...item} />
+            {modules.map((item, index) => (
+              <ModuleCard key={item.title} {...item} className={`stagger-${(index % 5) + 1}`} />
+            ))}
+          </div>
+        </section>
+
+        <section id="como-funciona" className="rounded-[32px] border border-slate-200 bg-white px-8 py-10 shadow-soft lg:px-10">
+          <div className="max-w-3xl fade-up">
+            <SectionBadge>Como funciona na prática</SectionBadge>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
+              Como funciona na prática
+            </h2>
+            <p className="mt-3 text-base leading-relaxed text-slate-600">
+              Fluxo operacional desenhado para cobrança segura e escalável.
+            </p>
+          </div>
+
+          <div className="relative mt-10 grid gap-5 xl:grid-cols-3">
+            <div className="absolute left-[18px] top-0 hidden h-full w-px bg-gradient-to-b from-emerald-200 via-slate-200 to-blue-200 xl:left-[calc(16.666%-10px)] xl:top-[38px] xl:block xl:h-px xl:w-[66%]" />
+            {practicalFlow.map((item, index) => (
+              <article
+                key={item.step}
+                className={`fade-up relative rounded-[26px] border border-slate-200 bg-slate-50 p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card stagger-${index + 1}`}
+              >
+                <div className="mb-5 flex items-center gap-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow-lg shadow-emerald-900/15">
+                    {item.step}
+                  </div>
+                  <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-emerald-700 shadow-soft">
+                    <item.icon size={18} />
+                  </div>
+                </div>
+                <h3 className="text-xl font-semibold text-slate-950">{item.title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-slate-600">{item.description}</p>
+              </article>
             ))}
           </div>
         </section>
 
         <section id="clientes" className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-soft lg:p-10">
           <div className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr] xl:items-center">
-            <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5 shadow-soft">
+            <div className="fade-up rounded-[28px] border border-slate-200 bg-slate-50 p-5 shadow-soft">
               <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-soft">
                 <div className="grid gap-5 lg:grid-cols-[240px_1fr]">
                   <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Sidebar resumida</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Sidebar resumida
+                    </p>
                     <div className="mt-4 space-y-2">
-                      {['Dashboard', 'Cobrança Automática', 'Central Operacional', 'Auditoria de Dados', 'Checklist Pré-Envio'].map((item, index) => (
+                      {[
+                        'Dashboard',
+                        'Cobrança Automática',
+                        'Central Operacional',
+                        'Auditoria de Dados',
+                        'Checklist Pré-Envio',
+                      ].map((item, index) => (
                         <div
                           key={item}
                           className={`rounded-xl px-3 py-2 text-sm font-medium ${
@@ -513,7 +559,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
               </div>
             </div>
 
-            <div>
+            <div className="fade-up">
               <SectionBadge>Preview do produto</SectionBadge>
               <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
                 Visão completa para decidir antes de cobrar
@@ -530,8 +576,11 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                   'Painel de inconsistências',
                   'Checklist de prontidão',
                   'Preparado para integração WhatsApp',
-                ].map((item) => (
-                  <div key={item} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-soft">
+                ].map((item, index) => (
+                  <div
+                    key={item}
+                    className={`fade-up flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-soft stagger-${(index % 6) + 1}`}
+                  >
                     <CheckCircle2 size={16} className="text-emerald-600" />
                     <span className="text-sm font-medium text-slate-700">{item}</span>
                   </div>
@@ -541,35 +590,19 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
           </div>
         </section>
 
-        <section id="como-funciona" className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-soft lg:p-10">
-          <div className="max-w-3xl">
-            <SectionBadge>Como funciona</SectionBadge>
-            <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">Como funciona</h2>
-          </div>
-          <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {workflow.map((item) => (
-              <article key={item.step} className="rounded-[24px] border border-slate-200 bg-slate-50 p-6">
-                <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500 text-white">
-                  <item.icon size={18} />
-                </div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Etapa {item.step}</p>
-                <h3 className="mt-2 text-lg font-semibold text-slate-950">{item.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.description}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
         <section className="rounded-[32px] border border-slate-200 bg-slate-50 px-8 py-10 shadow-soft lg:px-10">
-          <div className="max-w-3xl">
+          <div className="max-w-3xl fade-up">
             <SectionBadge>Resultados e benefícios</SectionBadge>
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
               Menos cobrança manual. Mais controle financeiro.
             </h2>
           </div>
           <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {outcomes.map((item) => (
-              <div key={item} className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-soft">
+            {outcomes.map((item, index) => (
+              <div
+                key={item}
+                className={`fade-up rounded-[24px] border border-slate-200 bg-white p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card stagger-${(index % 6) + 1}`}
+              >
                 <CheckCircle2 size={18} className="text-emerald-600" />
                 <p className="mt-4 text-base font-semibold text-slate-950">{item}</p>
               </div>
@@ -578,25 +611,26 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
         </section>
 
         <section id="planos" className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-soft lg:p-10">
-          <div className="max-w-3xl">
+          <div className="max-w-3xl fade-up">
             <SectionBadge>Planos</SectionBadge>
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
               Planos para cada fase da sua operação
             </h2>
           </div>
           <div className="mt-8 grid gap-4 xl:grid-cols-3">
-            {plans.map((plan) => (
+            {plans.map((plan, index) => (
               <PlanCard
                 key={plan.name}
                 plan={plan}
                 onPrimaryClick={plan.cta === 'Falar com especialista' ? handlePlans : handleStart}
+                className={`stagger-${index + 1}`}
               />
             ))}
           </div>
         </section>
 
         <section className="rounded-[32px] border border-slate-200 bg-white px-8 py-10 shadow-card lg:px-10">
-          <div className="mx-auto max-w-3xl text-center">
+          <div className="mx-auto max-w-3xl text-center fade-up">
             <SectionBadge>Próximo passo</SectionBadge>
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
               Pronto para transformar sua cobrança em processo?

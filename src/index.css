@@ -223,6 +223,10 @@ button:active:not(:disabled) {
   animation: ring-pulse 2.2s ease-in-out infinite;
 }
 
+.fade-up {
+  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 .micro-bounce {
   transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -249,6 +253,18 @@ button:active:not(:disabled) {
 
   50% {
     box-shadow: 0 0 0 9px rgba(16, 185, 129, 0);
+  }
+}
+
+@keyframes fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
