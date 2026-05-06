@@ -211,6 +211,27 @@ export async function getBillingInconsistencies(companyId, filters = {}) {
   );
 }
 
+export async function getRealSendChecklist(companyId) {
+  return invokeBillingAutomation(
+    {
+      action: 'get_real_send_checklist',
+      company_id: companyId,
+    },
+    'Falha ao carregar o checklist pre-envio.'
+  );
+}
+
+export async function simulateChargeBatch(companyId, limit = 10) {
+  return invokeBillingAutomation(
+    {
+      action: 'simulate_charge_batch',
+      company_id: companyId,
+      limit,
+    },
+    'Falha ao rodar a simulacao geral da regua.'
+  );
+}
+
 export async function simulateChargeItem(companyId, registroId) {
   return invokeBillingAutomation(
     {

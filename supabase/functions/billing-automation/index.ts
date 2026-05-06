@@ -1469,6 +1469,277 @@ async function getBillingInconsistenciesData(
   };
 }
 
+async function getRealSendChecklistData(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  todayIso: string,
+) {
+  const config = await getBillingConfigForCompany(supabaseAdmin, companyId);
+  const { data: records, error: recordsError } = await supabaseAdmin
+    .from('registros_financeiros')
+    .select('id, company_id, nome, numero_boleto, data_vencimento, valor, telefone, status, created_at')
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false });
+  if (recordsError) throw new Error(recordsError.message);
+
+  const { data: logs, error: logsError } = await supabaseAdmin
+    .from('logs_cobranca')
+    .select('id, financeiro_id, company_id, data_hora, tipo_cobranca, status_envio, arquivo_encontrado, erro, created_at')
+    .eq('company_id', companyId)
+    .order('data_hora', { ascending: false })
+    .order('created_at', { ascending: false });
+  if (logsError) throw new Error(logsError.message);
+
+  const inconsistencies = await getBillingInconsistenciesData(supabaseAdmin, companyId, {});
+  const criticalIssues = (inconsistencies.items || []).filter((item) =>
+    ['sem_telefone', 'telefone_invalido', 'sem_boleto', 'vencimento_ausente', 'valor_zerado'].includes(String(item.tipo_problema || ''))
+  );
+
+  const safeRecords = records || [];
+  const safeLogs = logs || [];
+  const successStatuses = new Set(['sucesso', 'sucesso_simulado', 'simulado']);
+  const errorStatuses = new Set(['erro', 'erro_simulacao']);
+  const sevenDaysAgoDate = parseDate(todayIso);
+  if (sevenDaysAgoDate) sevenDaysAgoDate.setUTCDate(sevenDaysAgoDate.getUTCDate() - 7);
+  const sevenDaysAgoIso = sevenDaysAgoDate ? `${sevenDaysAgoDate.toISOString().slice(0, 10)}T00:00:00-03:00` : `${todayIso}T00:00:00-03:00`;
+
+  const latestLogByFinanceiro = new Map<string, Record<string, unknown>>();
+  for (const log of safeLogs) {
+    const key = String(log.financeiro_id || '');
+    if (!key || latestLogByFinanceiro.has(key)) continue;
+    latestLogByFinanceiro.set(key, log as Record<string, unknown>);
+  }
+
+  const totalTitles = safeRecords.length;
+  const validPhones = safeRecords.filter((row) => validatePhone(normalizePhone(row.telefone))).length;
+  const boletoFound = safeRecords.filter((row) => {
+    const latest = latestLogByFinanceiro.get(String(row.id || ''));
+    return Boolean(latest?.arquivo_encontrado);
+  }).length;
+  const successfulSimulations = safeLogs.filter((row) => successStatuses.has(String(row.status_envio || ''))).length;
+  const errors = safeLogs.filter((row) => errorStatuses.has(String(row.status_envio || ''))).length;
+  const lastSimulation = safeLogs.find((row) => successStatuses.has(String(row.status_envio || '')));
+  const recentSimulation = lastSimulation
+    ? String(lastSimulation.data_hora || lastSimulation.created_at || '') >= sevenDaysAgoIso
+    : false;
+  const rateBase = successfulSimulations + errors;
+  const errorRate = rateBase > 0 ? (errors / rateBase) * 100 : 0;
+  const phonePercent = totalTitles > 0 ? (validPhones / totalTitles) * 100 : 0;
+  const boletoPercent = totalTitles > 0 ? (boletoFound / totalTitles) * 100 : 0;
+
+  const checklist = [
+    {
+      section: 'Configuracao',
+      item: 'Cobranca automatica ativa',
+      status: Boolean(config?.ativo),
+      detail: config?.ativo ? 'Configuracao ativa para a empresa.' : 'Ative a cobranca automatica para esta empresa.',
+      obrigatorio: true,
+    },
+    {
+      section: 'Configuracao',
+      item: 'Horario de execucao configurado',
+      status: Boolean(String(config?.hora_execucao || '').trim()),
+      detail: String(config?.hora_execucao || '').trim() || 'Horario nao configurado.',
+      obrigatorio: true,
+    },
+    {
+      section: 'Configuracao',
+      item: 'Template preventiva configurado',
+      status: Boolean(String(config?.template_preventiva || '').trim()),
+      detail: String(config?.template_preventiva || '').trim() ? 'Template preventiva configurado.' : 'Template preventiva ausente.',
+      obrigatorio: true,
+    },
+    {
+      section: 'Configuracao',
+      item: 'Template vencimento configurado',
+      status: Boolean(String(config?.template_vencimento || '').trim()),
+      detail: String(config?.template_vencimento || '').trim() ? 'Template vencimento configurado.' : 'Template vencimento ausente.',
+      obrigatorio: true,
+    },
+    {
+      section: 'Configuracao',
+      item: 'Template atraso configurado',
+      status: Boolean(String(config?.template_atraso || '').trim()),
+      detail: String(config?.template_atraso || '').trim() ? 'Template atraso configurado.' : 'Template atraso ausente.',
+      obrigatorio: true,
+    },
+    {
+      section: 'Dados',
+      item: 'Titulos monitorados maior que 0',
+      status: totalTitles > 0,
+      detail: `${totalTitles} titulo(s) monitorado(s).`,
+      obrigatorio: true,
+    },
+    {
+      section: 'Dados',
+      item: 'Telefones validos acima de 80%',
+      status: phonePercent >= 80,
+      detail: `${phonePercent.toFixed(1)}% com telefone valido.`,
+      obrigatorio: true,
+    },
+    {
+      section: 'Dados',
+      item: 'Boletos encontrados acima de 80%',
+      status: boletoPercent >= 80,
+      detail: `${boletoPercent.toFixed(1)}% com boleto encontrado.`,
+      obrigatorio: true,
+    },
+    {
+      section: 'Dados',
+      item: 'Inconsistencias criticas igual a 0',
+      status: criticalIssues.length === 0,
+      detail: `${criticalIssues.length} inconsistencia(s) critica(s).`,
+      obrigatorio: true,
+    },
+    {
+      section: 'Operacao',
+      item: 'Pelo menos 3 simulacoes com sucesso',
+      status: successfulSimulations >= 3,
+      detail: `${successfulSimulations} simulacao(oes) com sucesso.`,
+      obrigatorio: true,
+    },
+    {
+      section: 'Operacao',
+      item: 'Taxa de erro menor que 10%',
+      status: errorRate < 10,
+      detail: `${errorRate.toFixed(1)}% de taxa de erro.`,
+      obrigatorio: true,
+    },
+    {
+      section: 'Operacao',
+      item: 'Ultima simulacao ha menos de 7 dias',
+      status: recentSimulation,
+      detail: lastSimulation?.data_hora || lastSimulation?.created_at || 'Nenhuma simulacao recente.',
+      obrigatorio: true,
+    },
+    {
+      section: 'Integracao',
+      item: 'Z-API configurada',
+      status: false,
+      detail: 'Pendente / bloqueado. Z-API ainda nao configurada neste ambiente.',
+      obrigatorio: false,
+      blocked: true,
+    },
+    {
+      section: 'Integracao',
+      item: 'Token valido',
+      status: false,
+      detail: 'Pendente / bloqueado. Validacao de token depende da Z-API.',
+      obrigatorio: false,
+      blocked: true,
+    },
+    {
+      section: 'Integracao',
+      item: 'Instancia conectada',
+      status: false,
+      detail: 'Pendente / bloqueado. Conecte e valide a Z-API antes do envio real.',
+      obrigatorio: false,
+      blocked: true,
+    },
+  ];
+
+  const requiredItems = checklist.filter((item) => item.obrigatorio);
+  const passedRequired = requiredItems.filter((item) => item.status).length;
+  let statusGeral = 'nao_pronto';
+  if (requiredItems.length > 0 && passedRequired === requiredItems.length) {
+    statusGeral = 'pronto_para_ativar';
+  } else if (
+    totalTitles > 0 &&
+    criticalIssues.length === 0 &&
+    passedRequired >= Math.max(1, requiredItems.length - 2)
+  ) {
+    statusGeral = 'quase_pronto';
+  }
+
+  const recommendations = checklist
+    .filter((item) => !item.status)
+    .map((item) => `${item.section}: ${item.item} - ${item.detail}`);
+
+  return {
+    status_geral: statusGeral,
+    cards: {
+      status_geral: statusGeral,
+      titulos_monitorados: totalTitles,
+      telefones_validos: `${validPhones}/${totalTitles}`,
+      boletos_encontrados: `${boletoFound}/${totalTitles}`,
+      simulacoes_sucesso: successfulSimulations,
+      erros: errors,
+      inconsistencias_criticas: criticalIssues.length,
+      zapi: 'Pendente / bloqueado',
+    },
+    checklist,
+    recommendations,
+  };
+}
+
+async function simulateChargeBatchData(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  todayIso: string,
+  limit: number,
+) {
+  const config = await getBillingConfigForCompany(supabaseAdmin, companyId);
+  const driveConfig = await getSheetsDriveConfig(supabaseAdmin, companyId);
+  const folderId = requireDriveFolderId(driveConfig?.drive_root_folder_id);
+  const token = await getGoogleAccessToken();
+  await getDriveFolderInfo(token, folderId).catch((error) => {
+    const message = error instanceof Error ? error.message : 'Falha ao acessar a pasta do Google Drive.';
+    if (/File not found|insufficientFilePermissions|notFound|403|404/i.test(message)) {
+      throw new Error('A pasta nao esta acessivel. Compartilhe com a Service Account.');
+    }
+    throw error;
+  });
+
+  const companyName = await getCompanyName(supabaseAdmin, companyId);
+  const { data: records, error } = await supabaseAdmin
+    .from('registros_financeiros')
+    .select('id, company_id, user_id, representante_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, observacao, status, drive_file_id, preventiva_enviada, data_envio_preventiva, cobranca_vencimento_enviada, data_envio_vencimento, ultima_cobranca, tentativas_cobranca, created_at, updated_at')
+    .eq('company_id', companyId)
+    .in('status', ['pendente', 'aberto', 'vencido'])
+    .order('data_vencimento', { ascending: true })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+
+  let simulated = 0;
+  let errors = 0;
+  const items: Array<Record<string, unknown>> = [];
+
+  for (const record of records || []) {
+    const outcome = await processChargeForRecord(
+      supabaseAdmin,
+      record as FinancialRow,
+      config as BillingConfigRow | null,
+      token,
+      folderId,
+      todayIso,
+      true,
+      true,
+      companyName,
+    );
+
+    if (outcome.status === 'sucesso') simulated += 1;
+    if (outcome.status === 'erro') errors += 1;
+
+    items.push({
+      id: record.id,
+      nome: record.cliente_nome || record.nome || 'Cliente',
+      numero_boleto: record.numero_boleto || null,
+      status: outcome.status,
+      tipo: outcome.tipo || null,
+      arquivo_encontrado: Boolean(outcome.fileId),
+      motivo: outcome.reason || null,
+      simulated: Boolean(outcome.simulated),
+    });
+  }
+
+  return {
+    simulated,
+    errors,
+    items,
+    limit,
+  };
+}
+
 async function getBillingHistoryData(
   supabaseAdmin: AdminClient,
   companyId: string,
@@ -1655,7 +1926,7 @@ Deno.serve(async (req: Request) => {
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
     }
 
-    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template') {
+    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template') {
       requireCompanyId(companyId);
     }
 
@@ -1914,6 +2185,63 @@ Deno.serve(async (req: Request) => {
           ok: false,
           success: false,
           action: 'get_billing_inconsistencies',
+          error: String(error instanceof Error ? error.message : error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
+    }
+
+    if (action === 'get_real_send_checklist') {
+      try {
+        const checklist = await getRealSendChecklistData(admin, companyId || '', todayIso);
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'get_real_send_checklist',
+          status_geral: checklist.status_geral,
+          cards: checklist.cards,
+          checklist: checklist.checklist,
+          recommendations: checklist.recommendations,
+        }, 200);
+      } catch (error) {
+        console.error('get_real_send_checklist error', error);
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'get_real_send_checklist',
+          error: String(error instanceof Error ? error.message : error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
+    }
+
+    if (action === 'simulate_charge_batch') {
+      try {
+        const limit = Math.min(50, Math.max(1, Number(body?.limit || 10) || 10));
+        const result = await simulateChargeBatchData(admin, companyId || '', todayIso, limit);
+        await admin.from('audit_logs').insert({
+          company_id: companyId,
+          user_id: auth.userId,
+          action: 'billing_simulate_batch',
+          entity: 'logs_cobranca',
+          metadata: result,
+        }).then(() => {}).catch(() => {});
+
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'simulate_charge_batch',
+          simulated: result.simulated,
+          errors: result.errors,
+          items: result.items,
+          limit: result.limit,
+        }, 200);
+      } catch (error) {
+        console.error('simulate_charge_batch error', error);
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'simulate_charge_batch',
           error: String(error instanceof Error ? error.message : error),
           details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
