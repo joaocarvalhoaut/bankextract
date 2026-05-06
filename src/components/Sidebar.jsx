@@ -1,54 +1,64 @@
 import {
+  Activity,
   BarChart3,
   BadgeCheck,
   BriefcaseBusiness,
   Building2,
   Cog,
   CreditCard,
+  FileSearch,
   History,
   Link2,
   ListChecks,
   PanelLeftOpen,
-  Rocket,
   Settings2,
+  Shield,
   Sparkles,
   ShieldCheck,
+  SlidersHorizontal,
+  Target,
   Upload,
   WalletCards,
 } from 'lucide-react';
 import { formatCurrencyBRL } from '../utils/format';
 
 const items = [
-  { id: 'landing', label: 'Landing Page', icon: Rocket, group: 'marketing' },
-  { id: 'dashboard', label: 'Dashboard', icon: BarChart3, group: 'core' },
-  { id: 'onboarding', label: 'Onboarding', icon: ListChecks, group: 'core' },
-  { id: 'importacao', label: 'Importacao', icon: Upload, group: 'core' },
-  { id: 'visao-geral', label: 'Visao Geral', icon: WalletCards, group: 'core' },
-  { id: 'historico', label: 'Historico', icon: History, group: 'core' },
-  { id: 'cobrancas', label: 'Cobrancas', icon: Sparkles, group: 'core' },
-  { id: 'central-cobranca', label: 'Central de Cobranca', icon: Sparkles, group: 'core' },
-  { id: 'historico-cobranca', label: 'Historico de Cobrancas', icon: History, group: 'core' },
-  { id: 'inconsistencias', label: 'Inconsistencias', icon: ShieldCheck, group: 'core' },
-  { id: 'pronto-envio', label: 'Pronto para Envio', icon: BadgeCheck, group: 'core' },
-  { id: 'automacoes', label: 'Automacoes', icon: Settings2, group: 'ops' },
-  { id: 'integracoes', label: 'Integracoes', icon: Link2, group: 'ops' },
-  { id: 'configuracoes', label: 'Configuracoes', icon: Cog, group: 'ops' },
+  { id: 'dashboard', label: 'Dashboard', icon: BarChart3, group: 'operacao' },
+  { id: 'onboarding', label: 'Onboarding', icon: ListChecks, group: 'operacao' },
+  { id: 'importacao', label: 'Importacao', icon: Upload, group: 'operacao' },
+  { id: 'visao-geral', label: 'Visao Geral', icon: WalletCards, group: 'operacao' },
+  { id: 'historico', label: 'Historico', icon: History, group: 'operacao' },
+  { id: 'cobrancas', label: 'Cobranca Automatica', icon: Activity, group: 'cobranca' },
+  { id: 'central-cobranca', label: 'Central Operacional', icon: Target, group: 'cobranca' },
+  { id: 'historico-cobranca', label: 'Auditoria de Cobrancas', icon: History, group: 'cobranca' },
+  { id: 'inconsistencias', label: 'Auditoria de Dados', icon: FileSearch, group: 'cobranca' },
+  { id: 'pronto-envio', label: 'Checklist Pre-Envio', icon: BadgeCheck, group: 'cobranca' },
+  { id: 'automacoes', label: 'Automacoes', icon: SlidersHorizontal, group: 'configuracoes' },
+  { id: 'integracoes', label: 'Integracoes', icon: Link2, group: 'configuracoes' },
+  { id: 'configuracoes', label: 'Configuracoes', icon: Cog, group: 'configuracoes' },
   { id: 'status-sistema', label: 'Status do Sistema', icon: ShieldCheck, group: 'admin' },
   { id: 'planos', label: 'Planos', icon: BriefcaseBusiness, group: 'admin' },
   { id: 'billing', label: 'Billing', icon: CreditCard, group: 'admin' },
 ];
 
 const groupLabels = {
-  marketing: 'Marketing',
-  core: 'Operacao',
-  ops: 'Config',
+  operacao: 'Operacao',
+  cobranca: 'Cobranca',
+  configuracoes: 'Configuracoes',
   admin: 'Admin',
 };
 
-function NavGroup({ label, children }) {
+function NavGroup({ label, badge, children }) {
   return (
     <div className="mb-1">
-      <p className="mb-1 ml-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <div className="mb-1 ml-3 flex items-center gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
+        {badge ? (
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-emerald-700">
+            {badge}
+          </span>
+        ) : null}
+      </div>
       {children}
     </div>
   );
@@ -65,7 +75,7 @@ export default function Sidebar({
   isSystemAdmin = false,
   onOpenCompanyModal,
 }) {
-  const groups = ['marketing', 'core', 'ops', 'admin'];
+  const groups = ['operacao', 'cobranca', 'configuracoes', 'admin'];
 
   return (
     <aside className="w-full border-r border-slate-200 bg-white lg:min-h-screen lg:w-[286px] lg:px-3 lg:py-5">
@@ -77,12 +87,17 @@ export default function Sidebar({
                 <PanelLeftOpen size={18} className="text-white" />
               </div>
               <div>
-                <p className="text-sm font-bold tracking-tight text-slate-950">BankExtract</p>
-                <p className="text-[11px] leading-tight text-slate-500">SaaS financeiro premium</p>
+                <p className="text-sm font-bold tracking-tight text-slate-950">BankExtract Pro</p>
+                <p className="text-[11px] leading-tight text-slate-500">Gestao Financeira & Cobranca</p>
               </div>
               <div className="ml-auto flex h-5 items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 text-[10px] font-bold tracking-[0.18em] text-emerald-700">
                 B2B
               </div>
+            </div>
+
+            <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/90 px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] text-slate-600">
+              <Shield size={11} className="text-emerald-600" />
+              Simulacao ativa
             </div>
 
             <div className="glass mt-4 rounded-2xl p-3">
@@ -128,7 +143,7 @@ export default function Sidebar({
           {groups.map((group) => {
             const groupItems = items.filter((item) => item.group === group);
             return (
-              <NavGroup key={group} label={groupLabels[group]}>
+              <NavGroup key={group} label={groupLabels[group]} badge={group === 'cobranca' ? 'Simulacao' : null}>
                 {groupItems.map((item) => {
                   const Icon = item.icon;
                   const active = activeTab === item.id;
@@ -158,21 +173,21 @@ export default function Sidebar({
           </div>
           <div className="space-y-3 p-4">
             <div className="flex items-center justify-between">
-              <p className="text-xs text-slate-500">A vencer</p>
+              <p className="text-xs text-slate-500">Carteira ativa</p>
               <p className="text-sm font-bold text-slate-900">{formatCurrencyBRL(stats?.aVencer || 0)}</p>
             </div>
             <div className="h-px bg-slate-100" />
             <div className="flex items-center justify-between">
-              <p className="text-xs text-slate-500">Vencido</p>
+              <p className="text-xs text-slate-500">Em cobranca</p>
               <p className="text-sm font-bold text-red-600">{formatCurrencyBRL(stats?.vencidos || 0)}</p>
             </div>
             <div className="h-px bg-slate-100" />
             <div className="flex items-center justify-between">
-              <p className="text-xs text-slate-500">Sem telefone</p>
+              <p className="text-xs text-slate-500">Com inconsistencia</p>
               <p className="text-sm font-bold text-amber-600">{stats?.semTelefone || 0}</p>
             </div>
             <div className="rounded-xl bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-500">
-              Operacao protegida por company_id, batch_id e auditoria ativa.
+              Operacao protegida por company_id, batch_id e auditoria.
             </div>
           </div>
         </div>
