@@ -1,4 +1,6 @@
 import { ArrowRight, CheckCircle2, CircleDashed, Sparkles } from 'lucide-react';
+import PlanComparisonTable from '../components/plans/PlanComparisonTable';
+import { getAllPlans } from '../constants/plans';
 
 function ProgressRing({ pct = 0 }) {
   const r = 28;
@@ -75,6 +77,7 @@ export default function OnboardingScreen({ onboarding, companyName, onOpenStep }
   const completed = onboarding?.completed || 0;
   const total = onboarding?.total || 0;
   const nextStep = onboarding?.nextStep || null;
+  const plans = getAllPlans();
 
   return (
     <div className="space-y-6">
@@ -149,6 +152,8 @@ export default function OnboardingScreen({ onboarding, companyName, onOpenStep }
           </div>
         )}
       </section>
+
+      <PlanComparisonTable plans={plans} title="Starter, Pro e Business desde o primeiro acesso" />
 
     </div>
   );

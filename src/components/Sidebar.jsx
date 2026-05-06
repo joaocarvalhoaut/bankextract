@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import {
   Activity,
   BarChart3,
@@ -20,6 +21,8 @@ import {
   Upload,
   WalletCards,
 } from 'lucide-react';
+import { getPlanMeta, getUpgradeRecommendation, normalizePlanId } from '../constants/plans';
+import { getUsageSummary } from '../services/billingAutomationService';
 import { formatCurrencyBRL } from '../utils/format';
 
 const items = [
@@ -76,6 +79,43 @@ export default function Sidebar({
   onOpenCompanyModal,
 }) {
   const groups = ['operacao', 'cobranca', 'configuracoes', 'admin'];
+  const [usageSummary, setUsageSummary] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+
+    const loadUsage = async () => {
+      if (!activeCompanyId || activeCompany?.isGlobal) {
+        if (alive) setUsageSummary(null);
+        return;
+      }
+
+      try {
+        const data = await getUsageSummary(activeCompanyId);
+        if (alive) setUsageSummary(data);
+      } catch {
+        if (alive) setUsageSummary(null);
+      }
+    };
+
+    loadUsage();
+    return () => {
+      alive = false;
+    };
+  }, [activeCompanyId, activeCompany?.isGlobal]);
+
+  const usagePercent = Number(usageSummary?.usage_percent || 0);
+  const planId = normalizePlanId(usageSummary?.plan);
+  const planMeta = getPlanMeta(planId);
+  const usedRealSends = Number(usageSummary?.used_real_sends || 0);
+  const monthlyLimit = Number(usageSummary?.monthly_send_limit || 0);
+  const limitReached = Boolean(usageSummary?.blocked_by_limit);
+  const highUsage = !limitReached && usagePercent >= 80;
+  const upgrade = getUpgradeRecommendation(planId, {
+    monthly_send_limit: monthlyLimit,
+    extra_send_credits: Number(usageSummary?.extra_send_credits || 0),
+    used_real_sends: usedRealSends,
+  });
 
   return (
     <aside className="w-full border-r border-slate-200 bg-white lg:min-h-screen lg:w-[286px] lg:px-3 lg:py-5">
@@ -136,6 +176,29 @@ export default function Sidebar({
                 </button>
               ) : null}
             </div>
+
+            {!activeCompany?.isGlobal && activeCompanyId ? (
+              <div
+                className="mt-3 rounded-2xl border border-slate-200 bg-white/92 p-3 shadow-soft"
+                title={upgrade?.target ? `Upgrade recomendado: ${upgrade.target.name} - ${upgrade.reason}` : ''}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Plano atual</p>
+                    <p className="mt-1 text-sm font-bold text-slate-950">{planMeta.name}</p>
+                  </div>
+                  <div className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
+                    Envios: {usedRealSends}/{monthlyLimit || 0}
+                  </div>
+                </div>
+                {highUsage ? (
+                  <p className="mt-2 text-[11px] font-medium text-amber-700">Uso alto do plano</p>
+                ) : null}
+                {limitReached ? (
+                  <p className="mt-2 text-[11px] font-medium text-red-700">Limite atingido</p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
 

@@ -211,6 +211,38 @@ export async function getBillingInconsistencies(companyId, filters = {}) {
   );
 }
 
+export async function getPlanCapabilities(companyId) {
+  return invokeBillingAutomation(
+    {
+      action: 'get_plan_capabilities',
+      company_id: companyId,
+    },
+    'Falha ao carregar as capacidades do plano.'
+  );
+}
+
+export async function getUsageSummary(companyId) {
+  return invokeBillingAutomation(
+    {
+      action: 'get_usage_summary',
+      company_id: companyId,
+    },
+    'Falha ao carregar o resumo de uso do plano.'
+  );
+}
+
+export async function checkSendPermission(companyId, sendType, quantity = 1) {
+  return invokeBillingAutomation(
+    {
+      action: 'check_send_permission',
+      company_id: companyId,
+      send_type: sendType,
+      quantity,
+    },
+    'Falha ao validar a permissao de envio.'
+  );
+}
+
 export async function getRealSendChecklist(companyId) {
   return invokeBillingAutomation(
     {

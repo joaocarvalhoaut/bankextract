@@ -338,6 +338,22 @@ export default function CentralCobrancaScreen({
             {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCcw size={15} />}
             Atualizar central
           </button>
+          <button
+            type="button"
+            onClick={() => onToast?.('aviso', 'Envio real bloqueado ate configurar Z-API.')}
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-soft transition hover:bg-slate-100"
+          >
+            <Send size={15} />
+            Enviar agora - Em breve
+          </button>
+          <button
+            type="button"
+            onClick={() => onToast?.('aviso', 'Envio real em lote bloqueado ate configurar Z-API.')}
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-soft transition hover:bg-slate-100"
+          >
+            <Send size={15} />
+            Enviar selecionados - Em breve
+          </button>
         </div>
       </section>
 

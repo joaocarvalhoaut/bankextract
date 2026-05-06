@@ -1592,3 +1592,120 @@ to authenticated
 using (
   public.user_can_delete_company(empresa_id)
 );
+
+alter table public.empresas
+  add column if not exists subscription_plan text not null default 'starter';
+
+alter table public.empresas
+  add column if not exists subscription_status text not null default 'active';
+
+alter table public.empresas
+  add column if not exists monthly_send_limit integer not null default 200;
+
+alter table public.empresas
+  add column if not exists extra_send_credits integer not null default 0;
+
+alter table public.empresas
+  add column if not exists billing_cycle_start date not null default current_date;
+
+alter table public.empresas
+  add column if not exists billing_cycle_end date;
+
+alter table public.empresas
+  add column if not exists automatic_send_enabled boolean not null default false;
+
+create table if not exists public.usage_counters (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.empresas(id) on delete cascade,
+  period_start date not null,
+  period_end date not null,
+  real_sends_count integer not null default 0,
+  simulated_sends_count integer not null default 0,
+  manual_sends_count integer not null default 0,
+  automatic_sends_count integer not null default 0,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  unique (company_id, period_start, period_end)
+);
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conname = 'empresas_subscription_plan_check'
+      and conrelid = 'public.empresas'::regclass
+  ) then
+    alter table public.empresas
+      drop constraint empresas_subscription_plan_check;
+  end if;
+end;
+$$;
+
+alter table public.empresas
+  add constraint empresas_subscription_plan_check
+  check (subscription_plan in ('starter', 'pro', 'business'));
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conname = 'empresas_subscription_status_check'
+      and conrelid = 'public.empresas'::regclass
+  ) then
+    alter table public.empresas
+      drop constraint empresas_subscription_status_check;
+  end if;
+end;
+$$;
+
+alter table public.empresas
+  add constraint empresas_subscription_status_check
+  check (subscription_status in ('active', 'trialing', 'past_due', 'canceled'));
+
+create index if not exists idx_empresas_subscription_plan on public.empresas(subscription_plan);
+create index if not exists idx_empresas_subscription_status on public.empresas(subscription_status);
+create index if not exists idx_usage_counters_company_period on public.usage_counters(company_id, period_start, period_end);
+
+alter table public.usage_counters enable row level security;
+
+drop policy if exists "usage_counters_select_access" on public.usage_counters;
+drop policy if exists "usage_counters_insert_access" on public.usage_counters;
+drop policy if exists "usage_counters_update_access" on public.usage_counters;
+drop policy if exists "usage_counters_delete_access" on public.usage_counters;
+
+create policy "usage_counters_select_access"
+on public.usage_counters
+for select
+to authenticated
+using (
+  public.user_has_company_access(company_id)
+);
+
+create policy "usage_counters_insert_access"
+on public.usage_counters
+for insert
+to authenticated
+with check (
+  public.user_can_write_company(company_id)
+);
+
+create policy "usage_counters_update_access"
+on public.usage_counters
+for update
+to authenticated
+using (
+  public.user_can_write_company(company_id)
+)
+with check (
+  public.user_can_write_company(company_id)
+);
+
+create policy "usage_counters_delete_access"
+on public.usage_counters
+for delete
+to authenticated
+using (
+  public.user_can_delete_company(company_id)
+);

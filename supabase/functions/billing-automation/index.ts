@@ -1475,6 +1475,7 @@ async function getRealSendChecklistData(
   todayIso: string,
 ) {
   const config = await getBillingConfigForCompany(supabaseAdmin, companyId);
+  const planData = await getPlanCapabilitiesData(supabaseAdmin, companyId, todayIso);
   const { data: records, error: recordsError } = await supabaseAdmin
     .from('registros_financeiros')
     .select('id, company_id, nome, numero_boleto, data_vencimento, valor, telefone, status, created_at')
@@ -1636,6 +1637,42 @@ async function getRealSendChecklistData(
       obrigatorio: false,
       blocked: true,
     },
+    {
+      section: 'Comercial / Plano',
+      item: 'Plano atual',
+      status: true,
+      detail: `Plano ${planData.plan.toUpperCase()} com status ${planData.status}.`,
+      obrigatorio: false,
+    },
+    {
+      section: 'Comercial / Plano',
+      item: 'Envios reais usados',
+      status: !planData.limits.used_real_sends || planData.limits.remaining_real_sends > 0,
+      detail: `${planData.limits.used_real_sends}/${planData.limits.monthly_send_limit} usados. Creditos extras: ${planData.limits.extra_send_credits}.`,
+      obrigatorio: false,
+    },
+    {
+      section: 'Comercial / Plano',
+      item: 'Envio manual',
+      status: Boolean(planData.capabilities.manual_send),
+      detail: planData.capabilities.manual_send ? 'Liberado no plano atual.' : 'Bloqueado no plano atual.',
+      obrigatorio: false,
+    },
+    {
+      section: 'Comercial / Plano',
+      item: 'Envio em lote',
+      status: Boolean(planData.capabilities.batch_manual_send),
+      detail: planData.capabilities.batch_manual_send ? 'Liberado no plano atual.' : 'Bloqueado no plano atual.',
+      obrigatorio: false,
+    },
+    {
+      section: 'Comercial / Plano',
+      item: 'Envio automatico',
+      status: Boolean(planData.capabilities.automatic_send),
+      detail: planData.capabilities.automatic_send ? 'Liberado no plano atual.' : 'Bloqueado - upgrade para Pro.',
+      obrigatorio: false,
+      blocked: !planData.capabilities.automatic_send,
+    },
   ];
 
   const requiredItems = checklist.filter((item) => item.obrigatorio);
@@ -1666,9 +1703,266 @@ async function getRealSendChecklistData(
       erros: errors,
       inconsistencias_criticas: criticalIssues.length,
       zapi: 'Pendente / bloqueado',
+      plano_atual: planData.plan,
+      envios_reais_usados: `${planData.limits.used_real_sends}/${planData.limits.monthly_send_limit}`,
     },
     checklist,
     recommendations,
+    commercial: planData,
+  };
+}
+
+const PLAN_LIMITS: Record<string, number> = {
+  starter: 200,
+  pro: 2000,
+  business: 10000,
+};
+
+function normalizeSubscriptionPlan(value: string | null | undefined) {
+  const normalized = normalizeText(value);
+  if (normalized === 'pro') return 'pro';
+  if (normalized === 'business') return 'business';
+  return 'starter';
+}
+
+function normalizeSubscriptionStatus(value: string | null | undefined) {
+  const normalized = normalizeText(value);
+  if (normalized === 'trialing') return 'trialing';
+  if (normalized === 'past_due') return 'past_due';
+  if (normalized === 'canceled') return 'canceled';
+  return 'active';
+}
+
+function getPlanCapabilitiesMap(plan: string) {
+  if (plan === 'business') {
+    return {
+      manual_send: true,
+      batch_manual_send: true,
+      automatic_send: true,
+      multi_company: true,
+      approval_flow: true,
+      advanced_reports: true,
+    };
+  }
+
+  if (plan === 'pro') {
+    return {
+      manual_send: true,
+      batch_manual_send: true,
+      automatic_send: true,
+      multi_company: false,
+      approval_flow: false,
+      advanced_reports: true,
+    };
+  }
+
+  return {
+    manual_send: true,
+    batch_manual_send: true,
+    automatic_send: false,
+    multi_company: false,
+    approval_flow: false,
+    advanced_reports: false,
+  };
+}
+
+async function getCompanyCommercialConfig(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from('empresas')
+    .select('id, subscription_plan, subscription_status, monthly_send_limit, extra_send_credits, billing_cycle_start, billing_cycle_end, automatic_send_enabled')
+    .eq('id', companyId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+
+  const plan = normalizeSubscriptionPlan(data?.subscription_plan);
+  const status = normalizeSubscriptionStatus(data?.subscription_status);
+  const planLimit = PLAN_LIMITS[plan] || PLAN_LIMITS.starter;
+  const configuredLimit = Number(data?.monthly_send_limit || 0);
+  const monthlyLimit = configuredLimit > 0 ? configuredLimit : planLimit;
+
+  return {
+    id: companyId,
+    plan,
+    status,
+    monthly_send_limit: monthlyLimit,
+    extra_send_credits: Number(data?.extra_send_credits || 0),
+    billing_cycle_start: String(data?.billing_cycle_start || todayInSaoPaulo()),
+    billing_cycle_end: data?.billing_cycle_end ? String(data.billing_cycle_end) : null,
+    automatic_send_enabled: Boolean(data?.automatic_send_enabled),
+  };
+}
+
+function resolveUsageCycle(commercial: {
+  billing_cycle_start: string;
+  billing_cycle_end: string | null;
+}) {
+  const periodStart = commercial.billing_cycle_start || todayInSaoPaulo();
+  const startDate = parseDate(periodStart) || parseDate(todayInSaoPaulo()) || new Date();
+  const endDate = commercial.billing_cycle_end
+    ? parseDate(commercial.billing_cycle_end)
+    : new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + 1, startDate.getUTCDate() - 1));
+
+  return {
+    periodStart,
+    periodEnd: (endDate || startDate).toISOString().slice(0, 10),
+  };
+}
+
+async function getUsageSummaryData(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  todayIso: string,
+) {
+  const commercial = await getCompanyCommercialConfig(supabaseAdmin, companyId);
+  const { periodStart, periodEnd } = resolveUsageCycle(commercial);
+
+  const { data: usageRow, error: usageError } = await supabaseAdmin
+    .from('usage_counters')
+    .select('real_sends_count, simulated_sends_count, manual_sends_count, automatic_sends_count')
+    .eq('company_id', companyId)
+    .eq('period_start', periodStart)
+    .eq('period_end', periodEnd)
+    .maybeSingle();
+
+  if (usageError) throw new Error(usageError.message);
+
+  const periodStartIso = `${periodStart}T00:00:00-03:00`;
+  const periodEndIso = `${periodEnd}T23:59:59-03:00`;
+  const { data: logs, error: logsError } = await supabaseAdmin
+    .from('logs_cobranca')
+    .select('status_envio, data_hora, created_at')
+    .eq('company_id', companyId)
+    .gte('data_hora', periodStartIso)
+    .lte('data_hora', periodEndIso);
+
+  if (logsError) throw new Error(logsError.message);
+
+  const simulatedStatuses = new Set(['sucesso_simulado', 'simulado']);
+  const simulationCount = (logs || []).filter((row) => simulatedStatuses.has(String(row.status_envio || ''))).length;
+  const usedRealSends = Number(usageRow?.real_sends_count || 0);
+  const extraCredits = Number(commercial.extra_send_credits || 0);
+  const totalLimit = Number(commercial.monthly_send_limit || 0) + extraCredits;
+  const remainingRealSends = Math.max(0, totalLimit - usedRealSends);
+  const usagePercent = totalLimit > 0 ? Math.min(100, (usedRealSends / totalLimit) * 100) : 0;
+
+  return {
+    plan: commercial.plan,
+    status: commercial.status,
+    monthly_send_limit: Number(commercial.monthly_send_limit || 0),
+    extra_send_credits: extraCredits,
+    used_real_sends: usedRealSends,
+    remaining_real_sends: remainingRealSends,
+    simulated_sends_count: Number(usageRow?.simulated_sends_count || 0) || simulationCount,
+    manual_sends_count: Number(usageRow?.manual_sends_count || 0),
+    automatic_sends_count: Number(usageRow?.automatic_sends_count || 0),
+    usage_percent: usagePercent,
+    blocked_by_limit: usedRealSends >= totalLimit && totalLimit > 0,
+    period_start: periodStart,
+    period_end: periodEnd,
+    automatic_send_enabled: commercial.automatic_send_enabled,
+  };
+}
+
+async function getPlanCapabilitiesData(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  todayIso: string,
+) {
+  const usage = await getUsageSummaryData(supabaseAdmin, companyId, todayIso);
+  const capabilities = getPlanCapabilitiesMap(usage.plan);
+
+  let upgradeRecommendation = null;
+  if (usage.plan === 'starter') {
+    upgradeRecommendation = 'Fazer upgrade para Pro';
+  } else if (usage.plan === 'pro' && usage.usage_percent >= 80) {
+    upgradeRecommendation = 'Avaliar upgrade para Business';
+  }
+
+  return {
+    plan: usage.plan,
+    status: usage.status,
+    capabilities,
+    limits: {
+      monthly_send_limit: usage.monthly_send_limit,
+      extra_send_credits: usage.extra_send_credits,
+      used_real_sends: usage.used_real_sends,
+      remaining_real_sends: usage.remaining_real_sends,
+    },
+    upgrade_recommendation: upgradeRecommendation,
+  };
+}
+
+async function checkSendPermissionData(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  sendType: string,
+  quantity: number,
+  todayIso: string,
+) {
+  const planData = await getPlanCapabilitiesData(supabaseAdmin, companyId, todayIso);
+  const usage = await getUsageSummaryData(supabaseAdmin, companyId, todayIso);
+  const nextQuantity = Math.max(1, Number(quantity || 1));
+
+  if (!['active', 'trialing'].includes(planData.status)) {
+    return {
+      ok: true,
+      allowed: false,
+      reason: 'SUBSCRIPTION_INACTIVE',
+      message: 'A assinatura da empresa nao esta ativa para novos envios reais.',
+      upgrade_cta: 'Regularizar assinatura',
+    };
+  }
+
+  if (sendType === 'automatic' && !planData.capabilities.automatic_send) {
+    return {
+      ok: true,
+      allowed: false,
+      reason: 'PLAN_RESTRICTED',
+      message: 'Seu plano atual nao libera automacao programada de envios reais.',
+      upgrade_cta: 'Fazer upgrade para Pro',
+    };
+  }
+
+  if (sendType === 'batch_manual' && !planData.capabilities.batch_manual_send) {
+    return {
+      ok: true,
+      allowed: false,
+      reason: 'PLAN_RESTRICTED',
+      message: 'Seu plano atual nao libera envio em lote manual.',
+      upgrade_cta: 'Escolher plano com envio em lote',
+    };
+  }
+
+  if (sendType === 'manual' && !planData.capabilities.manual_send) {
+    return {
+      ok: true,
+      allowed: false,
+      reason: 'PLAN_RESTRICTED',
+      message: 'Seu plano atual nao libera envio manual real.',
+      upgrade_cta: 'Escolher plano com envio manual',
+    };
+  }
+
+  if (usage.used_real_sends + nextQuantity > usage.monthly_send_limit + usage.extra_send_credits) {
+    return {
+      ok: true,
+      allowed: false,
+      reason: 'LIMIT_REACHED',
+      message: 'O limite mensal de envios reais deste plano foi atingido.',
+      upgrade_cta: usage.plan === 'starter' ? 'Fazer upgrade para Pro' : 'Falar com comercial',
+    };
+  }
+
+  return {
+    ok: true,
+    allowed: true,
+    reason: null,
+    message: null,
+    upgrade_cta: null,
   };
 }
 
@@ -1926,7 +2220,7 @@ Deno.serve(async (req: Request) => {
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
     }
 
-    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template') {
+    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission') {
       requireCompanyId(companyId);
     }
 
@@ -2209,6 +2503,70 @@ Deno.serve(async (req: Request) => {
           ok: false,
           success: false,
           action: 'get_real_send_checklist',
+          error: String(error instanceof Error ? error.message : error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
+    }
+
+    if (action === 'get_plan_capabilities') {
+      try {
+        const planData = await getPlanCapabilitiesData(admin, companyId || '', todayIso);
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'get_plan_capabilities',
+          company_id: companyId,
+          ...planData,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'get_plan_capabilities',
+          error: String(error instanceof Error ? error.message : error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
+    }
+
+    if (action === 'get_usage_summary') {
+      try {
+        const usage = await getUsageSummaryData(admin, companyId || '', todayIso);
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'get_usage_summary',
+          company_id: companyId,
+          ...usage,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'get_usage_summary',
+          error: String(error instanceof Error ? error.message : error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
+    }
+
+    if (action === 'check_send_permission') {
+      try {
+        const sendType = String(body?.send_type || 'manual');
+        const quantity = Number(body?.quantity || 1) || 1;
+        const permission = await checkSendPermissionData(admin, companyId || '', sendType, quantity, todayIso);
+        return jsonResponse({
+          success: true,
+          action: 'check_send_permission',
+          company_id: companyId,
+          ...permission,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'check_send_permission',
           error: String(error instanceof Error ? error.message : error),
           details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);

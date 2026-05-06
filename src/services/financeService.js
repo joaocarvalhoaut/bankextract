@@ -6,6 +6,7 @@ import {
   supabase
 } from './supabaseClient';
 import { GLOBAL_COMPANY_ID } from './companyService';
+import { buildPlanCatalogForUi, getPlanMeta, normalizePlanId } from '../constants/plans';
 
 const mockUserId = 'user_demo_1';
 const mockDefaultCompanyId = 'emp1';

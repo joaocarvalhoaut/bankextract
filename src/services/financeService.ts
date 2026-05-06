@@ -2,6 +2,7 @@ import { financeService as legacyFinanceService, tenantContext } from './finance
 import { GLOBAL_COMPANY_ID } from './companyService.js';
 import { supabase, hasSupabaseConfig } from './supabaseClient.js';
 import { canUserPerformAction } from '../security/permissions';
+import { buildPlanCatalogForUi, getPlanMeta, normalizePlanId } from '../constants/plans.js';
 import {
   defaultWhatsAppAutoConfig,
   getWhatsAppAutoConfig,
@@ -448,7 +449,7 @@ const inferChecklistStatus = (condition, pendingDetail, readyDetail, attentionDe
 };
 
 const resolvePlanTier = (companyCount = 1, importedRows = 0) => {
-  if (companyCount > 5 || importedRows > 5000) return 'enterprise';
+  if (companyCount > 5 || importedRows > 5000) return 'business';
   if (companyCount > 1 || importedRows > 500) return 'pro';
   return 'starter';
 };
@@ -877,7 +878,7 @@ export const financeService = {
   },
 
   async getPlansCatalog() {
-    return getPlanCatalog();
+      return buildPlanCatalogForUi();
   },
 
   async getBillingOverview(companyId = runtimeContext.companyId, overrides = {}) {
@@ -885,8 +886,7 @@ export const financeService = {
     const companies = runtimeContext.companies || [];
     const importedRowsThisMonth = dataset.history.reduce((sum, item) => sum + Number(item.quantidade_registros || 0), 0);
     const planId = resolvePlanTier(companies.length || 1, importedRowsThisMonth);
-    const plans = getPlanCatalog();
-    const currentPlan = plans.find((plan) => plan.id === planId) || plans[0];
+      const currentPlan = getPlanMeta(normalizePlanId(planId));
 
     return {
       currentPlan,
@@ -897,13 +897,13 @@ export const financeService = {
         importedRowsThisMonth,
         records: dataset.records.length,
       },
-      limits: {
-        starter: { companies: 1, records: 500 },
-        pro: { companies: 5, records: 5000 },
-        enterprise: { companies: 'Ilimitado', records: 'Alto volume' },
-      },
-      supportLabel: planId === 'enterprise' ? 'Falar com time Enterprise' : 'Falar com suporte',
-    };
+        limits: {
+          starter: { companies: 1, records: 500 },
+          pro: { companies: 5, records: 5000 },
+          business: { companies: 'Ilimitado', records: 'Alto volume' },
+        },
+        supportLabel: planId === 'business' ? 'Falar com time Business' : 'Falar com suporte',
+      };
   },
 
   async getCharges(companyId = runtimeContext.companyId, overrides = {}) {
