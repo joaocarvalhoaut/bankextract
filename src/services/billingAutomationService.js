@@ -139,6 +139,17 @@ export async function previewChargePayload(companyId, registroId) {
   );
 }
 
+export async function prepareManualCharge(companyId, registroId) {
+  return invokeBillingAutomation(
+    {
+      action: 'prepare_manual_charge',
+      company_id: companyId,
+      registro_id: registroId,
+    },
+    'Falha ao preparar o envio manual assistido.'
+  );
+}
+
 export async function syncBillingSheet(companyId) {
   return invokeBillingAutomation(
     {

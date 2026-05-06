@@ -211,6 +211,28 @@ function normalizeDriveName(value: string | null | undefined) {
     .toUpperCase();
 }
 
+function normalizeBoletoNumber(value: string | null | undefined) {
+  return String(value || '')
+    .replace(/\.pdf$/i, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[.\s/_-]+/g, '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toUpperCase()
+    .trim();
+}
+
+function normalizeName(value: string | null | undefined) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/\b(LTDA|ME|EPP|EIRELI|SA|S\/A)\b/g, ' ')
+    .replace(/[^A-Z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function normalizeDigits(value: string | null | undefined) {
   return String(value || '').replace(/\D/g, '');
 }
@@ -297,11 +319,13 @@ function extractDocumento(text: string) {
 }
 
 function extractBoletoNumberFromName(name: string) {
+  const normalized = normalizeBoletoNumber(name);
+  if (normalized) return normalized;
   const base = String(name || '').replace(/\.pdf$/i, '');
   const tokens = base.split(/[_\s]+/).map((item) => item.trim()).filter(Boolean);
   for (const token of tokens.reverse()) {
     if (/^\d{2,}[-/A-Z0-9]*$/i.test(token)) {
-      return token;
+      return normalizeBoletoNumber(token);
     }
   }
   return null;
@@ -330,8 +354,8 @@ function compareIsoDates(a: string | null | undefined, b: string | null | undefi
 }
 
 function nameSimilarityScore(a: string | null | undefined, b: string | null | undefined) {
-  const left = normalizeText(a);
-  const right = normalizeText(b);
+  const left = normalizeName(a);
+  const right = normalizeName(b);
   if (!left || !right) return 0;
   if (left === right) return 1;
   if (left.includes(right) || right.includes(left)) return 0.85;
@@ -1084,44 +1108,60 @@ async function extractBoletoDataFromDriveFile(token: string, file: DriveCandidat
 function scoreFinancialMatch(pdfData: ExtractedBoletoData, record: FinancialRow): MatchCandidate {
   let score = 0;
   const reasons: string[] = [];
-  const pdfTokens = [
+  const pdfBoletoTokens = [
     pdfData.numero_boleto,
     pdfData.documento,
     pdfData.numero_nf,
     pdfData.nosso_numero,
+    pdfData.pdf_nome,
   ]
-    .map((item) => normalizeDocumentoToken(item))
+    .map((item) => normalizeBoletoNumber(item))
     .filter(Boolean);
-  const recordTokens = [
+  const recordBoletoTokens = [
     record.numero_boleto,
     record.documento,
     record.numero_nf,
   ]
-    .map((item) => normalizeDocumentoToken(item))
+    .map((item) => normalizeBoletoNumber(item))
     .filter(Boolean);
 
-  if (pdfTokens.length && recordTokens.length && pdfTokens.some((token) => recordTokens.includes(token))) {
-    score += 50;
-    reasons.push('documento');
+  const exactBoletoMatch = pdfBoletoTokens.length > 0 && recordBoletoTokens.length > 0 && pdfBoletoTokens.some((token) => recordBoletoTokens.includes(token));
+  if (exactBoletoMatch) {
+    score += 60;
+    if (normalizeBoletoNumber(pdfData.pdf_nome) && recordBoletoTokens.includes(normalizeBoletoNumber(pdfData.pdf_nome))) {
+      reasons.push('exact_boleto_filename');
+    } else if (normalizeBoletoNumber(pdfData.numero_boleto) && recordBoletoTokens.includes(normalizeBoletoNumber(pdfData.numero_boleto))) {
+      reasons.push('exact_boleto_text');
+    } else {
+      reasons.push('exact_document_match');
+    }
   }
 
-  if (compareNumbers(pdfData.valor, record.valor, 0.05)) {
+  const valueMatch = compareNumbers(pdfData.valor, record.valor, 0.05);
+  if (valueMatch) {
     score += 20;
-    reasons.push('valor');
+    reasons.push('boleto_value_match');
   }
 
-  if (compareIsoDates(pdfData.vencimento, record.data_vencimento)) {
-    score += 20;
-    reasons.push('vencimento');
+  const dueDateMatch = compareIsoDates(pdfData.vencimento, record.data_vencimento);
+  if (dueDateMatch) {
+    score += 10;
+    reasons.push('due_date_match');
   }
 
   const similarity = nameSimilarityScore(pdfData.nome_cliente, record.cliente_nome || record.nome);
   if (similarity >= 0.55) {
     score += 10;
-    reasons.push('nome');
+    reasons.push('fuzzy_name_match');
   }
 
-  return { record, score, reasons };
+  if (exactBoletoMatch && valueMatch) {
+    score = Math.max(score, 85);
+  } else if (exactBoletoMatch) {
+    score = Math.max(score, 70);
+  }
+
+  return { record, score: Math.min(100, score), reasons };
 }
 
 function shouldUpdateBoletoMatch(record: FinancialRow, nextConfidence: number) {
@@ -1217,24 +1257,39 @@ async function syncBoletoDriveIntelligentForCompany(
       let confidence = Number(best?.score || 0);
       let matchedRecord: FinancialRow | null = null;
       let errorMessage: string | null = null;
+      let strategy = 'low_confidence';
 
       if (best && best.score >= 80 && second && second.score >= 80 && Math.abs(best.score - second.score) <= 5) {
         status = 'conflito';
         confidence = Number(best.score);
         matchedRecord = best.record;
         errorMessage = 'Mais de um registro financeiro apresentou score alto semelhante.';
+        strategy = 'conflict_high_score';
       } else if (best && best.score >= 80) {
         status = 'encontrado';
         matchedRecord = best.record;
+        strategy = best.reasons[0] || 'exact_boleto_text';
       } else if (best && best.score >= 50) {
         status = 'baixa_confianca';
         matchedRecord = best.record;
+        strategy = `low_confidence${best.reasons[0] ? `|${best.reasons[0]}` : ''}`;
+      } else {
+        strategy = 'no_match';
       }
 
       if (matchedRecord) {
-        const strategy = [pdfData.match_strategy, ...(best?.reasons || [])].join('|');
-        await upsertBoletoMatchResult(supabaseAdmin, companyId, matchedRecord, pdfData, status, confidence, strategy, errorMessage);
+        const combinedStrategy = [strategy, pdfData.match_strategy, ...(best?.reasons || [])].filter(Boolean).join('|');
+        await upsertBoletoMatchResult(supabaseAdmin, companyId, matchedRecord, pdfData, status, confidence, combinedStrategy, errorMessage);
       }
+
+      console.log('boleto_match_debug', {
+        pdf_nome: pdfData.pdf_nome,
+        numero_extraido: pdfData.numero_boleto,
+        numero_registro: matchedRecord?.numero_boleto || best?.record?.numero_boleto || null,
+        score_final: confidence,
+        estrategia: strategy,
+        status,
+      });
 
       if (status === 'encontrado') summary.vinculados += 1;
       else if (status === 'baixa_confianca') summary.baixa_confianca += 1;
@@ -1252,6 +1307,7 @@ async function syncBoletoDriveIntelligentForCompany(
         vencimento: pdfData.vencimento,
         confidence,
         status,
+        strategy,
         erro: errorMessage,
       });
     } catch (error) {
@@ -1365,6 +1421,50 @@ async function buildChargePayloadPreview(
       boleto_pdf_nome: record.boleto_pdf_nome || null,
       boleto_status: buildBoletoStatus(record.boleto_status),
     },
+  };
+}
+
+async function prepareManualChargeData(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  registroId: string,
+) {
+  const preview = await buildChargePayloadPreview(supabaseAdmin, companyId, registroId);
+  const { data: record, error } = await supabaseAdmin
+    .from('registros_financeiros')
+    .select('id, company_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento')
+    .eq('id', registroId)
+    .eq('company_id', companyId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!record) throw new Error('Registro financeiro nao encontrado.');
+
+  await insertLog(supabaseAdmin, {
+    financeiro_id: record.id,
+    company_id: companyId,
+    data_hora: new Date().toISOString(),
+    cliente_nome: record.cliente_nome || record.nome || 'Cliente',
+    cliente_numero: record.cliente_numero || null,
+    telefone: record.telefone || null,
+    documento: record.documento || null,
+    numero_boleto: record.numero_boleto || null,
+    numero_nf: record.numero_nf || null,
+    valor: Number(record.valor || 0),
+    vencimento: record.data_vencimento || null,
+    tipo_cobranca: 'manual_assistido',
+    dias_atraso: 0,
+    arquivo_encontrado: Boolean(preview.payload?.drive_file_id || preview.payload?.boleto_url !== 'nao localizado'),
+    drive_file_id: preview.payload?.drive_file_id || null,
+    status_envio: 'preparado_manual',
+    erro: null,
+    payload: preview.payload,
+  });
+
+  return {
+    message: preview.message,
+    payload: preview.payload,
+    warning: 'Envio real nao realizado. Copie a mensagem e envie manualmente pelo WhatsApp.',
   };
 }
 
@@ -2754,7 +2854,7 @@ Deno.serve(async (req: Request) => {
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
     }
 
-    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission' || action === 'get_boleto_sync_report' || action === 'preview_charge_payload') {
+    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission' || action === 'get_boleto_sync_report' || action === 'preview_charge_payload' || action === 'prepare_manual_charge') {
       requireCompanyId(companyId);
     }
 
@@ -3006,6 +3106,39 @@ Deno.serve(async (req: Request) => {
           ok: false,
           success: false,
           action: 'preview_charge_payload',
+          error: String(error instanceof Error ? error.message : error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
+    }
+
+    if (action === 'prepare_manual_charge') {
+      try {
+        const registroId = String(body?.registro_id || '').trim();
+        if (!registroId) {
+          return jsonResponse({
+            ok: false,
+            success: false,
+            action: 'prepare_manual_charge',
+            error: 'registro_id e obrigatorio.',
+          }, 200);
+        }
+
+        const prepared = await prepareManualChargeData(admin, companyId || '', registroId);
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'prepare_manual_charge',
+          message: 'Envio manual assistido preparado com sucesso.',
+          payload: prepared.payload,
+          warning: prepared.warning,
+          manual_message: prepared.message,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'prepare_manual_charge',
           error: String(error instanceof Error ? error.message : error),
           details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);

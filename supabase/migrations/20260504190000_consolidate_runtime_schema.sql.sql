@@ -545,7 +545,7 @@ $$;
 
 alter table public.logs_cobranca
   add constraint logs_cobranca_tipo_cobranca_check
-  check (tipo_cobranca in ('preventiva', 'vencimento', 'atraso'));
+  check (tipo_cobranca in ('preventiva', 'vencimento', 'atraso', 'manual_assistido'));
 
 do $$
 begin
@@ -563,7 +563,7 @@ $$;
 
 alter table public.logs_cobranca
   add constraint logs_cobranca_status_envio_check
-  check (status_envio in ('sucesso', 'sucesso_simulado', 'simulado', 'erro', 'ignorado'));
+  check (status_envio in ('sucesso', 'sucesso_simulado', 'simulado', 'erro', 'ignorado', 'preparado_manual'));
 
 do $$
 begin

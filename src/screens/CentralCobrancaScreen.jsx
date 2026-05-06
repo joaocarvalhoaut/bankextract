@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
+  Copy,
   ExternalLink,
   Loader2,
   PhoneOff,
@@ -13,6 +14,7 @@ import {
 import DataTable from '../components/DataTable';
 import {
   getBillingCenter,
+  prepareManualCharge,
   previewChargePayload,
   simulateChargeItem,
   syncBillingDrive,
@@ -71,6 +73,8 @@ export default function CentralCobrancaScreen({
   const [items, setItems] = useState([]);
   const [simulationResult, setSimulationResult] = useState(null);
   const [previewResult, setPreviewResult] = useState(null);
+  const [manualResult, setManualResult] = useState(null);
+  const [selectedRows, setSelectedRows] = useState(() => new Set());
 
   const canManageCharges = canUserPerformAction(userRole, 'manage_charges');
 
@@ -87,6 +91,7 @@ export default function CentralCobrancaScreen({
       console.log('CentralCobranca getBillingCenter response', response);
       const nextItems = response?.items ?? response?.data?.items ?? [];
       setItems(Array.isArray(nextItems) ? nextItems : []);
+      setSelectedRows(new Set());
       setCenter(response);
     } catch (error) {
       setItems([]);
@@ -117,6 +122,18 @@ export default function CentralCobrancaScreen({
         if (result?.payload && result?.message) {
           setPreviewResult(result);
         }
+        if (result?.manual_message && result?.payload) {
+          setManualResult({
+            type: 'single',
+            items: [{
+              ...result.payload,
+              message: result.manual_message,
+            }],
+            prepared: 1,
+            errors: 0,
+            warning: result.warning,
+          });
+        }
         onToast?.('sucesso', result?.payload ? successMessage : result?.message || successMessage);
       } catch (error) {
         onToast?.('erro', error.message || 'Falha ao executar a acao da central.');
@@ -139,9 +156,121 @@ export default function CentralCobrancaScreen({
   };
 
   const rows = Array.isArray(items) ? items : [];
+  const allSelected = rows.length > 0 && selectedRows.size === rows.length;
+
+  const toggleRowSelection = useCallback((rowId) => {
+    setSelectedRows((current) => {
+      const next = new Set(current);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+  }, []);
+
+  const toggleAllRows = useCallback(() => {
+    setSelectedRows((current) => {
+      if (rows.length && current.size === rows.length) return new Set();
+      return new Set(rows.map((row) => row.id));
+    });
+  }, [rows]);
+
+  const copyText = useCallback(async (value, successMessage) => {
+    try {
+      await navigator.clipboard.writeText(String(value || ''));
+      onToast?.('sucesso', successMessage);
+    } catch {
+      onToast?.('erro', 'Nao foi possivel copiar o conteudo.');
+    }
+  }, [onToast]);
+
+  const downloadManualCsv = useCallback((entries) => {
+    const header = 'Cliente;Telefone;Mensagem;LinhaDigitavel;LinkBoleto';
+    const lines = (entries || []).map((item) =>
+      [
+        item.cliente || '',
+        item.telefone || '',
+        `"${String(item.message || '').replace(/"/g, '""')}"`,
+        item.linha_digitavel || '',
+        item.boleto_url || '',
+      ].join(';')
+    );
+    const blob = new Blob([[header, ...lines].join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'cobrancas_manuais_bankextract.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handlePrepareSelected = useCallback(async () => {
+    const selectedIds = Array.from(selectedRows).slice(0, 20);
+    if (!selectedIds.length) {
+      onToast?.('erro', 'Selecione pelo menos um titulo.');
+      return;
+    }
+
+    setRunningAction('prepare-selected');
+    try {
+      const preparedItems = [];
+      const errorsList = [];
+      for (const rowId of selectedIds) {
+        try {
+          const result = await prepareManualCharge(resolvedCompanyId, rowId);
+          preparedItems.push({
+            ...result.payload,
+            message: result.manual_message,
+          });
+        } catch (error) {
+          const row = rows.find((item) => item.id === rowId);
+          errorsList.push({
+            id: rowId,
+            cliente: row?.cliente_nome || 'Cliente',
+            error: error.message || 'Falha ao preparar envio manual.',
+            semTelefone: !row?.telefone,
+            semBoleto: !row?.boleto_url && !row?.drive_file_id,
+          });
+        }
+      }
+
+      setManualResult({
+        type: 'batch',
+        items: preparedItems,
+        prepared: preparedItems.length,
+        errors: errorsList.length,
+        errorItems: errorsList,
+        warning: 'Envio real nao realizado. Copie as mensagens e envie manualmente pelo WhatsApp.',
+      });
+      await loadCenter();
+      onToast?.('sucesso', `${preparedItems.length} preparo(s) manual(is) concluido(s).`);
+    } catch (error) {
+      onToast?.('erro', error.message || 'Falha ao preparar os titulos selecionados.');
+    } finally {
+      setRunningAction('');
+    }
+  }, [loadCenter, onToast, resolvedCompanyId, rows, selectedRows]);
 
   const columns = useMemo(
     () => [
+      {
+        key: 'select',
+        label: (
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={toggleAllRows}
+            className="h-4 w-4 rounded border-slate-300"
+          />
+        ),
+        render: (row) => (
+          <input
+            type="checkbox"
+            checked={selectedRows.has(row.id)}
+            onChange={() => toggleRowSelection(row.id)}
+            className="h-4 w-4 rounded border-slate-300"
+          />
+        ),
+      },
       {
         key: 'cliente_nome',
         label: 'Cliente',
@@ -228,6 +357,21 @@ export default function CentralCobrancaScreen({
         label: 'Acoes',
         render: (row) => (
           <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={!canManageCharges || Boolean(runningAction)}
+              onClick={() =>
+                runRowAction(
+                  `prepare-${row.id}`,
+                  () => prepareManualCharge(resolvedCompanyId, row.id),
+                  'Envio manual assistido preparado com sucesso.'
+                )
+              }
+              className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
+            >
+              {runningAction === `prepare-${row.id}` ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+              Preparar manual
+            </button>
             <button
               type="button"
               disabled={!canManageCharges || Boolean(runningAction)}
@@ -331,7 +475,7 @@ export default function CentralCobrancaScreen({
         ),
       },
     ],
-    [canManageCharges, resolvedCompanyId, runRowAction, runningAction]
+    [allSelected, canManageCharges, resolvedCompanyId, runRowAction, runningAction, selectedRows, toggleAllRows, toggleRowSelection]
   );
 
   if (globalMode || !resolvedCompanyId) {
@@ -375,19 +519,20 @@ export default function CentralCobrancaScreen({
           </button>
           <button
             type="button"
-            onClick={() => onToast?.('aviso', 'Envio real bloqueado ate configurar Z-API.')}
+            onClick={() => onToast?.('aviso', 'Selecione um titulo para preparar manualmente ou use a acao por linha.')}
             className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-soft transition hover:bg-slate-100"
           >
             <Send size={15} />
-            Enviar agora - Em breve
+            Preparar manual
           </button>
           <button
             type="button"
-            onClick={() => onToast?.('aviso', 'Envio real em lote bloqueado ate configurar Z-API.')}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-soft transition hover:bg-slate-100"
+            onClick={handlePrepareSelected}
+            disabled={!selectedRows.size || Boolean(runningAction)}
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-soft transition hover:bg-slate-100 disabled:opacity-50"
           >
-            <Send size={15} />
-            Enviar selecionados - Em breve
+            {runningAction === 'prepare-selected' ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+            Preparar selecionados
           </button>
         </div>
       </section>
@@ -460,6 +605,94 @@ export default function CentralCobrancaScreen({
                 <p className="mt-2"><span className="font-semibold text-slate-900">PDF:</span> {previewResult.payload?.drive_file_id || '-'}</p>
                 <p className="mt-2"><span className="font-semibold text-slate-900">Status:</span> Simulacao - nao enviado</p>
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {manualResult ? (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/45 p-4">
+          <div className="max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-[28px] border border-emerald-200 bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-emerald-900">Envio manual assistido</p>
+                <p className="mt-1 text-xs text-emerald-700">{manualResult.warning || 'Envio real ainda nao realizado.'}</p>
+              </div>
+              <div className="flex gap-2">
+                {manualResult.type === 'batch' ? (
+                  <button
+                    type="button"
+                    onClick={() => downloadManualCsv(manualResult.items || [])}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                  >
+                    Baixar CSV
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setManualResult(null)}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-4">
+              <CenterCard label="Preparados" value={manualResult.prepared || 0} tone="emerald" />
+              <CenterCard label="Erros" value={manualResult.errors || 0} tone="red" />
+              <CenterCard label="Sem telefone" value={(manualResult.errorItems || []).filter((item) => item.semTelefone).length} tone="amber" />
+              <CenterCard label="Sem boleto" value={(manualResult.errorItems || []).filter((item) => item.semBoleto).length} tone="amber" />
+            </div>
+
+            <div className="mt-5 space-y-4">
+              {(manualResult.items || []).map((item, index) => (
+                <div key={`${item.drive_file_id || item.numero_boleto || index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-2 text-sm text-slate-700">
+                      <p><span className="font-semibold text-slate-900">Cliente:</span> {item.cliente || '-'}</p>
+                      <p><span className="font-semibold text-slate-900">Telefone:</span> {item.telefone || '-'}</p>
+                      <p><span className="font-semibold text-slate-900">Numero boleto:</span> {item.numero_boleto || '-'}</p>
+                      <p><span className="font-semibold text-slate-900">Linha digitavel:</span> {item.linha_digitavel || '-'}</p>
+                      <p><span className="font-semibold text-slate-900">Codigo de barras:</span> {item.codigo_barras || '-'}</p>
+                      <p><span className="font-semibold text-slate-900">Link/PDF:</span> {item.boleto_url || '-'}</p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => copyText(item.message || '', 'Mensagem copiada com sucesso.')}
+                        className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700"
+                      >
+                        <Copy size={12} />
+                        Copiar mensagem
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => copyText(item.linha_digitavel || '', 'Linha digitavel copiada com sucesso.')}
+                        className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700"
+                      >
+                        <Copy size={12} />
+                        Copiar linha digitavel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!item.boleto_url || item.boleto_url === 'nao localizado'}
+                        onClick={() => window.open(item.boleto_url, '_blank', 'noopener,noreferrer')}
+                        className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 disabled:opacity-50"
+                      >
+                        <ExternalLink size={12} />
+                        Abrir boleto
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Mensagem pronta</p>
+                    <pre className="mt-3 whitespace-pre-wrap text-xs leading-relaxed text-slate-700">{item.message || 'Nenhuma mensagem gerada.'}</pre>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
