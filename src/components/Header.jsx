@@ -12,18 +12,54 @@ export default function Header({
   signOutLoading = false,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 16 });
   const menuRef = useRef(null);
+  const buttonRef = useRef(null);
 
   useEffect(() => {
+    if (!menuOpen) return undefined;
+
+    const updatePosition = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      setMenuPosition({
+        top: rect.bottom + 8,
+        right: Math.max(16, window.innerWidth - rect.right),
+      });
+    };
+
     const handleClickOutside = (event) => {
-      if (!menuRef.current?.contains(event.target)) {
+      const menuElement = menuRef.current;
+      const buttonElement = buttonRef.current;
+
+      if (menuElement?.contains(event.target) || buttonElement?.contains(event.target)) {
+        return;
+      }
+
+      setMenuOpen(false);
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
         setMenuOpen(false);
       }
     };
 
+    updatePosition();
+
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [menuOpen]);
 
   return (
     <header className="accent-bar relative z-20 mb-6 overflow-visible rounded-[30px] border border-slate-200 bg-white shadow-card">
@@ -69,8 +105,9 @@ export default function Header({
               <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-500 ring-1 ring-white" />
             </button>
 
-            <div ref={menuRef} className="relative overflow-visible">
+            <div className="relative overflow-visible">
               <button
+                ref={buttonRef}
                 type="button"
                 onClick={() => setMenuOpen((prev) => !prev)}
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
@@ -81,44 +118,51 @@ export default function Header({
                 <span className="hidden sm:inline">Conta</span>
                 <ChevronDown size={15} className={`transition ${menuOpen ? 'rotate-180' : ''}`} />
               </button>
-
-              {menuOpen ? (
-                <div className="absolute right-0 top-[calc(100%+12px)] z-[9999] w-[220px] rounded-2xl border border-slate-200 bg-white p-2.5 shadow-[0_24px_60px_rgba(15,23,42,0.16)]">
-                  <div className="border-b border-slate-100 px-3 py-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Conta</p>
-                    <p className="mt-1 truncate text-sm font-medium text-slate-700">{userEmail || 'Sessão ativa'}</p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onViewPublicSite?.();
-                    }}
-                    className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                  >
-                    <Globe2 size={15} className="text-slate-500" />
-                    Ver site público
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={signOutLoading}
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onSignOut?.();
-                    }}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
-                  >
-                    <LogOut size={15} />
-                    {signOutLoading ? 'Saindo...' : 'Sair'}
-                  </button>
-                </div>
-              ) : null}
             </div>
           </div>
         </div>
       </div>
+
+      {menuOpen ? (
+        <div
+          ref={menuRef}
+          className="fixed z-[99999] w-[220px] rounded-2xl border border-slate-200 bg-white p-2.5 shadow-xl"
+          style={{
+            top: `${menuPosition.top}px`,
+            right: `${menuPosition.right}px`,
+          }}
+        >
+          <div className="border-b border-slate-100 px-3 py-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Conta</p>
+            <p className="mt-1 truncate text-sm font-medium text-slate-700">{userEmail || 'Sessao ativa'}</p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(false);
+              onViewPublicSite?.();
+            }}
+            className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            <Globe2 size={15} className="text-slate-500" />
+            Ver site publico
+          </button>
+
+          <button
+            type="button"
+            disabled={signOutLoading}
+            onClick={() => {
+              setMenuOpen(false);
+              onSignOut?.();
+            }}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+          >
+            <LogOut size={15} />
+            {signOutLoading ? 'Saindo...' : 'Sair'}
+          </button>
+        </div>
+      ) : null}
     </header>
   );
 }
