@@ -13,6 +13,7 @@ import {
   UploadCloud,
 } from 'lucide-react';
 import DataTable from '../components/DataTable';
+import GoogleSheetsConfig from '../components/GoogleSheetsConfig';
 import LimitWarningModal from '../components/plans/LimitWarningModal';
 import UpgradeBanner from '../components/plans/UpgradeBanner';
 import {
@@ -41,10 +42,10 @@ const statusTone = {
 };
 
 const tabItems = [
-  { id: 'regras', label: 'Regras', icon: Settings2 },
-  { id: 'mensagens', label: 'Mensagens', icon: MessageSquareText },
+  { id: 'regras', label: 'Configuracao', icon: Settings2 },
+  { id: 'mensagens', label: 'Templates', icon: MessageSquareText },
   { id: 'integracoes', label: 'Integracoes', icon: FolderKanban },
-  { id: 'execucoes', label: 'Execucoes', icon: Clock3 },
+  { id: 'execucoes', label: 'Monitoramento', icon: Clock3 },
 ];
 
 const templateTabs = [
@@ -171,6 +172,13 @@ export default function CobrancaAutomaticaScreen({
     status: '',
     quantidade_arquivos_pdf: 0,
     mensagem_erro: '',
+    spreadsheet_id: '',
+    sheet_name: '',
+    source_spreadsheet_id: '',
+    source_sheet_name: '',
+    last_source_sync_at: '',
+    last_source_sync_status: '',
+    last_source_sync_error: '',
   });
   const [driveFolderInput, setDriveFolderInput] = useState('');
   const [driveSaving, setDriveSaving] = useState(false);
@@ -227,6 +235,13 @@ export default function CobrancaAutomaticaScreen({
         status: '',
         quantidade_arquivos_pdf: 0,
         mensagem_erro: '',
+        spreadsheet_id: '',
+        sheet_name: '',
+        source_spreadsheet_id: '',
+        source_sheet_name: '',
+        last_source_sync_at: '',
+        last_source_sync_status: '',
+        last_source_sync_error: '',
       });
       setDriveFolderInput('');
       return;
@@ -241,6 +256,13 @@ export default function CobrancaAutomaticaScreen({
         status: data?.status || '',
         quantidade_arquivos_pdf: data?.quantidade_arquivos_pdf || 0,
         mensagem_erro: data?.mensagem_erro || '',
+        spreadsheet_id: data?.spreadsheet_id || '',
+        sheet_name: data?.sheet_name || '',
+        source_spreadsheet_id: data?.source_spreadsheet_id || '',
+        source_sheet_name: data?.source_sheet_name || '',
+        last_source_sync_at: data?.last_source_sync_at || '',
+        last_source_sync_status: data?.last_source_sync_status || '',
+        last_source_sync_error: data?.last_source_sync_error || '',
       });
       setDriveFolderInput(data?.drive_root_folder_id || '');
     } catch (error) {
@@ -431,6 +453,13 @@ export default function CobrancaAutomaticaScreen({
         status: data?.status || '',
         quantidade_arquivos_pdf: data?.quantidade_arquivos_pdf || 0,
         mensagem_erro: data?.mensagem_erro || '',
+        spreadsheet_id: data?.spreadsheet_id || '',
+        sheet_name: data?.sheet_name || '',
+        source_spreadsheet_id: data?.source_spreadsheet_id || '',
+        source_sheet_name: data?.source_sheet_name || '',
+        last_source_sync_at: data?.last_source_sync_at || '',
+        last_source_sync_status: data?.last_source_sync_status || '',
+        last_source_sync_error: data?.last_source_sync_error || '',
       });
       setDriveFolderInput(data?.drive_root_folder_id || '');
       onToast?.('sucesso', data?.message || 'Pasta salva com sucesso.');
@@ -566,14 +595,14 @@ export default function CobrancaAutomaticaScreen({
 
   return (
     <section className="space-y-6 rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
             <CheckCircle2 size={13} />
-            Regua financeira
+            Cobranca automatica
           </div>
-          <h3 className="mt-4 text-2xl font-semibold text-slate-950">Cobranca automatica com boletos do Google Drive</h3>
-          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
+          <h3 className="mt-3 text-xl font-semibold text-slate-950">Cobranca automatica com boletos do Google Drive</h3>
+          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600">
             Painel operacional da empresa <span className="font-semibold text-slate-900">{companyName}</span> com
             sincronizacao da planilha financeira, localizacao automatica do boleto e envio auditavel por WhatsApp.
           </p>
@@ -582,21 +611,21 @@ export default function CobrancaAutomaticaScreen({
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => runAction('run', runBillingAutomationNow, 'Regua executada com sucesso.')}
+            onClick={() => runAction('simulate', (id) => runBillingAutomationNow(id, { simulate: true }), 'Simulacao executada com sucesso.')}
             disabled={Boolean(executingAction)}
             className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-emerald-700 disabled:opacity-50"
           >
-            {executingAction === 'run' ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
-            Executar agora
+            {executingAction === 'simulate' ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
+            Executar simulacao
           </button>
           <button
             type="button"
-            onClick={() => runAction('simulate', (id) => runBillingAutomationNow(id, { simulate: true }), 'Simulacao executada com sucesso.')}
+            onClick={() => runAction('run', runBillingAutomationNow, 'Regua executada com sucesso.')}
             disabled={Boolean(executingAction)}
-            className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-soft transition hover:bg-blue-100 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-soft transition hover:bg-slate-50 disabled:opacity-50"
           >
-            {executingAction === 'simulate' ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
-            Executar simulacao
+            {executingAction === 'run' ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
+            Executar agora
           </button>
           <button
             type="button"
@@ -648,6 +677,19 @@ export default function CobrancaAutomaticaScreen({
               <SmallSummaryCard key={card.label} label={card.label} value={card.value} helper={card.helper} />
             ))}
           </section>
+
+          {upgradeRecommendation?.target ? (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setUpgradeModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+              >
+                Ver planos
+                <span aria-hidden="true">→</span>
+              </button>
+            </div>
+          ) : null}
 
           <SectionCard
             title="Configuracao principal"
@@ -945,6 +987,85 @@ export default function CobrancaAutomaticaScreen({
               >
                 {executingAction === 'drive' ? <Loader2 size={15} className="animate-spin" /> : <RefreshCcw size={15} />}
                 Sincronizar Drive
+              </button>
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            title="Google Sheets / Planilha financeira"
+            description="Campos operacionais restaurados para acompanhar a planilha conectada e continuar usando a sincronizacao atual."
+            aside={
+              <div className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
+                driveConfig.last_source_sync_status === 'success'
+                  ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                  : driveConfig.last_source_sync_status === 'error'
+                    ? 'bg-red-50 text-red-700 ring-red-200'
+                    : 'bg-slate-100 text-slate-600 ring-slate-200'
+              }`}>
+                {driveConfig.last_source_sync_status === 'success'
+                  ? 'Sincronizacao ok'
+                  : driveConfig.last_source_sync_status === 'error'
+                    ? 'Sincronizacao com erro'
+                    : 'Pendente'}
+              </div>
+            }
+          >
+            <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">ID da planilha</span>
+                <input
+                  type="text"
+                  value={driveConfig.source_spreadsheet_id || driveConfig.spreadsheet_id || ''}
+                  readOnly
+                  placeholder="Nao configurado"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none"
+                />
+              </label>
+
+              <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Nome da planilha / aba</span>
+                <input
+                  type="text"
+                  value={driveConfig.source_sheet_name || driveConfig.sheet_name || ''}
+                  readOnly
+                  placeholder="Nao configurado"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none"
+                />
+              </label>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Ultima sincronizacao</p>
+                <p className="mt-2 text-sm font-medium text-slate-900">
+                  {driveConfig.last_source_sync_at
+                    ? new Date(driveConfig.last_source_sync_at).toLocaleString('pt-BR')
+                    : 'Ainda nao sincronizada'}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Status operacional</p>
+                <p className="mt-2 text-sm font-medium text-slate-900">
+                  {driveConfig.last_source_sync_error || 'Pronto para sincronizacao manual.'}
+                </p>
+              </div>
+            </div>
+
+            <GoogleSheetsConfig
+              empresaId={resolvedCompanyId}
+              empresaNome={companyName}
+              globalMode={globalMode}
+              onSaved={loadOverview}
+            />
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => runAction('sheet', syncBillingSheet, 'Planilha sincronizada com sucesso.')}
+                disabled={Boolean(executingAction)}
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-soft transition hover:bg-slate-50 disabled:opacity-50"
+              >
+                {executingAction === 'sheet' ? <Loader2 size={15} className="animate-spin" /> : <Sheet size={15} />}
+                Sincronizar planilha
               </button>
             </div>
           </SectionCard>
