@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { tenantContext } from '../services/tenantContext.js';
 import { companyService, GLOBAL_COMPANY_ID } from '../services/companyService';
+import { markOnboardingStep } from '../services/onboardingService';
+import { ensureTrialSubscription } from '../services/subscriptionService';
+import { setUsage } from '../services/usageService';
 
 const globalCompanyOption = {
   id: GLOBAL_COMPANY_ID,
@@ -40,6 +43,7 @@ export const useEmpresa = ({ user, authEnabled }) => {
     [activeCompanyId, companies]
   );
   const isGlobalActive = activeCompanyId === GLOBAL_COMPANY_ID;
+  const canCreateCompany = isSystemAdmin || companies.length === 0;
 
   const persistActiveCompany = useCallback((companyId) => {
     companyService.setStoredActiveCompanyId(effectiveUserId, companyId);
@@ -53,8 +57,8 @@ export const useEmpresa = ({ user, authEnabled }) => {
   const resetModalState = useCallback(() => {
     setModalError('');
     setModalForm(initialForm);
-    setModalMode(isSystemAdmin ? 'criar' : 'entrar');
-  }, [isSystemAdmin]);
+    setModalMode(canCreateCompany ? 'criar' : 'entrar');
+  }, [canCreateCompany]);
 
   const applyCompanySelection = useCallback((nextCompanies, preferredCompanyId = '', adminStatus = false) => {
     const storedCompanyId = companyService.getStoredActiveCompanyId(effectiveUserId);
@@ -118,7 +122,7 @@ export const useEmpresa = ({ user, authEnabled }) => {
       setMemberships(data.memberships || []);
       applyCompanySelection(companiesWithGlobal, preferredCompanyId, adminStatus);
       if (!companiesWithGlobal.length) {
-        setModalMode(adminStatus ? 'criar' : 'entrar');
+        setModalMode(adminStatus || !(data.memberships || []).length ? 'criar' : 'entrar');
         setModalError('');
         setModalForm(initialForm);
       }
@@ -163,6 +167,12 @@ export const useEmpresa = ({ user, authEnabled }) => {
         cnpj: modalForm.cnpj
       });
 
+      await Promise.allSettled([
+        ensureTrialSubscription(result.company.id),
+        setUsage(result.company.id, 'users_count', 1),
+        markOnboardingStep(result.company.id, 'company_created'),
+      ]);
+
       resetModalState();
       await loadCompanies(result.company.id);
     } catch (err) {
@@ -181,6 +191,11 @@ export const useEmpresa = ({ user, authEnabled }) => {
         userId: effectiveUserId,
         inviteCode: modalForm.inviteCode
       });
+
+      await Promise.allSettled([
+        ensureTrialSubscription(result.company.id),
+        markOnboardingStep(result.company.id, 'company_created'),
+      ]);
 
       resetModalState();
       await loadCompanies(result.company.id);
@@ -219,6 +234,7 @@ export const useEmpresa = ({ user, authEnabled }) => {
     companies,
     memberships,
     isSystemAdmin,
+    canCreateCompany,
     isGlobalActive,
     activeCompanyId,
     setActiveCompanyId,

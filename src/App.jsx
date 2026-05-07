@@ -311,6 +311,7 @@ export default function App() {
   const [billingOverview, setBillingOverview] = useState(null);
   const [markingOnboardingStepId, setMarkingOnboardingStepId] = useState('');
   const [skippedOnboardingStepIds, setSkippedOnboardingStepIds] = useState([]);
+  const [waitingFirstCompanySetup, setWaitingFirstCompanySetup] = useState(false);
 
   const [financialConfig, setFinancialConfig] = useState({
     multaPercentual: 2,
@@ -356,6 +357,21 @@ export default function App() {
       setSkippedOnboardingStepIds([]);
     }
   }, [onboardingSkipStorageKey]);
+
+  useEffect(() => {
+    if (!auth.user || empresa.loading) return;
+
+    if (!currentCompanyId && !empresa.companies.length) {
+      setWaitingFirstCompanySetup(true);
+      return;
+    }
+
+    if (waitingFirstCompanySetup && currentCompanyId) {
+      setPublicScreen('app');
+      setActiveTab('onboarding');
+      setWaitingFirstCompanySetup(false);
+    }
+  }, [auth.user, currentCompanyId, empresa.companies.length, empresa.loading, waitingFirstCompanySetup]);
 
   useEffect(() => {
     financeService.setRuntimeContext({
@@ -1241,14 +1257,36 @@ export default function App() {
 
   let currentContent = null;
 
-  if (!currentCompanyId && empresa.isSystemAdmin && companyDependentTabs.has(activeTab)) {
+  const shouldBlockCompanyViews =
+    auth.user &&
+    !empresa.loading &&
+    !currentCompanyId &&
+    !globalMode &&
+    (companyDependentTabs.has(activeTab) || activeTab === 'dashboard');
+
+  if (shouldBlockCompanyViews) {
     currentContent = (
       <div className="rounded-[32px] border border-slate-200 bg-white p-10 text-center shadow-soft">
-        <h2 className="text-2xl font-semibold text-slate-900">Nenhuma empresa ativa selecionada</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">Configure sua primeira empresa</h2>
         <p className="mt-3 text-sm text-slate-500">
-          O administrador geral pode continuar sem empresa, mas para operar importacoes, carteira e integracoes e
-          preciso escolher uma empresa especifica ou o modo global.
+          Sua conta ainda nao possui uma empresa ativa. Crie uma empresa ou entre por codigo de convite para continuar usando o BankExtract sem quebrar a operacao.
         </p>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => handleOpenEmpresaModal(empresa.canCreateCompany ? 'criar' : 'entrar')}
+            className="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
+          >
+            {empresa.canCreateCompany ? 'Criar ou entrar em empresa' : 'Entrar em empresa'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('onboarding')}
+            className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Ver onboarding
+          </button>
+        </div>
       </div>
     );
   } else {
@@ -1669,7 +1707,7 @@ export default function App() {
           isOpen={empresa.modalOpen}
           mode={empresa.modalMode}
           setMode={empresa.setModalMode}
-          allowCreate={empresa.isSystemAdmin}
+          allowCreate={empresa.canCreateCompany}
           onClose={empresa.closeModal}
           onContinueWithoutCompany={empresa.continueWithoutCompany}
           form={empresa.modalForm}

@@ -113,6 +113,26 @@ const resolveRpcRow = (payload) => {
   return payload || null;
 };
 
+const userHasNoCompanyMemberships = async (userId) => {
+  if (!userId) return true;
+
+  if (!hasSupabaseConfig) {
+    return !mockMemberships.some((membership) => membership.user_id === (userId || mockUserId));
+  }
+
+  const client = requireSupabase();
+  const { count, error } = await client
+    .from('usuarios_empresas')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId);
+
+  if (error) {
+    throw buildError(error, 'Falha ao verificar vinculos do usuario.');
+  }
+
+  return Number(count || 0) === 0;
+};
+
 const generateUniqueInviteCode = async (client) => {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const inviteCode = createInviteCodeCandidate();
@@ -268,9 +288,9 @@ export const companyService = {
       throw new Error('Informe o nome da empresa.');
     }
 
-    const allowedToCreate = await this.isSystemAdmin({ userId, email });
+    const allowedToCreate = await this.isSystemAdmin({ userId, email }) || await userHasNoCompanyMemberships(userId);
     if (!allowedToCreate) {
-      throw new Error('Apenas o administrador geral do sistema pode criar empresas.');
+      throw new Error('Voce ja esta vinculado a uma empresa. Solicite ao administrador geral a criacao de uma nova empresa.');
     }
 
     if (!hasSupabaseConfig || !userId) {
