@@ -170,6 +170,18 @@ Caso já tenha efetuado o pagamento, desconsidere esta mensagem.
 Atenciosamente,
 Setor de Cobrança Orthomax`;
 
+const DEFAULT_UNIVERSAL_TEMPLATE = `Olá!
+
+Identificamos um título em aberto em nosso sistema referente ao documento {DOCUMENTO}, com vencimento em {VENCIMENTO}, no valor de {VALOR}.
+
+Pedimos, por gentileza, que verifique a pendência.
+
+Caso o pagamento já tenha sido realizado, desconsidere esta mensagem.
+
+Se precisar de qualquer informação adicional, estamos à disposição.
+
+Atenciosamente.`;
+
 const DEFAULT_TEMPLATE_SAMPLE = {
   nome: 'Cliente Exemplo',
   cliente_nome: 'Cliente Exemplo',
@@ -476,9 +488,9 @@ function extractRuleDays(value: unknown) {
 
 function resolveTemplate(config: BillingConfigRow | null, type: 'preventiva' | 'vencimento' | 'atraso') {
   const generic = config?.mensagem_template || '';
-  if (type === 'preventiva') return config?.template_preventiva || generic || DEFAULT_PREVENTIVA_TEMPLATE;
-  if (type === 'vencimento') return config?.template_vencimento || generic || DEFAULT_VENCIMENTO_TEMPLATE;
-  return config?.template_atraso || generic || DEFAULT_ATRASO_TEMPLATE;
+  if (type === 'preventiva') return config?.template_preventiva || generic || DEFAULT_UNIVERSAL_TEMPLATE;
+  if (type === 'vencimento') return config?.template_vencimento || generic || DEFAULT_UNIVERSAL_TEMPLATE;
+  return config?.template_atraso || generic || DEFAULT_UNIVERSAL_TEMPLATE;
 }
 
 function fillTemplate(
@@ -502,9 +514,13 @@ function fillTemplate(
     .replaceAll('{cliente_nome}', nome)
     .replaceAll('{nome}', nome)
     .replaceAll('{cliente}', nome)
+    .replaceAll('{CLIENTE}', nome)
     .replaceAll('{documento}', documento)
+    .replaceAll('{DOCUMENTO}', documento)
     .replaceAll('{vencimento}', formatDateBR(vencimento))
+    .replaceAll('{VENCIMENTO}', formatDateBR(vencimento))
     .replaceAll('{valor}', formatCurrency(valor))
+    .replaceAll('{VALOR}', formatCurrency(valor))
     .replaceAll('{dias_atraso}', String(diasAtraso))
     .replaceAll('{numero_boleto}', numeroBoleto || '-')
     .replaceAll('{numero_nf}', String(record.numero_nf || '-'))
@@ -512,7 +528,8 @@ function fillTemplate(
     .replaceAll('{linha_digitavel}', linhaDigitavel)
     .replaceAll('{codigo_barras}', codigoBarras)
     .replaceAll('{link_boleto}', linkBoleto)
-    .replaceAll('{empresa}', companyName || String(record.empresa || ''));
+    .replaceAll('{empresa}', companyName || String(record.empresa || ''))
+    .replaceAll('{EMPRESA}', companyName || String(record.empresa || ''));
 }
 
 async function getCompanySnapshot(supabaseAdmin: AdminClient, companyId: string) {
@@ -984,10 +1001,10 @@ async function saveBillingConfigForCompany(
     ativo: Boolean(payload?.ativo ?? existing?.ativo ?? false),
     hora_execucao: horario,
     hora_envio: horario,
-    mensagem_template: String(payload?.mensagem_template ?? existing?.mensagem_template ?? DEFAULT_ATRASO_TEMPLATE),
-    template_preventiva: String(payload?.template_preventiva ?? existing?.template_preventiva ?? DEFAULT_PREVENTIVA_TEMPLATE),
-    template_vencimento: String(payload?.template_vencimento ?? existing?.template_vencimento ?? DEFAULT_VENCIMENTO_TEMPLATE),
-    template_atraso: String(payload?.template_atraso ?? existing?.template_atraso ?? DEFAULT_ATRASO_TEMPLATE),
+    mensagem_template: String(payload?.mensagem_template ?? existing?.mensagem_template ?? DEFAULT_UNIVERSAL_TEMPLATE),
+    template_preventiva: String(payload?.template_preventiva ?? existing?.template_preventiva ?? DEFAULT_UNIVERSAL_TEMPLATE),
+    template_vencimento: String(payload?.template_vencimento ?? existing?.template_vencimento ?? DEFAULT_UNIVERSAL_TEMPLATE),
+    template_atraso: String(payload?.template_atraso ?? existing?.template_atraso ?? DEFAULT_UNIVERSAL_TEMPLATE),
     regua_atraso: Array.isArray(payload?.regua_atraso) ? payload.regua_atraso : (existing?.regua_atraso ?? DEFAULT_RULES),
     intervalo_dias: Number(payload?.intervalo_dias ?? existing?.intervalo_dias ?? 5) || 5,
     cobrar_apos_dias_vencido: Number(payload?.cobrar_apos_dias_vencido ?? existing?.cobrar_apos_dias_vencido ?? 1) || 1,
@@ -2976,10 +2993,10 @@ Deno.serve(async (req: Request) => {
           ativo: Boolean(config?.ativo),
           hora_execucao: config?.hora_execucao || config?.hora_envio || DEFAULT_EXECUTION_TIME,
           hora_envio: config?.hora_envio || config?.hora_execucao || DEFAULT_EXECUTION_TIME,
-          mensagem_template: config?.mensagem_template || DEFAULT_ATRASO_TEMPLATE,
-          template_preventiva: config?.template_preventiva || DEFAULT_PREVENTIVA_TEMPLATE,
-          template_vencimento: config?.template_vencimento || DEFAULT_VENCIMENTO_TEMPLATE,
-          template_atraso: config?.template_atraso || DEFAULT_ATRASO_TEMPLATE,
+          mensagem_template: config?.mensagem_template || DEFAULT_UNIVERSAL_TEMPLATE,
+          template_preventiva: config?.template_preventiva || DEFAULT_UNIVERSAL_TEMPLATE,
+          template_vencimento: config?.template_vencimento || DEFAULT_UNIVERSAL_TEMPLATE,
+          template_atraso: config?.template_atraso || DEFAULT_UNIVERSAL_TEMPLATE,
           regua_atraso: Array.isArray(config?.regua_atraso) ? config?.regua_atraso : DEFAULT_RULES,
           intervalo_dias: Number(config?.intervalo_dias || 5),
           cobrar_apos_dias_vencido: Number(config?.cobrar_apos_dias_vencido || 1),
@@ -3014,10 +3031,10 @@ Deno.serve(async (req: Request) => {
           ativo: Boolean(savedConfig?.ativo),
           hora_execucao: savedConfig?.hora_execucao || savedConfig?.hora_envio || DEFAULT_EXECUTION_TIME,
           hora_envio: savedConfig?.hora_envio || savedConfig?.hora_execucao || DEFAULT_EXECUTION_TIME,
-          mensagem_template: savedConfig?.mensagem_template || DEFAULT_ATRASO_TEMPLATE,
-          template_preventiva: savedConfig?.template_preventiva || DEFAULT_PREVENTIVA_TEMPLATE,
-          template_vencimento: savedConfig?.template_vencimento || DEFAULT_VENCIMENTO_TEMPLATE,
-          template_atraso: savedConfig?.template_atraso || DEFAULT_ATRASO_TEMPLATE,
+          mensagem_template: savedConfig?.mensagem_template || DEFAULT_UNIVERSAL_TEMPLATE,
+          template_preventiva: savedConfig?.template_preventiva || DEFAULT_UNIVERSAL_TEMPLATE,
+          template_vencimento: savedConfig?.template_vencimento || DEFAULT_UNIVERSAL_TEMPLATE,
+          template_atraso: savedConfig?.template_atraso || DEFAULT_UNIVERSAL_TEMPLATE,
           regua_atraso: Array.isArray(savedConfig?.regua_atraso) ? savedConfig?.regua_atraso : DEFAULT_RULES,
           intervalo_dias: Number(savedConfig?.intervalo_dias || 5),
           cobrar_apos_dias_vencido: Number(savedConfig?.cobrar_apos_dias_vencido || 1),
@@ -3428,7 +3445,7 @@ Deno.serve(async (req: Request) => {
         ...body?.sample,
         empresa: body?.sample?.empresa || companyName || DEFAULT_TEMPLATE_SAMPLE.empresa,
       };
-      const message = fillTemplate(String(body?.template || DEFAULT_ATRASO_TEMPLATE), sample, Number(sample.dias_atraso || 0), String(sample.empresa || companyName || ''));
+      const message = fillTemplate(String(body?.template || DEFAULT_UNIVERSAL_TEMPLATE), sample, Number(sample.dias_atraso || 0), String(sample.empresa || companyName || ''));
       return jsonResponse({
         ok: true,
         company_id: companyId,

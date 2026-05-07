@@ -17,6 +17,9 @@ export default function CollectionMessagePreview({
   restoreMessage = '',
   onMessageChange,
   onGenerated,
+  onSaveTemplate,
+  saveTemplateLabel = 'Salvar como modelo da empresa',
+  savingTemplate = false,
 }) {
   const [tone, setTone] = useState(() => getDefaultCollectionTone(context));
   const [message, setMessage] = useState(initialMessage || '');
@@ -125,6 +128,17 @@ export default function CollectionMessagePreview({
                 <RefreshCcw size={13} />
                 Restaurar mensagem padrao
               </button>
+              {onSaveTemplate ? (
+                <button
+                  type="button"
+                  disabled={savingTemplate}
+                  onClick={() => onSaveTemplate(message)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <Copy size={13} />
+                  {savingTemplate ? 'Salvando modelo...' : saveTemplateLabel}
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

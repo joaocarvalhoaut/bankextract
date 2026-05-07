@@ -18,8 +18,10 @@ import DataTable from '../components/DataTable';
 import PlanLimitNotice from '../components/PlanLimitNotice';
 import {
   getBillingCenter,
+  getBillingConfig,
   prepareManualCharge,
   previewChargePayload,
+  saveBillingConfig,
   simulateChargeItem,
   syncBillingDrive,
   updateChargeStatus,
@@ -137,6 +139,7 @@ export default function CentralCobrancaScreen({
   const [selectedRows, setSelectedRows] = useState(() => new Set());
   const [openMenuRowId, setOpenMenuRowId] = useState(null);
   const [limitNotice, setLimitNotice] = useState(null);
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   const canManageCharges = canUserPerformAction(userRole, 'manage_charges');
 
@@ -340,6 +343,40 @@ export default function CentralCobrancaScreen({
       onToast?.('erro', 'Nao foi possivel copiar o conteudo.');
     }
   }, [onToast]);
+
+  const saveCompanyTemplate = useCallback(async (mensagemFinal) => {
+    if (!resolvedCompanyId || globalMode) {
+      onToast?.('erro', 'Selecione uma empresa especifica para salvar o modelo.');
+      return;
+    }
+
+    const finalMessage = String(mensagemFinal || '').trim();
+    if (!finalMessage) {
+      onToast?.('erro', 'A mensagem do modelo nao pode ficar vazia.');
+      return;
+    }
+
+    console.log('[MENSAGEM TEMPLATE]', finalMessage);
+    setSavingTemplate(true);
+    try {
+      const currentConfigResponse = await getBillingConfig(resolvedCompanyId);
+      const currentConfig = currentConfigResponse?.config || currentConfigResponse?.data || currentConfigResponse || {};
+
+      await saveBillingConfig(resolvedCompanyId, {
+        ...currentConfig,
+        mensagem_template: finalMessage,
+        template_preventiva: finalMessage,
+        template_vencimento: finalMessage,
+        template_atraso: finalMessage,
+      });
+
+      onToast?.('sucesso', 'Modelo da empresa salvo com sucesso.');
+    } catch (error) {
+      onToast?.('erro', error.message || 'Falha ao salvar o modelo da empresa.');
+    } finally {
+      setSavingTemplate(false);
+    }
+  }, [globalMode, onToast, resolvedCompanyId]);
 
   const handleCollectionMessageGenerated = useCallback(
     async (tone, payload) => {
@@ -899,12 +936,17 @@ export default function CentralCobrancaScreen({
                   initialMessage={simulationResult.mensagem_gerada || ''}
                   restoreMessage={simulationResult.mensagem_gerada || ''}
                   onMessageChange={(value) =>
-                    setSimulationResult((current) => (current ? { ...current, mensagem_gerada: value } : current))
+                    {
+                      console.log('[MENSAGEM TEMPLATE]', value);
+                      setSimulationResult((current) => (current ? { ...current, mensagem_gerada: value } : current));
+                    }
                   }
                   onGenerated={(result) => {
                     handleCollectionMessageGenerated(result.tone, simulationResult.payload).catch(() => {});
                     setSimulationResult((current) => (current ? { ...current, mensagem_gerada: result.message } : current));
                   }}
+                  onSaveTemplate={saveCompanyTemplate}
+                  savingTemplate={savingTemplate}
                 />
               </div>
             </div>
@@ -956,12 +998,17 @@ export default function CentralCobrancaScreen({
                 initialMessage={previewResult.message || ''}
                 restoreMessage={previewResult.message || ''}
                 onMessageChange={(value) =>
-                  setPreviewResult((current) => (current ? { ...current, message: value } : current))
+                  {
+                    console.log('[MENSAGEM TEMPLATE]', value);
+                    setPreviewResult((current) => (current ? { ...current, message: value } : current));
+                  }
                 }
                 onGenerated={(result) => {
                   handleCollectionMessageGenerated(result.tone, previewResult.payload).catch(() => {});
                   setPreviewResult((current) => (current ? { ...current, message: result.message } : current));
                 }}
+                onSaveTemplate={saveCompanyTemplate}
+                savingTemplate={savingTemplate}
               />
 
               <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
@@ -1072,16 +1119,19 @@ export default function CentralCobrancaScreen({
                       initialMessage={item.message || ''}
                       restoreMessage={item.message || ''}
                       onMessageChange={(value) =>
-                        setManualResult((current) =>
-                          current
-                            ? {
-                                ...current,
-                                items: current.items.map((currentItem, currentIndex) =>
-                                  currentIndex === index ? { ...currentItem, message: value } : currentItem
-                                ),
-                              }
-                            : current
-                        )
+                        {
+                          console.log('[MENSAGEM TEMPLATE]', value);
+                          setManualResult((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  items: current.items.map((currentItem, currentIndex) =>
+                                    currentIndex === index ? { ...currentItem, message: value } : currentItem
+                                  ),
+                                }
+                              : current
+                          );
+                        }
                       }
                       onGenerated={(result) => {
                         handleCollectionMessageGenerated(result.tone, item).catch(() => {});
@@ -1096,6 +1146,8 @@ export default function CentralCobrancaScreen({
                             : current
                         );
                       }}
+                      onSaveTemplate={saveCompanyTemplate}
+                      savingTemplate={savingTemplate}
                     />
                   </div>
                 </div>
