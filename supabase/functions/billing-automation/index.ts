@@ -208,6 +208,11 @@ function getClienteEfetivo(registro: Partial<FinancialRow> & Record<string, unkn
   return String(registro?.cliente_nome || '').trim();
 }
 
+function temBoletoEncontrado(registro: Partial<FinancialRow> & Record<string, unknown>) {
+  const numero = getNumeroBoletoEfetivo(registro) || String(registro?.numero_boleto || '').trim();
+  return Boolean(numero && numero !== '-');
+}
+
 function logCobrancaMapping(registro: Partial<FinancialRow> & Record<string, unknown>) {
   const numeroBoletoEfetivo = getNumeroBoletoEfetivo(registro);
   const clienteEfetivo = getClienteEfetivo(registro);
@@ -1457,10 +1462,10 @@ async function buildChargePayloadPreview(
       codigo_barras: record.codigo_barras || 'nao localizado',
       boleto_url: record.boleto_url || 'nao localizado',
       drive_file_id: record.drive_file_id || null,
-      arquivo_encontrado: Boolean(record.drive_file_id || record.boleto_url),
+      arquivo_encontrado: temBoletoEncontrado(record) || Boolean(record.drive_file_id || record.boleto_url),
       envio_real: false,
       boleto_pdf_nome: record.boleto_pdf_nome || null,
-      boleto_status: buildBoletoStatus(record.boleto_status),
+      boleto_status: temBoletoEncontrado(record) ? 'encontrado' : 'sem_boleto',
     },
   };
 }
@@ -1496,7 +1501,7 @@ async function prepareManualChargeData(
     vencimento: record.data_vencimento || null,
     tipo_cobranca: 'manual_assistido',
     dias_atraso: 0,
-    arquivo_encontrado: Boolean(preview.payload?.drive_file_id || preview.payload?.boleto_url !== 'nao localizado'),
+    arquivo_encontrado: temBoletoEncontrado(preview.payload) || Boolean(preview.payload?.drive_file_id || preview.payload?.boleto_url !== 'nao localizado'),
     drive_file_id: preview.payload?.drive_file_id || null,
     status_envio: 'preparado_manual',
     erro: null,
@@ -1913,11 +1918,25 @@ async function getBillingCenterData(
     const latestLog = latestLogByFinanceiro.get(record.id);
     const telefoneBruto = String(record?.telefone || latestLog?.telefone || '');
     const telefoneValido = validatePhone(normalizePhone(telefoneBruto));
-    const boletoEncontrado = Boolean(latestLog?.arquivo_encontrado);
+    const boletoEncontrado = temBoletoEncontrado(record);
+    const statusBoleto = boletoEncontrado ? 'encontrado' : 'sem_boleto';
     const dataVencimento = String(record?.data_vencimento || '');
     const diasParaVencer = dataVencimento ? isoDaysDiff(dataVencimento, todayIso) : null;
     const diasAtraso = diasParaVencer !== null && diasParaVencer < 0 ? Math.abs(diasParaVencer) : 0;
     const etapaRegua = resolveStage(record, latestLog);
+    const confidence = boletoEncontrado
+      ? Math.max(Number(record?.boleto_match_confidence || 0), 100)
+      : Number(record?.boleto_match_confidence || 0);
+
+    console.log('[COBRANCA STATUS]', {
+      cliente: record.cliente_nome,
+      documento: record.documento,
+      numero_nf: record.numero_nf,
+      numero_boleto: record.numero_boleto,
+      numeroBoletoEfetivo,
+      boletoEncontrado,
+      status_boleto: statusBoleto
+    });
 
     let motivoNaoElegivel = null;
     if (!record?.status) motivoNaoElegivel = 'status_vazio';
@@ -1949,8 +1968,8 @@ async function getBillingCenterData(
       codigo_barras: record?.codigo_barras || null,
       boleto_url: record?.boleto_url || null,
       boleto_pdf_nome: record?.boleto_pdf_nome || null,
-      boleto_status: buildBoletoStatus(record?.boleto_status),
-      boleto_match_confidence: Number(record?.boleto_match_confidence || 0),
+      boleto_status: statusBoleto,
+      boleto_match_confidence: confidence,
       created_at: record?.created_at || null,
       dias_para_vencer: diasParaVencer,
       dias_atraso: diasAtraso,
@@ -1966,7 +1985,7 @@ async function getBillingCenterData(
       vencendo_amanha: mapped.filter((row) => row.etapa_regua === 'preventiva').length,
       vencem_hoje: mapped.filter((row) => row.etapa_regua === 'vencimento').length,
       em_atraso: mapped.filter((row) => row.dias_atraso > 0 && isOpen(row.status)).length,
-      sem_boleto_encontrado: mapped.filter((row) => !row.boleto_encontrado && row.boleto_status !== 'encontrado').length,
+      sem_boleto_encontrado: mapped.filter((row) => !row.boleto_encontrado).length,
       sem_telefone_valido: mapped.filter((row) => !row.telefone_valido).length,
       simulacoes_realizadas_hoje: todayLogs.filter((row) => ['sucesso_simulado', 'simulado'].includes(String(row.status_envio || ''))).length,
       erros: todayLogs.filter((row) => String(row.status_envio || '') === 'erro').length,
@@ -2161,7 +2180,7 @@ async function getRealSendChecklistData(
   const planData = await getPlanCapabilitiesData(supabaseAdmin, companyId, todayIso);
   const { data: records, error: recordsError } = await supabaseAdmin
     .from('registros_financeiros')
-    .select('id, company_id, nome, numero_boleto, data_vencimento, valor, telefone, status, created_at')
+    .select('id, company_id, nome, cliente_nome, documento, numero_nf, numero_boleto, data_vencimento, valor, telefone, status, created_at')
     .eq('company_id', companyId)
     .order('created_at', { ascending: false });
   if (recordsError) throw new Error(recordsError.message);
@@ -2196,10 +2215,7 @@ async function getRealSendChecklistData(
 
   const totalTitles = safeRecords.length;
   const validPhones = safeRecords.filter((row) => validatePhone(normalizePhone(row.telefone))).length;
-  const boletoFound = safeRecords.filter((row) => {
-    const latest = latestLogByFinanceiro.get(String(row.id || ''));
-    return Boolean(latest?.arquivo_encontrado);
-  }).length;
+  const boletoFound = safeRecords.filter((row) => temBoletoEncontrado(row as Partial<FinancialRow> & Record<string, unknown>)).length;
   const successfulSimulations = safeLogs.filter((row) => successStatuses.has(String(row.status_envio || ''))).length;
   const errors = safeLogs.filter((row) => errorStatuses.has(String(row.status_envio || ''))).length;
   const lastSimulation = safeLogs.find((row) => successStatuses.has(String(row.status_envio || '')));
@@ -2703,7 +2719,7 @@ async function simulateChargeBatchData(
       numero_boleto: getNumeroBoletoEfetivo(record) || null,
       status: outcome.status,
       tipo: outcome.tipo || null,
-      arquivo_encontrado: Boolean(outcome.fileId),
+      arquivo_encontrado: temBoletoEncontrado(record),
       motivo: outcome.reason || null,
       simulated: Boolean(outcome.simulated),
     });

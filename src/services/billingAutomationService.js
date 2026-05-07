@@ -55,9 +55,15 @@ const getNumeroBoletoEfetivo = (registro = {}) =>
 const getClienteEfetivo = (registro = {}) =>
   String(registro?.cliente_nome || registro?.cliente || '').trim();
 
+const temBoletoEncontrado = (registro = {}) => {
+  const numero = getNumeroBoletoEfetivo(registro);
+  return Boolean(numero && numero !== '-');
+};
+
 const normalizeBillingPayload = (payload = {}) => {
   const numeroBoletoEfetivo = getNumeroBoletoEfetivo(payload);
   const clienteEfetivo = getClienteEfetivo(payload);
+  const boletoEncontrado = temBoletoEncontrado(payload);
   console.log(
     '[COBRANCA]',
     'cliente=', clienteEfetivo,
@@ -73,6 +79,11 @@ const normalizeBillingPayload = (payload = {}) => {
     documento: payload?.documento || '',
     numero_nf: payload?.numero_nf || '',
     numero_boleto: numeroBoletoEfetivo || payload?.numero_boleto || '',
+    boleto_encontrado: boletoEncontrado,
+    boleto_status: boletoEncontrado ? 'encontrado' : 'sem_boleto',
+    boleto_match_confidence: boletoEncontrado
+      ? Math.max(Number(payload?.boleto_match_confidence || 0), 100)
+      : Number(payload?.boleto_match_confidence || 0),
   };
 };
 

@@ -60,6 +60,7 @@ const boletoStatusTone = {
   encontrado: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
   baixa_confianca: 'bg-amber-50 text-amber-700 ring-amber-200',
   pendente: 'bg-slate-100 text-slate-700 ring-slate-200',
+  sem_boleto: 'bg-red-50 text-red-700 ring-red-200',
   nao_encontrado: 'bg-orange-50 text-orange-700 ring-orange-200',
   conflito: 'bg-red-50 text-red-700 ring-red-200',
   erro: 'bg-red-50 text-red-700 ring-red-200',
