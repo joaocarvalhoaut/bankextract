@@ -94,6 +94,15 @@ function logCobrancaMapping(registro = {}) {
   return { numeroBoletoEfetivo, clienteEfetivo };
 }
 
+function isChargeRowEligible(row = {}) {
+  const status = String(row?.status || '').toLowerCase().trim();
+  const hasStatus = ['aberto', 'pendente', 'vencido'].includes(status);
+  const hasPhone = Boolean(row?.telefone_valido || String(row?.telefone || '').trim());
+  const hasDocument = Boolean(getNumeroBoletoEfetivo(row));
+  const hasError = Boolean(String(row?.ultimo_erro || '').trim());
+  return hasStatus && hasPhone && hasDocument && !hasError;
+}
+
 export default function CentralCobrancaScreen({
   companyId,
   activeCompanyId,
@@ -381,18 +390,40 @@ export default function CentralCobrancaScreen({
     URL.revokeObjectURL(url);
   }, []);
 
-  const handlePrepareSelected = useCallback(async () => {
+  const handlePrepareSelected = useCallback(async (options = {}) => {
+    console.log('[PREPARAR COBRANCA] click');
+    console.log('[PREPARAR COBRANCA] selecionados', Array.from(selectedRows));
+    const fallbackToEligible = options?.fallbackToEligible !== false;
     const selectedIds = Array.from(selectedRows).slice(0, 20);
-    if (!selectedIds.length) {
-      onToast?.('erro', 'Selecione ao menos um titulo para preparar o lote.');
+    const eligibleRows = rows.filter((row) => isChargeRowEligible(row)).slice(0, 20);
+    const targetIds = selectedIds.length ? selectedIds : (fallbackToEligible ? eligibleRows.map((row) => row.id) : []);
+
+    if (!targetIds.length) {
+      onToast?.('erro', 'Selecione ao menos um titulo para preparar a cobranca.');
       return;
     }
+
+    const debugPayload = targetIds.map((rowId) => {
+      const row = rows.find((item) => item.id === rowId) || {};
+      return {
+        id: rowId,
+        cliente: getClienteEfetivo(row),
+        telefone: row?.telefone || '',
+        documento: row?.documento || '',
+        numero_boleto: getNumeroBoletoEfetivo(row),
+        vencimento: row?.vencimento || null,
+        valor: row?.valor || 0,
+        status: row?.status || '',
+        elegivel: isChargeRowEligible(row),
+      };
+    });
+    console.log('[PREPARAR COBRANCA] payload', debugPayload);
 
     setRunningAction('prepare-selected');
     try {
       const preparedItems = [];
       const errorsList = [];
-      for (const rowId of selectedIds) {
+      for (const rowId of targetIds) {
         try {
           const result = await prepareManualCharge(resolvedCompanyId, rowId);
           preparedItems.push({
@@ -413,14 +444,16 @@ export default function CentralCobrancaScreen({
         }
       }
 
-      setManualResult({
+      const result = {
         type: 'batch',
         items: preparedItems,
         prepared: preparedItems.length,
         errors: errorsList.length,
         errorItems: errorsList,
         warning: 'Envio real nao realizado. Copie as mensagens e envie manualmente pelo WhatsApp.',
-      });
+      };
+      console.log('[PREPARAR COBRANCA] resultado', result);
+      setManualResult(result);
       if (preparedItems.length) {
         createAuditEvent(resolvedCompanyId, {
           action: 'charge_prepared',
@@ -438,6 +471,7 @@ export default function CentralCobrancaScreen({
       await loadCenter();
       onToast?.('sucesso', `${preparedItems.length} preparo(s) manual(is) concluido(s).`);
     } catch (error) {
+      console.error('[PREPARAR COBRANCA] erro', error);
       onToast?.('erro', error.message || 'Falha ao preparar os titulos selecionados.');
     } finally {
       setRunningAction('');
@@ -763,7 +797,8 @@ export default function CentralCobrancaScreen({
           </button>
           <button
             type="button"
-            onClick={() => onToast?.('aviso', 'Selecione um titulo para preparar manualmente ou use a acao por linha.')}
+            onClick={() => handlePrepareSelected({ fallbackToEligible: true })}
+            disabled={Boolean(runningAction)}
             className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-soft transition hover:bg-slate-100"
           >
             <Send size={15} />
@@ -771,7 +806,7 @@ export default function CentralCobrancaScreen({
           </button>
           <button
             type="button"
-            onClick={handlePrepareSelected}
+            onClick={() => handlePrepareSelected({ fallbackToEligible: false })}
             disabled={!selectedRows.size || Boolean(runningAction)}
             className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-soft transition hover:bg-slate-100 disabled:opacity-50"
           >
