@@ -779,15 +779,32 @@ export const financeService = {
       const cleanPayload = items.map((item) => {
         const normalizedStatus = normalizeStatus(item?.status);
         console.log('[IMPORT] normalized status', item?.status, '=>', normalizedStatus);
+        const documentoFinal =
+          item?.documento ||
+          item?.numero_boleto ||
+          item?.numeroBoleto ||
+          item?.numero_nf ||
+          item?.numeroNf ||
+          item?.numeroDocumento ||
+          item?.document ||
+          item?.titulo ||
+          '';
         const clone = {
           ...mapRegistroToDb({
             ...item,
             company_id: tenant.companyId,
             user_id: tenant.userId,
+            documento: documentoFinal,
+            numero_nf: item?.numero_nf ?? item?.numeroNf ?? '',
             status: normalizedStatus,
           })
         };
         delete clone.id;
+        clone.documento = documentoFinal;
+        console.log('[IMPORT DOC]', {
+          original: item,
+          documentoFinal: clone.documento
+        });
         return clone;
       });
 
@@ -1188,8 +1205,9 @@ export const financeService = {
       batchId,
       cliente_fornecedor: row.cliente_fornecedor || row.nome || '',
       nome: row.nome || row.cliente_fornecedor || '',
-      numeroBoleto: row.numero_boleto ?? row.documento ?? row.numeroBoleto ?? '',
-      documento: row.documento ?? row.numero_boleto ?? row.numeroBoleto ?? '',
+      numeroBoleto: row.numero_boleto ?? row.documento ?? row.numeroBoleto ?? row.numero_nf ?? row.numeroNf ?? row.numeroDocumento ?? row.document ?? row.titulo ?? '',
+      documento: row.documento ?? row.numero_boleto ?? row.numeroBoleto ?? row.numero_nf ?? row.numeroNf ?? row.numeroDocumento ?? row.document ?? row.titulo ?? '',
+      numero_nf: row.numero_nf ?? row.numeroNf ?? '',
       dataVencimento: row.data_vencimento ?? row.dataVencimento ?? '',
       vencimento: row.data_vencimento ?? row.dataVencimento ?? '',
       valor: Number(row.valor || 0),
