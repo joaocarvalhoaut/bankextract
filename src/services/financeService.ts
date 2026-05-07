@@ -46,7 +46,7 @@ const blockedMockNames = new Set([
 ]);
 
 const normalizeImportRecord = (row = {}, index = 0, tipo = 'vencidos', companyId = '') => {
-  const nome = row.nome || row.cliente || row.customer_name || row.pagador || row.sacado || '';
+  const nome = row.nome || row.cliente || row.cliente_fornecedor || row.customer_name || row.pagador || row.sacado || '';
   const documento = row.documento || row.numero_documento || row.doc || row.titulo || '';
   const numeroBoleto = row.numero_boleto || row.boleto_numero || row.nosso_numero || '';
   const dueDate = row.data_vencimento || row.vencimento || row.due_date || '';
@@ -90,7 +90,7 @@ const isValidImportRow = (row = {}) => {
   const vencimento = String(row.data_vencimento || '').trim();
   const valor = Number(row.valor || 0);
 
-  return Boolean((nome || row.sacado || row.cliente) && documento && vencimento && Number.isFinite(valor) && valor > 0);
+  return Boolean((nome || row.sacado || row.cliente || row.cliente_fornecedor) && documento && vencimento && Number.isFinite(valor) && valor > 0);
 };
 
 const extractImportRows = (result = {}) => {
@@ -1097,7 +1097,7 @@ export const financeService = {
 
       const result = data;
       if (result?.success === false) {
-        throw new Error(result?.message || 'OCR nao configurado ou indisponivel. Nenhum dado foi importado.');
+        throw new Error(result?.message || result?.error || 'OCR nao configurado ou indisponivel. Nenhum dado foi importado.');
       }
 
       const preview = buildImportPreview(result, file, tipo, companyId);
