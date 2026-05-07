@@ -63,6 +63,12 @@ const buildError = (error, fallback) => {
   return new Error(error?.message || fallback);
 };
 
+const cleanInsertPayload = (items = []) =>
+  (items || []).map((item) => {
+    const { id, ...rest } = item || {};
+    return isUuid(id) ? { id, ...rest } : rest;
+  });
+
 const isSystemAdminUser = async (userId) => {
   if (!hasSupabaseConfig || !userId) {
     return false;
@@ -759,10 +765,12 @@ export const financeService = {
           user_id: tenant.userId
         })
       );
+      const cleanPayload = cleanInsertPayload(payload);
 
       console.log('[IMPORT] payload', payload);
+      console.log('[IMPORT] cleanPayload', cleanPayload);
 
-      const { data, error } = await client.from('registros_financeiros').insert(payload).select();
+      const { data, error } = await client.from('registros_financeiros').insert(cleanPayload).select();
       if (error) throw buildError(error, 'Falha ao inserir registros.');
       console.log('[IMPORT] resultado', data);
       return (data || []).map(mapRegistroToApp);
