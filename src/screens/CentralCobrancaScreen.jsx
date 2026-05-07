@@ -81,6 +81,11 @@ function getClienteEfetivo(registro = {}) {
   return String(registro?.cliente_nome || registro?.cliente || '').trim();
 }
 
+function temBoleto(registro = {}) {
+  const numero = getNumeroBoletoEfetivo(registro);
+  return Boolean(numero && numero !== '-');
+}
+
 function logCobrancaMapping(registro = {}) {
   const numeroBoletoEfetivo = getNumeroBoletoEfetivo(registro);
   const clienteEfetivo = getClienteEfetivo(registro);
@@ -98,7 +103,7 @@ function isChargeRowEligible(row = {}) {
   const status = String(row?.status || '').toLowerCase().trim();
   const hasStatus = ['aberto', 'pendente', 'vencido'].includes(status);
   const hasPhone = Boolean(row?.telefone_valido || String(row?.telefone || '').trim());
-  const hasDocument = Boolean(getNumeroBoletoEfetivo(row));
+  const hasDocument = temBoleto(row);
   const hasError = Boolean(String(row?.ultimo_erro || '').trim());
   return hasStatus && hasPhone && hasDocument && !hasError;
 }
@@ -410,10 +415,12 @@ export default function CentralCobrancaScreen({
         cliente: getClienteEfetivo(row),
         telefone: row?.telefone || '',
         documento: row?.documento || '',
+        numero_nf: row?.numero_nf || '',
         numero_boleto: getNumeroBoletoEfetivo(row),
         vencimento: row?.vencimento || null,
         valor: row?.valor || 0,
         status: row?.status || '',
+        temBoleto: temBoleto(row),
         elegivel: isChargeRowEligible(row),
       };
     });
@@ -424,23 +431,58 @@ export default function CentralCobrancaScreen({
       const preparedItems = [];
       const errorsList = [];
       for (const rowId of targetIds) {
+        const row = rows.find((item) => item.id === rowId) || {};
+        const elegivel = isChargeRowEligible(row);
+        console.log('[PREVIEW ITEM]', {
+          cliente: row?.cliente_nome,
+          telefone: row?.telefone,
+          documento: row?.documento,
+          numero_nf: row?.numero_nf,
+          numero_boleto: row?.numero_boleto,
+          numeroEfetivo: getNumeroBoletoEfetivo(row),
+          temBoleto: temBoleto(row),
+          elegivel,
+        });
+
+        if (!elegivel) {
+          errorsList.push({
+            id: rowId,
+            cliente: getClienteEfetivo(row) || 'Cliente',
+            error: 'Titulo nao elegivel para preparo manual.',
+            semTelefone: !(row?.telefone_valido || String(row?.telefone || '').trim()),
+            semBoleto: !temBoleto(row),
+          });
+          continue;
+        }
+
         try {
           const result = await prepareManualCharge(resolvedCompanyId, rowId);
           preparedItems.push({
             ...result.payload,
             cliente: getClienteEfetivo(result.payload) || result.payload?.cliente || '',
             numero_boleto: getNumeroBoletoEfetivo(result.payload) || result.payload?.numero_boleto || '',
-            message: result.manual_message,
+            message: result.manual_message || result.message || '',
           });
         } catch (error) {
-          const row = rows.find((item) => item.id === rowId);
-          errorsList.push({
-            id: rowId,
-            cliente: row?.cliente_nome || 'Cliente',
-            error: error.message || 'Falha ao preparar envio manual.',
-            semTelefone: !row?.telefone,
-            semBoleto: !row?.boleto_url && !row?.drive_file_id,
-          });
+          console.error('[PREPARAR COBRANCA] erro item', error);
+          try {
+            const fallbackResult = await previewChargePayload(resolvedCompanyId, rowId);
+            preparedItems.push({
+              ...fallbackResult.payload,
+              cliente: getClienteEfetivo(fallbackResult.payload) || fallbackResult.payload?.cliente || '',
+              numero_boleto: getNumeroBoletoEfetivo(fallbackResult.payload) || fallbackResult.payload?.numero_boleto || '',
+              message: fallbackResult.message || fallbackResult.manual_message || '',
+              preview_only: true,
+            });
+          } catch (fallbackError) {
+            errorsList.push({
+              id: rowId,
+              cliente: getClienteEfetivo(row) || 'Cliente',
+              error: fallbackError.message || error.message || 'Falha ao preparar envio manual.',
+              semTelefone: !(row?.telefone_valido || String(row?.telefone || '').trim()),
+              semBoleto: !temBoleto(row),
+            });
+          }
         }
       }
 
