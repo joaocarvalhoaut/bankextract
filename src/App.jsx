@@ -1621,10 +1621,10 @@ export default function App() {
             <Header
               title={sectionHeader.title}
               subtitle={sectionHeader.subtitle}
-              user={auth.user}
+              userEmail={auth.user?.email || ''}
               onSignOut={auth.signOut}
               companyName={currentCompanyName}
-              notificationCount={notificationCount}
+              companyId={currentCompanyId}
               onOpenNotifications={() => setActiveTab('notifications')}
             />
 
