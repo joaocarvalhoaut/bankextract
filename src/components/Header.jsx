@@ -11,6 +11,7 @@ export default function Header({
   companyId = '',
   onViewPublicSite,
   onOpenNotifications,
+  onNavigate,
   onSignOut,
   signOutLoading = false,
   onToast,
@@ -86,7 +87,12 @@ export default function Header({
 
           <div className="flex flex-wrap items-center gap-2 overflow-visible">
             {actions}
-            <NotificationBell companyId={companyId} onClick={onOpenNotifications} />
+            <NotificationBell
+              companyId={companyId}
+              onOpenNotifications={onOpenNotifications}
+              onNavigate={onNavigate}
+              onToast={onToast}
+            />
 
             {onViewPublicSite && (
               <button

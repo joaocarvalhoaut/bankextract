@@ -439,6 +439,18 @@ export default function App() {
     setActiveTab('notifications');
   }, []);
 
+  const handleHeaderNavigation = useCallback((nextTab) => {
+    if (nextTab === 'notifications') {
+      handleOpenNotifications();
+      return;
+    }
+
+    if (nextTab) {
+      setPublicScreen('app');
+      setActiveTab(nextTab);
+    }
+  }, [handleOpenNotifications]);
+
   const handleOpenEmpresaModal = useCallback((mode = 'criar') => {
     empresa.openCompanyModal?.(mode);
   }, [empresa]);
@@ -1625,7 +1637,8 @@ export default function App() {
               onSignOut={auth.signOut}
               companyName={currentCompanyName}
               companyId={currentCompanyId}
-              onOpenNotifications={() => setActiveTab('notifications')}
+              onNavigate={handleHeaderNavigation}
+              onOpenNotifications={handleOpenNotifications}
             />
 
             {toast && (

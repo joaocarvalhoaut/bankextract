@@ -25,7 +25,7 @@ const formatRelative = (value) => {
   return `${diffDays} d`;
 };
 
-export default function NotificationBell({ companyId, onOpenNotifications, onToast }) {
+export default function NotificationBell({ companyId, onOpenNotifications, onNavigate, onToast }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, right: 16 });
   const [loading, setLoading] = useState(false);
@@ -126,6 +126,15 @@ export default function NotificationBell({ companyId, onOpenNotifications, onToa
     }
   };
 
+  const handleNavigateToNotifications = () => {
+    setOpen(false);
+    if (onNavigate) {
+      onNavigate('notifications');
+      return;
+    }
+    onOpenNotifications?.();
+  };
+
   return (
     <>
       <button
@@ -199,10 +208,7 @@ export default function NotificationBell({ companyId, onOpenNotifications, onToa
 
           <button
             type="button"
-            onClick={() => {
-              setOpen(false);
-              onOpenNotifications?.();
-            }}
+            onClick={handleNavigateToNotifications}
             className="mt-3 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
           >
             Ver todas
