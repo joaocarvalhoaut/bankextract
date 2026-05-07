@@ -65,8 +65,9 @@ const buildError = (error, fallback) => {
 
 const cleanInsertPayload = (items = []) =>
   (items || []).map((item) => {
-    const { id, ...rest } = item || {};
-    return isUuid(id) ? { id, ...rest } : rest;
+    const clone = { ...(item || {}) };
+    delete clone.id;
+    return clone;
   });
 
 const isSystemAdminUser = async (userId) => {
@@ -765,7 +766,17 @@ export const financeService = {
           user_id: tenant.userId
         })
       );
-      const cleanPayload = cleanInsertPayload(payload);
+      const cleanPayload = items.map((item) => {
+        const clone = {
+          ...mapRegistroToDb({
+            ...item,
+            company_id: tenant.companyId,
+            user_id: tenant.userId
+          })
+        };
+        delete clone.id;
+        return clone;
+      });
 
       console.log('[IMPORT] payload', payload);
       console.log('[IMPORT] cleanPayload', cleanPayload);
