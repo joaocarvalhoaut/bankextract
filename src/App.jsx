@@ -662,13 +662,35 @@ export default function App() {
 
     try {
       setProcessing(true);
+      setPreview(null);
+      console.log('[IMPORTACAO] arquivo selecionado', selectedFile);
       for (const stage of ['Enviando arquivo', 'Executando OCR', 'Estruturando dados', 'Validando registros']) {
         setProcessingStage(stage);
         await sleep(180);
       }
 
-      const processed = await financeService.processImportFile(selectedFile, importType, currentCompanyId);
+      const result = await financeService.processImportFile(selectedFile, importType, currentCompanyId);
+      console.log('[IMPORTACAO] resposta OCR', result);
+      const previewRows = Array.isArray(result?.rows)
+        ? result.rows
+        : Array.isArray(result?.data)
+          ? result.data
+          : Array.isArray(result?.records)
+            ? result.records
+            : Array.isArray(result?.registros)
+              ? result.registros
+              : [];
+      const processed = {
+        ...result,
+        rows: previewRows.map((row) => ({
+          ...row,
+          selected: row?.selected !== false,
+        })),
+      };
       setPreview(processed);
+      if (!processed.rows.length) {
+        showToast('erro', 'Nenhum registro foi encontrado no arquivo. Verifique se o PDF possui texto legivel ou tente outro arquivo.');
+      }
       createAuditEvent(currentCompanyId, {
         action: 'import_created',
         entity_type: 'importacoes',
@@ -681,8 +703,11 @@ export default function App() {
         userId: currentUserId,
         severity: 'info',
       }).catch(() => {});
-      showToast('sucesso', 'Previa gerada com sucesso.');
+      if (processed.rows.length) {
+        showToast('sucesso', 'Previa gerada com sucesso.');
+      }
     } catch (error) {
+      console.error('[IMPORTACAO] erro OCR', error);
       showToast('erro', error.message || 'Nao foi possivel processar o arquivo.');
     } finally {
       setProcessing(false);

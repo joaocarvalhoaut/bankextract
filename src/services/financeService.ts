@@ -52,6 +52,79 @@ const samplePhones = [
   '',
 ];
 
+const OCR_FUNCTION_NAME = 'process-import-ocr';
+
+const buildMockImportRows = (tipo, companyId) => {
+  const baseDate = new Date();
+  return Array.from({ length: 8 }).map((_, index) => {
+    const dueDate = new Date(baseDate);
+    dueDate.setDate(baseDate.getDate() + (index - 3));
+    return {
+      id: makeUuid(),
+      nome: sampleNames[index % sampleNames.length],
+      documento: `${tipo === 'liquidacao' ? 'LQ' : 'DOC'}-${String(index + 1).padStart(4, '0')}`,
+      numero_boleto: `${String(index + 1).padStart(4, '0')}-${index + 2}`,
+      data_vencimento: toIsoDate(dueDate),
+      valor: normalizeMoney(650 + index * 175.35),
+      status: tipo === 'liquidacao' ? 'liquidado' : (index < 3 ? 'vencido' : 'pendente'),
+      telefone: samplePhones[index % samplePhones.length] || '',
+      observacoes: '',
+      selected: true,
+      company_id: companyId,
+    };
+  });
+};
+
+const normalizeImportRecord = (row = {}, index = 0, tipo = 'vencidos', companyId = '') => {
+  const nome = row.nome || row.cliente || row.customer_name || row.pagador || row.sacado || '';
+  const documento = row.documento || row.numero_documento || row.doc || row.titulo || '';
+  const numeroBoleto = row.numero_boleto || row.boleto_numero || row.nosso_numero || '';
+  const dueDate = row.data_vencimento || row.vencimento || row.due_date || '';
+  const status = row.status || (tipo === 'liquidacao' ? 'liquidado' : 'pendente');
+  const telefone = row.telefone || row.phone || row.celular || '';
+  const observacoes = row.observacoes || row.observacao || row.notes || '';
+
+  return {
+    ...row,
+    id: row.id || `preview-${index + 1}-${makeUuid().slice(0, 8)}`,
+    nome: String(nome || ''),
+    documento: String(documento || ''),
+    numero_boleto: String(numeroBoleto || ''),
+    data_vencimento: dueDate ? toIsoDate(dueDate) : '',
+    valor: normalizeMoney(row.valor ?? row.amount ?? row.valor_original ?? row.valor_boleto ?? 0),
+    status: String(status || 'pendente').toLowerCase(),
+    telefone: String(telefone || ''),
+    observacoes: String(observacoes || ''),
+    selected: row.selected !== false,
+    company_id: row.company_id || companyId,
+  };
+};
+
+const extractImportRows = (result = {}) => {
+  const candidates = [
+    result?.records,
+    result?.rows,
+    result?.data?.records,
+    result?.data?.rows,
+    result?.data,
+    result?.registros,
+  ];
+
+  return candidates.find((item) => Array.isArray(item)) || [];
+};
+
+const buildImportPreview = (result, file, tipo, companyId) => {
+  const normalizedRows = extractImportRows(result).map((row, index) =>
+    normalizeImportRecord(row, index, tipo, companyId)
+  );
+
+  return {
+    fileName: result?.fileName || result?.file_name || file?.name || 'importacao_ocr.pdf',
+    tipo: result?.tipo || result?.tipo_importacao || tipo,
+    rows: normalizedRows,
+  };
+};
+
 const emptyMetrics = {
   kpis: [],
   charts: {
@@ -989,29 +1062,38 @@ export const financeService = {
   },
 
   async processImportFile(file, tipo = 'vencidos', companyId = runtimeContext.companyId) {
-    const baseDate = new Date();
-    const rows = Array.from({ length: 8 }).map((_, index) => {
-      const dueDate = new Date(baseDate);
-      dueDate.setDate(baseDate.getDate() + (index - 3));
-      return {
-        id: makeUuid(),
-        nome: sampleNames[index % sampleNames.length],
-        documento: `${tipo === 'liquidacao' ? 'LQ' : 'DOC'}-${String(index + 1).padStart(4, '0')}`,
-        numero_boleto: `${String(index + 1).padStart(4, '0')}-${index + 2}`,
-        data_vencimento: toIsoDate(dueDate),
-        valor: normalizeMoney(650 + index * 175.35),
-        status: tipo === 'liquidacao' ? 'liquidado' : (index < 3 ? 'vencido' : 'pendente'),
-        telefone: samplePhones[index % samplePhones.length] || '',
-        observacoes: '',
-        selected: true,
-        company_id: companyId,
-      };
-    });
+    if (hasSupabaseConfig && supabase && file instanceof File) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('tipo_importacao', tipo);
+        formData.append('company_id', companyId || '');
+
+        const { data, error } = await supabase.functions.invoke(OCR_FUNCTION_NAME, {
+          body: formData,
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        const result = data && typeof data === 'object' ? data : {};
+        if (result?.success === false) {
+          throw new Error(result?.message || 'Falha ao processar OCR.');
+        }
+
+        return buildImportPreview(result, file, tipo, companyId);
+      } catch (error) {
+        if (isDevelopment) {
+          console.warn('[IMPORTACAO] fallback local apos falha ao invocar OCR', error);
+        }
+      }
+    }
 
     return {
       fileName: file?.name || 'importacao_ocr.pdf',
       tipo,
-      rows,
+      rows: buildMockImportRows(tipo, companyId),
     };
   },
 

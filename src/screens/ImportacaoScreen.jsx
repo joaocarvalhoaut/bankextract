@@ -71,6 +71,8 @@ export default function ImportacaoScreen({
   const activeCompany = companies.find((item) => item.id === activeCompanyId);
   const selectedType = importTypeOptions.find((item) => item.value === importType) || importTypeOptions[0];
   const [limitNotice, setLimitNotice] = useState(null);
+  const previewRows = Array.isArray(preview?.rows) ? preview.rows : [];
+  const processingFinished = Boolean(preview) && !processing;
 
   useEffect(() => {
     let alive = true;
@@ -250,7 +252,7 @@ export default function ImportacaoScreen({
           <div className="space-y-3">
             {stageLabels.map((stage, index) => {
               const active = processingStage === stage;
-              const completed = stageLabels.indexOf(processingStage) > index;
+              const completed = processingFinished || stageLabels.indexOf(processingStage) > index;
               return <StageCard key={stage} stage={stage} active={active} completed={completed} />;
             })}
           </div>
@@ -262,16 +264,22 @@ export default function ImportacaoScreen({
       </section>
 
       {preview ? (
-        <PreviewImportTable
-          preview={preview}
-          onToggleRow={onTogglePreviewRow}
-          onToggleAll={onToggleAllPreviewRows}
-          onUpdateField={onUpdatePreviewField}
-          onDiscard={onDiscardPreview}
-          onImport={onImportSelected}
-        />
+        <>
+          {previewRows.length === 0 ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Nenhum registro foi encontrado no arquivo. Verifique se o PDF possui texto legivel ou tente outro arquivo.
+            </div>
+          ) : null}
+          <PreviewImportTable
+            rows={previewRows}
+            onToggleRow={onTogglePreviewRow}
+            onToggleAll={onToggleAllPreviewRows}
+            onFieldChange={onUpdatePreviewField}
+            onDiscard={onDiscardPreview}
+            onImport={onImportSelected}
+          />
+        </>
       ) : null}
     </div>
   );
 }
-
