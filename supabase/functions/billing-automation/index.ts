@@ -32,6 +32,16 @@ interface SheetsConfigRow {
   last_source_sync_error: string | null;
 }
 
+interface CompanyIntegrationRow {
+  company_id: string;
+  provider: string;
+  instance_id: string | null;
+  token: string | null;
+  client_token: string | null;
+  phone_number: string | null;
+  connected: boolean | null;
+}
+
 interface FinancialRow {
   id: string;
   company_id: string;
@@ -426,6 +436,117 @@ function validatePhone(phone: string) {
 
 function normalizeBrazilPhone(raw: string | null | undefined) {
   return normalizePhone(raw);
+}
+
+function maskSecret(value: string | null | undefined) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (raw.length <= 8) return `${raw.slice(0, 2)}***${raw.slice(-2)}`;
+  return `${raw.slice(0, 4)}***${raw.slice(-4)}`;
+}
+
+async function getCompanyZapiIntegration(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from('company_integrations')
+    .select('company_id, provider, instance_id, token, client_token, phone_number, connected')
+    .eq('company_id', companyId)
+    .eq('provider', 'zapi')
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return (data || null) as CompanyIntegrationRow | null;
+}
+
+function getTestZapiConfig() {
+  const instanceId = Deno.env.get('TEST_ZAPI_INSTANCE_ID') || '';
+  const token = Deno.env.get('TEST_ZAPI_TOKEN') || '';
+  const clientToken = Deno.env.get('TEST_ZAPI_CLIENT_TOKEN') || '';
+
+  if (!instanceId || !token || !clientToken) {
+    return null;
+  }
+
+  return {
+    source: 'test',
+    instanceId,
+    token,
+    clientToken,
+    phoneNumber: '',
+  };
+}
+
+async function resolveCompanyZapiConfig(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  options: { allowTestMode?: boolean } = {},
+) {
+  const integration = await getCompanyZapiIntegration(supabaseAdmin, companyId);
+  const allowTestMode = options.allowTestMode === true;
+  const testConfig = allowTestMode ? getTestZapiConfig() : null;
+
+  console.log('[ZAPI COMPANY CONFIG]', {
+    company_id: companyId,
+    provider: 'zapi',
+    connected: Boolean(integration?.connected),
+    has_instance_id: Boolean(String(integration?.instance_id || '').trim()),
+    has_token: Boolean(String(integration?.token || '').trim()),
+    has_client_token: Boolean(String(integration?.client_token || '').trim()),
+    source: integration?.connected ? 'company' : (testConfig ? 'test' : 'missing'),
+    instance_id: maskSecret(integration?.instance_id),
+  });
+
+  if (
+    integration?.connected &&
+    String(integration?.instance_id || '').trim() &&
+    String(integration?.token || '').trim() &&
+    String(integration?.client_token || '').trim()
+  ) {
+    return {
+      source: 'company',
+      instanceId: String(integration.instance_id || '').trim(),
+      token: String(integration.token || '').trim(),
+      clientToken: String(integration.client_token || '').trim(),
+      phoneNumber: String(integration.phone_number || '').trim(),
+    };
+  }
+
+  if (testConfig) {
+    return testConfig;
+  }
+
+  throw new Error('Empresa sem integracao Z-API configurada.');
+}
+
+async function validateZapiConnection(config: {
+  instanceId: string;
+  token: string;
+  clientToken: string;
+}) {
+  const url = `https://api.z-api.io/instances/${config.instanceId}/token/${config.token}/status`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Client-Token': config.clientToken,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+  console.log('[ZAPI COMPANY REQUEST]', {
+    url,
+    ok: response.ok,
+    status: response.status,
+  });
+  console.log('[ZAPI COMPANY RESPONSE]', data);
+
+  if (!response.ok) {
+    throw new Error(`Z-API validacao erro ${response.status}: ${JSON.stringify(data)}`);
+  }
+
+  return data as Record<string, unknown>;
 }
 
 function formatCurrency(value: number) {
@@ -1552,6 +1673,7 @@ async function sendRealChargesData(
   companyId: string,
   userId: string | null,
   items: Array<Record<string, unknown>>,
+  options: { allowTestMode?: boolean } = {},
 ) {
   const sent: Array<Record<string, unknown>> = [];
   const failed: Array<Record<string, unknown>> = [];
@@ -1665,7 +1787,7 @@ async function sendRealChargesData(
     }
 
     try {
-      const sendResult = await sendZapiText({ phone: normalizedPhone, message });
+      const sendResult = await sendZapiText(supabaseAdmin, companyId, { phone: normalizedPhone, message }, options);
 
       await insertWhatsappCharge(supabaseAdmin, {
         empresa_id: companyId,
@@ -1745,10 +1867,16 @@ async function sendRealChargesData(
   return { sent, failed };
 }
 
-async function sendZapiDocument(phone: string, caption: string, fileName: string, base64: string) {
-  const instanceId = Deno.env.get('ZAPI_INSTANCE_ID') || '';
-  const token = Deno.env.get('ZAPI_TOKEN') || '';
-  const clientToken = Deno.env.get('ZAPI_CLIENT_TOKEN') || '';
+async function sendZapiDocument(
+  zapiConfig: { instanceId: string; token: string; clientToken: string; source?: string },
+  phone: string,
+  caption: string,
+  fileName: string,
+  base64: string,
+) {
+  const instanceId = zapiConfig.instanceId || '';
+  const token = zapiConfig.token || '';
+  const clientToken = zapiConfig.clientToken || '';
   const documentEndpoint =
     Deno.env.get('ZAPI_DOCUMENT_ENDPOINT') ||
     (instanceId && token ? `https://api.z-api.io/instances/${instanceId}/token/${token}/send-file-base64` : '');
@@ -1774,7 +1902,17 @@ async function sendZapiDocument(phone: string, caption: string, fileName: string
 
   const data = await response.json().catch(() => ({}));
 
+  console.log('[ZAPI COMPANY REQUEST]', {
+    source: zapiConfig.source || 'company',
+    mode: 'document',
+    phone,
+    ok: response.ok,
+    status: response.status,
+  });
+  console.log('[ZAPI COMPANY RESPONSE]', data);
+
   if (!response.ok) {
+    console.error('[ZAPI ERROR]', data);
     throw new Error(String(data?.message || data?.error || `HTTP ${response.status}`));
   }
 
@@ -1784,14 +1922,13 @@ async function sendZapiDocument(phone: string, caption: string, fileName: string
   };
 }
 
-async function sendZapiText({ phone, message }: { phone: string; message: string }) {
-  const instanceId = Deno.env.get('ZAPI_INSTANCE_ID') || '';
-  const token = Deno.env.get('ZAPI_TOKEN') || '';
-  const clientToken = Deno.env.get('ZAPI_CLIENT_TOKEN') || '';
-
-  if (!instanceId || !token || !clientToken) {
-    throw new Error('Z-API nao configurada.');
-  }
+async function sendZapiText(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  { phone, message }: { phone: string; message: string },
+  options: { allowTestMode?: boolean } = {},
+) {
+  const zapiConfig = await resolveCompanyZapiConfig(supabaseAdmin, companyId, options);
 
   const normalizedPhone = normalizeBrazilPhone(phone);
   if (!validatePhone(normalizedPhone)) {
@@ -1799,11 +1936,11 @@ async function sendZapiText({ phone, message }: { phone: string; message: string
   }
 
   const response = await fetch(
-    `https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`,
+    `https://api.z-api.io/instances/${zapiConfig.instanceId}/token/${zapiConfig.token}/send-text`,
     {
       method: 'POST',
       headers: {
-        'Client-Token': clientToken,
+        'Client-Token': zapiConfig.clientToken,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -1815,14 +1952,26 @@ async function sendZapiText({ phone, message }: { phone: string; message: string
 
   const data = await response.json().catch(() => ({}));
   console.log('[ZAPI REQUEST]', {
+    company_id: companyId,
+    source: zapiConfig.source,
     phone: normalizedPhone,
     ok: response.ok,
     status: response.status,
     data,
   });
+  console.log('[ZAPI COMPANY REQUEST]', {
+    company_id: companyId,
+    source: zapiConfig.source,
+    mode: 'text',
+    phone: normalizedPhone,
+    ok: response.ok,
+    status: response.status,
+  });
 
   if (!response.ok) {
     console.error('[ZAPI ERROR]', {
+      company_id: companyId,
+      source: zapiConfig.source,
       phone: normalizedPhone,
       status: response.status,
       data,
@@ -1831,6 +1980,7 @@ async function sendZapiText({ phone, message }: { phone: string; message: string
   }
 
   console.log('[ZAPI RESPONSE]', data);
+  console.log('[ZAPI COMPANY RESPONSE]', data);
 
   return {
     normalizedPhone,
@@ -1994,8 +2144,9 @@ async function processChargeForRecord(
     return { status: 'erro', reason: 'boleto_nao_encontrado' };
   }
 
+  const zapiConfig = await resolveCompanyZapiConfig(supabaseAdmin, record.company_id, { allowTestMode: false });
   const base64 = await downloadDriveFileBase64(token, file.id);
-  const sendResult = await sendZapiDocument(phone, message, file.name || `${numeroBoletoEfetivo || record.documento || record.id}.pdf`, base64);
+  const sendResult = await sendZapiDocument(zapiConfig, phone, message, file.name || `${numeroBoletoEfetivo || record.documento || record.id}.pdf`, base64);
 
   await insertWhatsappCharge(supabaseAdmin, {
     empresa_id: record.company_id,
@@ -3214,7 +3365,7 @@ Deno.serve(async (req: Request) => {
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
     }
 
-    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission' || action === 'get_boleto_sync_report' || action === 'preview_charge_payload' || action === 'prepare_manual_charge' || action === 'send_real') {
+    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission' || action === 'get_boleto_sync_report' || action === 'preview_charge_payload' || action === 'prepare_manual_charge' || action === 'send_real' || action === 'validate_company_integration') {
       requireCompanyId(companyId);
     }
 
@@ -3505,6 +3656,48 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    if (action === 'validate_company_integration') {
+      try {
+        const config = body?.config || {};
+        const instanceId = String(config?.instance_id || '').trim();
+        const tokenValue = String(config?.token || '').trim();
+        const clientTokenValue = String(config?.client_token || '').trim();
+
+        if (!instanceId || !tokenValue || !clientTokenValue) {
+          return jsonResponse({
+            ok: false,
+            success: false,
+            action: 'validate_company_integration',
+            error: 'Instance ID, Token e Client Token sao obrigatorios.',
+          }, 200);
+        }
+
+        const validation = await validateZapiConnection({
+          instanceId,
+          token: tokenValue,
+          clientToken: clientTokenValue,
+        });
+
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'validate_company_integration',
+          message: 'Integracao Z-API validada com sucesso.',
+          connected: true,
+          phone_number: String(validation?.phone || validation?.mobile || validation?.connectedPhone || ''),
+          data: validation,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'validate_company_integration',
+          error: String(error instanceof Error ? error.message : error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
+    }
+
     if (action === 'send_real') {
       try {
         const items = Array.isArray(body?.items) ? body.items : [];
@@ -3517,7 +3710,13 @@ Deno.serve(async (req: Request) => {
           }, 200);
         }
 
-        const result = await sendRealChargesData(admin, companyId || '', auth.userId, items as Array<Record<string, unknown>>);
+        const result = await sendRealChargesData(
+          admin,
+          companyId || '',
+          auth.userId,
+          items as Array<Record<string, unknown>>,
+          { allowTestMode: auth.bypass === true }
+        );
         return jsonResponse({
           ok: true,
           success: true,

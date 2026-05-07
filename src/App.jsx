@@ -1569,6 +1569,7 @@ export default function App() {
               await refreshAllData();
               showToast('sucesso', 'Integracao atualizada.');
             }}
+            onToast={showToast}
           />
         );
         break;
