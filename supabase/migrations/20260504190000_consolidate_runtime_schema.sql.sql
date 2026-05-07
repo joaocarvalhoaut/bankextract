@@ -1676,6 +1676,18 @@ create table if not exists public.usage_counters (
   unique (company_id, period_start, period_end)
 );
 
+alter table public.usage_counters
+  add column if not exists imports_month integer not null default 0;
+
+alter table public.usage_counters
+  add column if not exists charges_month integer not null default 0;
+
+alter table public.usage_counters
+  add column if not exists automations_month integer not null default 0;
+
+alter table public.usage_counters
+  add column if not exists users_count integer not null default 0;
+
 do $$
 begin
   if exists (

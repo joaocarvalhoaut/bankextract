@@ -1,4 +1,7 @@
 import { Clock3, Sparkles } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import PlanLimitNotice from '../components/PlanLimitNotice';
+import { getUsageSummary } from '../services/usageService';
 import CobrancaAutomaticaScreen from './CobrancaAutomaticaScreen';
 
 function calcProximaExecucao(horaEnvio, ativo) {
@@ -46,9 +49,45 @@ export default function AutomacoesScreen({
   const ativo = Boolean(rules?.active);
   const horario = rules?.horario || '08:00';
   const proximaJanela = calcProximaExecucao(horario, ativo);
+  const [limitNotice, setLimitNotice] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+
+    const loadUsage = async () => {
+      if (!activeCompanyId || globalMode) {
+        if (alive) setLimitNotice(null);
+        return;
+      }
+
+      try {
+        const summary = await getUsageSummary(activeCompanyId);
+        const metric = summary?.metrics?.automations_month;
+
+        if (!alive) return;
+        if (metric?.alert) {
+          setLimitNotice({
+            type: metric.alert.level === 'warning' ? 'warning' : 'danger',
+            title: metric.alert.title,
+            message: metric.alert.message,
+          });
+        } else {
+          setLimitNotice(null);
+        }
+      } catch {
+        if (alive) setLimitNotice(null);
+      }
+    };
+
+    loadUsage();
+    return () => {
+      alive = false;
+    };
+  }, [activeCompanyId, globalMode]);
 
   return (
     <div className="space-y-6">
+      {limitNotice ? <PlanLimitNotice {...limitNotice} /> : null}
       <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>

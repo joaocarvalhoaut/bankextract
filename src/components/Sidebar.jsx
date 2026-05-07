@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
 import {
   Activity,
+  AreaChart,
   BarChart3,
+  Bell,
   BadgeCheck,
   BriefcaseBusiness,
   Building2,
+  ClipboardList,
   Cog,
   CreditCard,
   FileSearch,
   History,
+  LifeBuoy,
   Link2,
   ListChecks,
   PanelLeftOpen,
@@ -22,7 +26,8 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { getPlanMeta, getUpgradeRecommendation, normalizePlanId } from '../constants/plans';
-import { getUsageSummary } from '../services/billingAutomationService';
+import SubscriptionBadge from './SubscriptionBadge';
+import { getUsageLimits } from '../services/subscriptionService';
 import { formatCurrencyBRL } from '../utils/format';
 
 const items = [
@@ -31,6 +36,11 @@ const items = [
   { id: 'importacao', label: 'Importacao', icon: Upload, group: 'operacao' },
   { id: 'visao-geral', label: 'Visao Geral', icon: WalletCards, group: 'operacao' },
   { id: 'historico', label: 'Historico', icon: History, group: 'operacao' },
+  { id: 'analytics', label: 'Analytics', icon: AreaChart, group: 'operacao' },
+  { id: 'notifications', label: 'Notificacoes', icon: Bell, group: 'operacao' },
+  { id: 'audit', label: 'Auditoria', icon: ClipboardList, group: 'operacao' },
+  { id: 'help', label: 'Ajuda', icon: LifeBuoy, group: 'operacao' },
+  { id: 'production-checklist', label: 'Checklist Producao', icon: ClipboardList, group: 'operacao' },
   { id: 'cobrancas', label: 'Cobranca Automatica', icon: Activity, group: 'cobranca' },
   { id: 'central-cobranca', label: 'Central Operacional', icon: Target, group: 'cobranca' },
   { id: 'historico-cobranca', label: 'Auditoria de Cobrancas', icon: History, group: 'cobranca' },
@@ -42,6 +52,7 @@ const items = [
   { id: 'status-sistema', label: 'Status do Sistema', icon: ShieldCheck, group: 'admin' },
   { id: 'planos', label: 'Planos', icon: BriefcaseBusiness, group: 'admin' },
   { id: 'billing', label: 'Billing', icon: CreditCard, group: 'admin' },
+  { id: 'admin-saas', label: 'Admin SaaS', icon: Settings2, group: 'admin', adminOnly: true },
 ];
 
 const groupLabels = {
@@ -77,6 +88,7 @@ export default function Sidebar({
   stats,
   isSystemAdmin = false,
   onOpenCompanyModal,
+  onOpenPlans,
 }) {
   const groups = ['operacao', 'cobranca', 'configuracoes', 'admin'];
   const [usageSummary, setUsageSummary] = useState(null);
@@ -91,7 +103,7 @@ export default function Sidebar({
       }
 
       try {
-        const data = await getUsageSummary(activeCompanyId);
+        const data = await getUsageLimits(activeCompanyId);
         if (alive) setUsageSummary(data);
       } catch {
         if (alive) setUsageSummary(null);
@@ -107,9 +119,9 @@ export default function Sidebar({
   const usagePercent = Number(usageSummary?.usage_percent || 0);
   const planId = normalizePlanId(usageSummary?.plan);
   const planMeta = getPlanMeta(planId);
-  const usedRealSends = Number(usageSummary?.used_real_sends || 0);
-  const monthlyLimit = Number(usageSummary?.monthly_send_limit || 0);
-  const limitReached = Boolean(usageSummary?.blocked_by_limit);
+  const usedRealSends = Number(usageSummary?.used_real_sends || usageSummary?.usage?.realSends || 0);
+  const monthlyLimit = Number(usageSummary?.monthly_send_limit || usageSummary?.currentPlan?.monthly_send_limit || 0);
+  const limitReached = Boolean(usageSummary?.blocked_by_limit || usageSummary?.remainingRealSends <= 0);
   const highUsage = !limitReached && usagePercent >= 80;
   const upgrade = getUpgradeRecommendation(planId, {
     monthly_send_limit: monthlyLimit,
@@ -170,90 +182,78 @@ export default function Sidebar({
                 <button
                   type="button"
                   onClick={() => onOpenCompanyModal?.('criar')}
-                  className="mt-2.5 w-full rounded-xl bg-emerald-500 px-3 py-2 text-xs font-bold text-white shadow-lg shadow-emerald-900/30 transition hover:bg-emerald-600 active:scale-[0.98]"
+                  className="mt-2.5 w-full rounded-xl bg-emerald-500 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-600"
                 >
                   + Nova empresa
                 </button>
               ) : null}
             </div>
 
-            {!activeCompany?.isGlobal && activeCompanyId ? (
-              <div
-                className="mt-3 rounded-2xl border border-slate-200 bg-white/92 p-3 shadow-soft"
-                title={upgrade?.target ? `Upgrade recomendado: ${upgrade.target.name} - ${upgrade.reason}` : ''}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Plano atual</p>
-                    <p className="mt-1 text-sm font-bold text-slate-950">{planMeta.name}</p>
-                  </div>
-                  <div className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
-                    Envios: {usedRealSends}/{monthlyLimit || 0}
-                  </div>
+            {usageSummary ? (
+              <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Uso mensal</p>
+                  {planMeta ? (
+                    <SubscriptionBadge planId={planId} size="xs" />
+                  ) : null}
                 </div>
-                {highUsage ? (
-                  <p className="mt-2 text-[11px] font-medium text-amber-700">Uso alto do plano</p>
-                ) : null}
-                {limitReached ? (
-                  <p className="mt-2 text-[11px] font-medium text-red-700">Limite atingido</p>
+                <div className="mb-1.5 flex items-center justify-between text-[11px]">
+                  <span className="text-slate-600">{usedRealSends} de {monthlyLimit > 0 ? monthlyLimit : '∞'} envios</span>
+                  <span className={limitReached ? 'font-bold text-red-600' : highUsage ? 'font-bold text-amber-600' : 'text-slate-500'}>
+                    {limitReached ? 'Limite atingido' : `${Math.round(usagePercent)}%`}
+                  </span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${limitReached ? 'bg-red-500' : highUsage ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                    style={{ width: `${Math.min(usagePercent, 100)}%` }}
+                  />
+                </div>
+                {upgrade?.message ? (
+                  <button
+                    type="button"
+                    onClick={onOpenPlans}
+                    className="mt-2 w-full rounded-lg bg-gradient-to-r from-emerald-500 to-blue-500 px-2 py-1.5 text-[10px] font-bold text-white"
+                  >
+                    <Sparkles size={9} className="mr-1 inline" />
+                    {upgrade.message}
+                  </button>
                 ) : null}
               </div>
             ) : null}
           </div>
         </div>
 
-        <nav className="rounded-[24px] border border-slate-200 bg-white p-2 shadow-soft">
-          {groups.map((group) => {
-            const groupItems = items.filter((item) => item.group === group);
-            return (
-              <NavGroup key={group} label={groupLabels[group]} badge={group === 'cobranca' ? 'Simulacao' : null}>
-                {groupItems.map((item) => {
-                  const Icon = item.icon;
-                  const active = activeTab === item.id;
+        {groups.map((group) => {
+          const groupItems = items.filter(
+            (item) => item.group === group && (!item.adminOnly || isSystemAdmin)
+          );
+          if (!groupItems.length) return null;
 
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setActiveTab(item.id)}
-                      className={`${
-                        active ? 'nav-item-active bg-emerald-50 text-emerald-700 shadow-soft' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                      } relative flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium transition-all duration-150`}
-                    >
-                      <Icon size={15} className={active ? 'text-emerald-600' : 'text-slate-400'} />
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </NavGroup>
-            );
-          })}
-        </nav>
-
-        <div className="accent-bar overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-soft">
-          <div className="border-b border-slate-100 px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Resumo</p>
-          </div>
-          <div className="space-y-3 p-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-slate-500">Carteira ativa</p>
-              <p className="text-sm font-bold text-slate-900">{formatCurrencyBRL(stats?.aVencer || 0)}</p>
-            </div>
-            <div className="h-px bg-slate-100" />
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-slate-500">Em cobranca</p>
-              <p className="text-sm font-bold text-red-600">{formatCurrencyBRL(stats?.vencidos || 0)}</p>
-            </div>
-            <div className="h-px bg-slate-100" />
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-slate-500">Com inconsistencia</p>
-              <p className="text-sm font-bold text-amber-600">{stats?.semTelefone || 0}</p>
-            </div>
-            <div className="rounded-xl bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-500">
-              Operacao protegida por company_id, batch_id e auditoria.
-            </div>
-          </div>
-        </div>
+          return (
+            <NavGroup key={group} label={groupLabels[group]}>
+              {groupItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setActiveTab(item.id)}
+                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    <Icon size={16} className={isActive ? 'text-emerald-600' : 'text-slate-400'} />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </NavGroup>
+          );
+        })}
       </div>
     </aside>
   );

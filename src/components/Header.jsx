@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, Building2, ChevronDown, Globe2, LogOut, User2, Zap } from 'lucide-react';
+import { Building2, ChevronDown, Globe2, LogOut, User2, Zap } from 'lucide-react';
+import NotificationBell from './NotificationBell';
 
 export default function Header({
   title,
@@ -7,9 +8,12 @@ export default function Header({
   companyName,
   actions = null,
   userEmail = '',
+  companyId = '',
   onViewPublicSite,
+  onOpenNotifications,
   onSignOut,
   signOutLoading = false,
+  onToast,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 16 });
@@ -71,98 +75,67 @@ export default function Header({
                 <Building2 size={11} />
                 {companyName || 'Sem empresa ativa'}
               </div>
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 ring-pulse" />
-                SaaS Premium
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700">
+                <Zap size={10} />
+                BankExtract Pro
               </div>
             </div>
-            <h1 className="truncate text-2xl font-bold tracking-tight text-slate-900 lg:text-3xl">
-              {title}
-            </h1>
-            {subtitle ? (
-              <p className="max-w-2xl text-sm leading-relaxed text-slate-700 lg:text-[15px]">{subtitle}</p>
-            ) : null}
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 lg:text-2xl">{title}</h1>
+            {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
           </div>
 
-          <div className="flex flex-shrink-0 items-center gap-2 overflow-visible">
+          <div className="flex flex-wrap items-center gap-2 overflow-visible">
             {actions}
+            <NotificationBell companyId={companyId} onClick={onOpenNotifications} />
 
-            <div className="hidden items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 sm:inline-flex">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 ring-pulse" />
-              Sistema ativo
-            </div>
-
-            <div className="hidden items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[11px] font-semibold text-blue-700 lg:inline-flex">
-              <Zap size={11} />
-              Live
-            </div>
-
-            <button
-              type="button"
-              className="micro-bounce relative inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white p-2.5 text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
-            >
-              <Bell size={16} />
-              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-500 ring-1 ring-white" />
-            </button>
+            {onViewPublicSite && (
+              <button
+                type="button"
+                onClick={onViewPublicSite}
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                <Globe2 size={13} />
+                Site
+              </button>
+            )}
 
             <div className="relative overflow-visible">
               <button
                 ref={buttonRef}
                 type="button"
-                onClick={() => setMenuOpen((prev) => !prev)}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                onClick={() => setMenuOpen((v) => !v)}
+                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
               >
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                  <User2 size={15} />
-                </span>
-                <span className="hidden sm:inline">Conta</span>
-                <ChevronDown size={15} className={`transition ${menuOpen ? 'rotate-180' : ''}`} />
+                <User2 size={14} />
+                <span className="max-w-[120px] truncate">{userEmail || 'Conta'}</span>
+                <ChevronDown size={12} className={menuOpen ? 'rotate-180 transition-transform' : 'transition-transform'} />
               </button>
+
+              {menuOpen && (
+                <div
+                  ref={menuRef}
+                  className="fixed z-[200] min-w-[180px] rounded-2xl border border-slate-200 bg-white py-1 shadow-xl"
+                  style={{ top: menuPosition.top, right: menuPosition.right }}
+                >
+                  <div className="border-b border-slate-100 px-4 py-2.5">
+                    <p className="text-xs font-semibold text-slate-900">{userEmail || 'Conta'}</p>
+                    <p className="text-[11px] text-slate-500">Conta ativa</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { onSignOut?.(); setMenuOpen(false); }}
+                    disabled={signOutLoading}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50"
+                  >
+                    <LogOut size={14} />
+                    {signOutLoading ? 'Saindo...' : 'Sair da conta'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
-
-      {menuOpen ? (
-        <div
-          ref={menuRef}
-          className="fixed z-[99999] w-[220px] rounded-2xl border border-slate-200 bg-white p-2.5 shadow-xl"
-          style={{
-            top: `${menuPosition.top}px`,
-            right: `${menuPosition.right}px`,
-          }}
-        >
-          <div className="border-b border-slate-100 px-3 py-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Conta</p>
-            <p className="mt-1 truncate text-sm font-medium text-slate-700">{userEmail || 'Sessao ativa'}</p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              setMenuOpen(false);
-              onViewPublicSite?.();
-            }}
-            className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-          >
-            <Globe2 size={15} className="text-slate-500" />
-            Ver site publico
-          </button>
-
-          <button
-            type="button"
-            disabled={signOutLoading}
-            onClick={() => {
-              setMenuOpen(false);
-              onSignOut?.();
-            }}
-            className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
-          >
-            <LogOut size={15} />
-            {signOutLoading ? 'Saindo...' : 'Sair'}
-          </button>
-        </div>
-      ) : null}
     </header>
   );
 }

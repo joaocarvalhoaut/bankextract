@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   UploadCloud,
 } from 'lucide-react';
+import CollectionMessagePreview from '../components/CollectionMessagePreview';
 import DataTable from '../components/DataTable';
 import GoogleSheetsConfig from '../components/GoogleSheetsConfig';
 import LimitWarningModal from '../components/plans/LimitWarningModal';
@@ -35,6 +36,10 @@ import {
 } from '../services/billingAutomationService';
 import { canUserPerformAction } from '../security/permissions';
 import { getUpgradeRecommendation, normalizePlanId } from '../constants/plans';
+import { createNotification } from '../services/notificationService';
+import { createAuditEvent } from '../services/auditTimelineService';
+import { getCollectionToneMeta } from '../services/collectionMessageService';
+import { incrementUsage } from '../services/usageService';
 
 const statusTone = {
   sucesso: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
@@ -161,8 +166,6 @@ export default function CobrancaAutomaticaScreen({
     company?.id ||
     null;
 
-  console.log('CobrancaAutomatica companyId', resolvedCompanyId);
-
   const [activeTab, setActiveTab] = useState('regras');
   const [activeTemplateTab, setActiveTemplateTab] = useState('preventiva');
   const [loading, setLoading] = useState(false);
@@ -206,6 +209,12 @@ export default function CobrancaAutomaticaScreen({
     enviar_no_vencimento: true,
     permitir_envio_sem_boleto: false,
     regua_atraso: [1, 3, 5, 10, 15, 30],
+  });
+  const [billingTemplateBaseline, setBillingTemplateBaseline] = useState({
+    mensagem_template: '',
+    template_preventiva: '',
+    template_vencimento: '',
+    template_atraso: '',
   });
 
   const canManage = canUserPerformAction(userRole, 'manage_automations');
@@ -296,12 +305,18 @@ export default function CobrancaAutomaticaScreen({
         permitir_envio_sem_boleto: false,
         regua_atraso: [1, 3, 5, 10, 15, 30],
       });
+      setBillingTemplateBaseline({
+        mensagem_template: '',
+        template_preventiva: '',
+        template_vencimento: '',
+        template_atraso: '',
+      });
       return;
     }
 
     try {
       const data = await getBillingConfig(resolvedCompanyId);
-      setBillingConfig({
+      const nextConfig = {
         ativo: Boolean(data?.config?.ativo),
         hora_execucao: data?.config?.hora_execucao || data?.config?.hora_envio || '08:00',
         mensagem_template: data?.config?.mensagem_template || '',
@@ -317,6 +332,13 @@ export default function CobrancaAutomaticaScreen({
         regua_atraso: Array.isArray(data?.config?.regua_atraso)
           ? data.config.regua_atraso.map((item) => Number(item))
           : [1, 3, 5, 10, 15, 30],
+      };
+      setBillingConfig(nextConfig);
+      setBillingTemplateBaseline({
+        mensagem_template: nextConfig.mensagem_template,
+        template_preventiva: nextConfig.template_preventiva,
+        template_vencimento: nextConfig.template_vencimento,
+        template_atraso: nextConfig.template_atraso,
       });
     } catch (error) {
       onToast?.('erro', error.message || 'Falha ao carregar a configuracao da regua.');
@@ -491,6 +513,40 @@ export default function CobrancaAutomaticaScreen({
       setExecutingAction(action);
       try {
         const result = await fn(resolvedCompanyId);
+        if (action === 'simulate' || action === 'run') {
+          await incrementUsage(resolvedCompanyId, 'automations_month', 1);
+          await createAuditEvent(resolvedCompanyId, {
+            action: action === 'simulate' ? 'automation_simulated' : 'automation_executed',
+            entity_type: 'automacoes_cobranca',
+            title: action === 'simulate' ? 'Simulacao de automacao executada' : 'Automacao executada',
+            description:
+              action === 'simulate'
+                ? 'A simulacao da regua automatica foi executada com sucesso.'
+                : 'A regua automatica foi executada com sucesso.',
+            metadata: {
+              action,
+              hora_execucao: billingConfig.hora_execucao || '',
+              ativo: Boolean(billingConfig.ativo),
+            },
+            severity: 'success',
+          });
+          try {
+            await createNotification(resolvedCompanyId, {
+              type: 'automation_executed',
+              title: 'Automacao executada',
+              message:
+                action === 'simulate'
+                  ? 'Uma simulacao da automacao de cobranca foi executada com sucesso.'
+                  : 'A automacao de cobranca foi executada com sucesso.',
+              severity: 'success',
+              metadata: {
+                action,
+              },
+            });
+          } catch {
+            // Mantem a automacao principal mesmo se a notificacao falhar.
+          }
+        }
         await loadOverview();
         if (action === 'drive') {
           await loadDriveConfig();
@@ -602,7 +658,7 @@ export default function CobrancaAutomaticaScreen({
     setBillingSaving(true);
     try {
       const data = await saveBillingConfig(resolvedCompanyId, billingConfig);
-      setBillingConfig({
+      const nextConfig = {
         ativo: Boolean(data?.config?.ativo),
         hora_execucao: data?.config?.hora_execucao || data?.config?.hora_envio || '08:00',
         mensagem_template: data?.config?.mensagem_template || '',
@@ -618,6 +674,13 @@ export default function CobrancaAutomaticaScreen({
         regua_atraso: Array.isArray(data?.config?.regua_atraso)
           ? data.config.regua_atraso.map((item) => Number(item))
           : [1, 3, 5, 10, 15, 30],
+      };
+      setBillingConfig(nextConfig);
+      setBillingTemplateBaseline({
+        mensagem_template: nextConfig.mensagem_template,
+        template_preventiva: nextConfig.template_preventiva,
+        template_vencimento: nextConfig.template_vencimento,
+        template_atraso: nextConfig.template_atraso,
       });
       await loadOverview();
       onToast?.('sucesso', data?.message || 'Configuracao da regua salva com sucesso.');
@@ -673,6 +736,39 @@ export default function CobrancaAutomaticaScreen({
   }, [activeTemplateTab, billingConfig, companyName, globalMode, onToast, resolvedCompanyId]);
 
   const selectedTemplate = templateTabs.find((item) => item.id === activeTemplateTab) || templateTabs[0];
+
+  const handleCollectionMessageGenerated = useCallback(
+    async (tone) => {
+      const toneMeta = getCollectionToneMeta(tone);
+      await createAuditEvent(resolvedCompanyId, {
+        action: 'collection_ai_generated',
+        entity_type: 'templates_cobranca',
+        entity_id: selectedTemplate.field,
+        title: 'Mensagem inteligente gerada',
+        description: `IA local gerou um template com tom ${toneMeta.label.toLowerCase()}.`,
+        metadata: {
+          tone,
+          tone_label: toneMeta.label,
+          template: selectedTemplate.field,
+        },
+        severity: toneMeta.severity === 'danger' ? 'danger' : toneMeta.severity === 'warning' ? 'warning' : 'info',
+      });
+
+      if (tone === 'firme' || tone === 'juridico') {
+        await createNotification(resolvedCompanyId, {
+          type: 'collection_ai_tone',
+          title: `Tom ${toneMeta.label} usado na automacao`,
+          message: `Um template da regua foi gerado com tom ${toneMeta.label.toLowerCase()}.`,
+          severity: tone === 'juridico' ? 'danger' : 'warning',
+          metadata: {
+            tone,
+            template: selectedTemplate.field,
+          },
+        });
+      }
+    },
+    [resolvedCompanyId, selectedTemplate.field]
+  );
 
   if (globalMode || !resolvedCompanyId) {
     return (
@@ -977,12 +1073,37 @@ export default function CobrancaAutomaticaScreen({
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Preview e teste</p>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-600">
-                    Use o teste para validar placeholders, tom da mensagem e estrutura antes da simulacao em lote.
-                  </p>
-                </div>
+                <CollectionMessagePreview
+                  title="IA de cobranca para templates"
+                  context={{
+                    nome: companyName || 'Cliente Exemplo',
+                    valor: 1250.5,
+                    vencimento: '2026-05-10',
+                    diasAtraso: activeTemplateTab === 'preventiva' ? 0 : activeTemplateTab === 'vencimento' ? 1 : 7,
+                    documento: 'NF-3001',
+                    telefone: '77999990000',
+                    empresa: companyName || 'Empresa Exemplo',
+                    linha_digitavel: '34191.79001 01043.510047 91020.150008 8 92820000129990',
+                    codigo_barras: '34198928200001299901790010104351004791020150',
+                    link_boleto: 'https://drive.google.com/file/d/exemplo/view',
+                    historico: activeTemplateTab === 'atraso' ? 'Contato anterior sem retorno' : '',
+                  }}
+                  initialMessage={billingConfig[selectedTemplate.field] || ''}
+                  restoreMessage={billingTemplateBaseline[selectedTemplate.field] || ''}
+                  onMessageChange={(value) =>
+                    setBillingConfig((current) => ({
+                      ...current,
+                      [selectedTemplate.field]: value,
+                    }))
+                  }
+                  onGenerated={(result) => {
+                    handleCollectionMessageGenerated(result.tone).catch(() => {});
+                    setBillingConfig((current) => ({
+                      ...current,
+                      [selectedTemplate.field]: result.message,
+                    }));
+                  }}
+                />
               </div>
             </div>
 

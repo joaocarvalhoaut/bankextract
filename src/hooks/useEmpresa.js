@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { tenantContext } from '../services/financeService';
+import { tenantContext } from '../services/tenantContext.js';
 import { companyService, GLOBAL_COMPANY_ID } from '../services/companyService';
 
 const globalCompanyOption = {
@@ -238,4 +238,4 @@ export const useEmpresa = ({ user, authEnabled }) => {
     openCompanyModal,
     reloadCompanies: loadCompanies
   };
-};
+}

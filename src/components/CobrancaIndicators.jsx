@@ -1,7 +1,7 @@
 import { AlertTriangle, ArrowRightCircle, BadgeDollarSign, MessageCircleMore, PhoneOff, TrendingUp, WalletCards, Waypoints } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { GLOBAL_COMPANY_ID } from '../services/companyService';
-import { financeService } from '../services/financeService';
+import { financeService } from '../services/financeService.ts';
 import { formatCurrencyBRL } from '../utils/format';
 
 function DashboardCard({ title, value, tone = 'slate', subtitle = '', badges = [], action = null }) {

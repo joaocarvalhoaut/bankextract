@@ -1,24 +1,31 @@
 import { Copy, MessageSquare, Phone, Send, X } from 'lucide-react';
+import CollectionMessagePreview from './CollectionMessagePreview';
 import { formatCurrencyBRL, formatDateBR } from '../utils/format';
 
 export default function MessagePreviewModal({
   modal,
+  data,
   onClose,
   onChangeMessage,
   onCopy,
+  onCollectionGenerated,
   onSend,
+  onConfirmSend,
   sending = false,
 }) {
-  if (!modal?.open || !modal.row) return null;
+  const resolvedModal = modal || data;
+  const resolvedSend = onSend || onConfirmSend;
 
-  const { row, message } = modal;
+  if (!resolvedModal?.open || !resolvedModal.row) return null;
+
+  const { row, message } = resolvedModal;
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm"
       onClick={(event) => (event.target === event.currentTarget ? onClose() : null)}
     >
-      <div className="w-full max-w-3xl overflow-hidden rounded-[32px] border border-white/70 bg-white shadow-[0_40px_120px_rgba(15,23,42,0.2)]">
+      <div className="w-full max-w-5xl overflow-hidden rounded-[32px] border border-white/70 bg-white shadow-[0_40px_120px_rgba(15,23,42,0.2)]">
         <div className="hero-mesh border-b border-slate-200 px-6 py-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3">
@@ -26,9 +33,9 @@ export default function MessagePreviewModal({
                 <MessageSquare size={18} />
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-slate-950">Prévia da mensagem</h3>
+                <h3 className="text-xl font-semibold text-slate-950">Previa da mensagem</h3>
                 <p className="mt-1 text-sm text-slate-600">
-                  Revise e edite a cobrança antes de enviar pelo WhatsApp.
+                  Revise, ajuste o tom e edite a cobranca antes de enviar pelo WhatsApp.
                 </p>
               </div>
             </div>
@@ -43,7 +50,7 @@ export default function MessagePreviewModal({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-5 px-6 py-6 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="grid grid-cols-1 gap-5 px-6 py-6 lg:grid-cols-[0.75fr_1.25fr]">
           <div className="space-y-3">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Cliente</p>
@@ -71,17 +78,26 @@ export default function MessagePreviewModal({
           </div>
 
           <div className="space-y-3">
-            <div>
-              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Mensagem editável
-              </label>
-              <textarea
-                rows={16}
-                value={message}
-                onChange={(event) => onChangeMessage(event.target.value)}
-                className="input-premium min-h-[340px] w-full"
-              />
-            </div>
+            <CollectionMessagePreview
+              title="IA de cobranca no modal principal"
+              context={{
+                nome: row.cliente,
+                valor: row.valor,
+                vencimento: row.vencimento,
+                diasAtraso: row.dias_atraso,
+                documento: row.documento,
+                telefone: row.telefone,
+                empresa: row.company_name || row.empresa,
+                linha_digitavel: row.linha_digitavel,
+                link_boleto: row.boleto_url,
+                codigo_barras: row.codigo_barras,
+                historico: row.historico,
+              }}
+              initialMessage={message}
+              restoreMessage={resolvedModal.originalMessage || row.mensagem || message}
+              onMessageChange={onChangeMessage}
+              onGenerated={onCollectionGenerated}
+            />
 
             <div className="flex flex-wrap justify-end gap-2">
               <button
@@ -94,7 +110,7 @@ export default function MessagePreviewModal({
               </button>
               <button
                 type="button"
-                onClick={onSend}
+                onClick={resolvedSend}
                 disabled={sending}
                 className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
               >

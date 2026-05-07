@@ -1,4 +1,7 @@
 import { FileImage, FileText, LoaderCircle, ScanSearch, UploadCloud, Wand2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import PlanLimitNotice from '../components/PlanLimitNotice';
+import { getUsageSummary } from '../services/usageService';
 import PreviewImportTable from '../components/PreviewImportTable';
 import { canUserPerformAction } from '../security/permissions';
 
@@ -62,13 +65,50 @@ export default function ImportacaoScreen({
   onDiscardPreview,
   onImportSelected,
   userRole = 'operador',
+  onOpenPlans,
 }) {
   const canImport = canUserPerformAction(userRole, 'import_files');
   const activeCompany = companies.find((item) => item.id === activeCompanyId);
   const selectedType = importTypeOptions.find((item) => item.value === importType) || importTypeOptions[0];
+  const [limitNotice, setLimitNotice] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+
+    const loadUsage = async () => {
+      if (!activeCompanyId) {
+        if (alive) setLimitNotice(null);
+        return;
+      }
+
+      try {
+        const summary = await getUsageSummary(activeCompanyId);
+        const metric = summary?.metrics?.imports_month;
+
+        if (!alive) return;
+        if (metric?.alert) {
+          setLimitNotice({
+            type: metric.alert.level === 'warning' ? 'warning' : 'danger',
+            title: metric.alert.title,
+            message: metric.alert.message,
+          });
+        } else {
+          setLimitNotice(null);
+        }
+      } catch {
+        if (alive) setLimitNotice(null);
+      }
+    };
+
+    loadUsage();
+    return () => {
+      alive = false;
+    };
+  }, [activeCompanyId]);
 
   return (
     <div className="space-y-6">
+      {limitNotice ? <PlanLimitNotice {...limitNotice} actionLabel="Ver planos" onAction={onOpenPlans} /> : null}
       <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-200 bg-white p-6 shadow-lifted lg:p-8">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           <div>
@@ -216,33 +256,22 @@ export default function ImportacaoScreen({
           </div>
 
           <div className="mt-5 rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">
-            A previa so aparece depois do processamento. Nesse ponto, voce pode revisar, editar e importar apenas as
-            linhas selecionadas.
+            A previa so aparece depois do processamento. Nesse ponto, voce pode revisar, selecionar e confirmar apenas as linhas desejadas.
           </div>
         </div>
       </section>
 
       {preview ? (
         <PreviewImportTable
-          rows={preview.rows}
+          preview={preview}
           onToggleRow={onTogglePreviewRow}
           onToggleAll={onToggleAllPreviewRows}
-          onFieldChange={onUpdatePreviewField}
+          onUpdateField={onUpdatePreviewField}
           onDiscard={onDiscardPreview}
           onImport={onImportSelected}
         />
-      ) : (
-        <section className="rounded-[28px] border border-dashed border-slate-300 bg-white px-6 py-14 text-center shadow-soft">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100 text-slate-400">
-            <ScanSearch size={28} />
-          </div>
-          <h3 className="text-lg font-semibold text-slate-900">Aguardando processamento</h3>
-          <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-slate-500">
-            Assim que o OCR terminar, a previa editavel aparece aqui com selecao por linha, campos revisaveis e
-            confirmacao segura da importacao.
-          </p>
-        </section>
-      )}
+      ) : null}
     </div>
   );
 }
+

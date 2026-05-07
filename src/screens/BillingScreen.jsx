@@ -1,9 +1,12 @@
 import { CreditCard, LifeBuoy, TrendingUp, Zap } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import UsageMeter from '../components/UsageMeter';
+import PlanLimitNotice from '../components/PlanLimitNotice';
 import FeatureBadge from '../components/plans/FeatureBadge';
 import LimitWarningModal from '../components/plans/LimitWarningModal';
 import PlanCard from '../components/plans/PlanCard';
 import UpgradeBanner from '../components/plans/UpgradeBanner';
+import { getUsageSummary } from '../services/usageService';
 import {
   calculateRemainingSends,
   getPlanMeta,
@@ -11,26 +14,12 @@ import {
   normalizePlanId,
 } from '../constants/plans';
 
-function UsageMeter({ label, value, max, color }) {
-  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
-  return (
-    <div>
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-xs font-medium text-slate-600">{label}</span>
-        <span className="text-xs font-semibold text-slate-900">
-          {value} <span className="font-normal text-slate-400">/ {max}</span>
-        </span>
-      </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-      <p className="mt-1 text-right text-[10px] text-slate-400">{pct}% usado</p>
-    </div>
-  );
-}
+const toNoticeType = (level) => (level === 'warning' ? 'warning' : 'danger');
+const toMeterStatus = (percent) => (percent >= 95 ? 'danger' : percent >= 80 ? 'warning' : 'ok');
 
-export default function BillingScreen({ billing, onOpenPlans }) {
+export default function BillingScreen({ billing, onOpenPlans, companyId, onToast }) {
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [usageSummary, setUsageSummary] = useState(null);
   const normalizedPlanId = normalizePlanId(billing?.currentPlan?.id);
   const currentPlan = useMemo(
     () => ({
@@ -39,6 +28,30 @@ export default function BillingScreen({ billing, onOpenPlans }) {
     }),
     [billing?.currentPlan, normalizedPlanId]
   );
+
+  useEffect(() => {
+    let alive = true;
+
+    const loadUsage = async () => {
+      if (!companyId) {
+        if (alive) setUsageSummary(null);
+        return;
+      }
+
+      try {
+        const data = await getUsageSummary(companyId);
+        if (alive) setUsageSummary(data);
+      } catch (error) {
+        if (alive) setUsageSummary(null);
+        onToast?.('erro', error.message || 'Falha ao carregar o consumo comercial.');
+      }
+    };
+
+    loadUsage();
+    return () => {
+      alive = false;
+    };
+  }, [companyId, onToast]);
 
   const usage = {
     monthly_send_limit: Number(currentPlan?.monthly_send_limit || 0),
@@ -51,7 +64,7 @@ export default function BillingScreen({ billing, onOpenPlans }) {
   const kpis = [
     {
       label: 'Plano atual',
-      value: `${currentPlan.name} - ${currentPlan.subtitle}`,
+      value: currentPlan.name + ' - ' + currentPlan.subtitle,
       sub: currentPlan.price_label,
       bg: 'bg-emerald-50',
       fg: 'text-emerald-700',
@@ -77,7 +90,7 @@ export default function BillingScreen({ billing, onOpenPlans }) {
     {
       label: 'Envios restantes',
       value: remaining,
-      sub: `${usage.used_real_sends}/${usage.monthly_send_limit} usados`,
+      sub: usage.used_real_sends + '/' + usage.monthly_send_limit + ' usados',
       bg: 'bg-violet-50',
       fg: 'text-violet-700',
       Icon: LifeBuoy,
@@ -86,6 +99,16 @@ export default function BillingScreen({ billing, onOpenPlans }) {
 
   return (
     <div className="space-y-6">
+      {usageSummary?.highestAlert ? (
+        <PlanLimitNotice
+          type={toNoticeType(usageSummary.highestAlert.level)}
+          title={usageSummary.highestAlert.title}
+          message={usageSummary.highestAlert.message}
+          actionLabel="Fazer upgrade"
+          onAction={() => setUpgradeModalOpen(true)}
+        />
+      ) : null}
+
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map(({ label, value, sub, bg, fg, valueColor, Icon }) => (
           <article
@@ -93,11 +116,11 @@ export default function BillingScreen({ billing, onOpenPlans }) {
             className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card"
           >
             <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-slate-200 via-emerald-300 to-blue-300 opacity-70" />
-            <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl ${bg} ${fg}`}>
+            <div className={"mb-3 flex h-10 w-10 items-center justify-center rounded-2xl " + bg + " " + fg}>
               <Icon size={18} />
             </div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-            <p className={`mt-1.5 text-2xl font-semibold ${valueColor || 'text-slate-900'}`}>{value}</p>
+            <p className={"mt-1.5 text-2xl font-semibold " + (valueColor || 'text-slate-900')}>{value}</p>
             <p className="mt-1 text-xs text-slate-400">{sub}</p>
           </article>
         ))}
@@ -135,22 +158,36 @@ export default function BillingScreen({ billing, onOpenPlans }) {
 
           <div className="mt-6 space-y-4">
             <UsageMeter
-              label="Envios reais do ciclo"
-              value={usage.used_real_sends}
-              max={usage.monthly_send_limit}
-              color="bg-emerald-500"
+              label="Cobrancas do mes"
+              used={usageSummary?.metrics?.charges_month?.used ?? usage.used_real_sends}
+              limit={usageSummary?.metrics?.charges_month?.limit ?? usage.monthly_send_limit}
+              percentage={usageSummary?.metrics?.charges_month?.percent ?? 0}
+              remaining={usageSummary?.metrics?.charges_month?.remaining ?? remaining}
+              status={toMeterStatus(usageSummary?.metrics?.charges_month?.percent ?? 0)}
             />
             <UsageMeter
-              label="Empresas cadastradas"
-              value={billing?.usage?.companies || 0}
-              max={currentPlan.id === 'business' ? 10 : currentPlan.id === 'pro' ? 5 : 1}
-              color="bg-blue-500"
+              label="Importacoes do mes"
+              used={usageSummary?.metrics?.imports_month?.used ?? 0}
+              limit={usageSummary?.metrics?.imports_month?.limit ?? 0}
+              percentage={usageSummary?.metrics?.imports_month?.percent ?? 0}
+              remaining={usageSummary?.metrics?.imports_month?.remaining ?? 0}
+              status={toMeterStatus(usageSummary?.metrics?.imports_month?.percent ?? 0)}
             />
             <UsageMeter
-              label="Carteira monitorada"
-              value={billing?.usage?.records || 0}
-              max={currentPlan.id === 'business' ? 10000 : currentPlan.id === 'pro' ? 5000 : 1000}
-              color="bg-violet-500"
+              label="Automacoes do mes"
+              used={usageSummary?.metrics?.automations_month?.used ?? 0}
+              limit={usageSummary?.metrics?.automations_month?.limit ?? 0}
+              percentage={usageSummary?.metrics?.automations_month?.percent ?? 0}
+              remaining={usageSummary?.metrics?.automations_month?.remaining ?? 0}
+              status={toMeterStatus(usageSummary?.metrics?.automations_month?.percent ?? 0)}
+            />
+            <UsageMeter
+              label="Usuarios"
+              used={usageSummary?.metrics?.users_count?.used ?? (billing?.usage?.usersCount || 0)}
+              limit={usageSummary?.metrics?.users_count?.limit ?? (currentPlan.id === 'business' ? 10 : currentPlan.id === 'pro' ? 3 : 2)}
+              percentage={usageSummary?.metrics?.users_count?.percent ?? 0}
+              remaining={usageSummary?.metrics?.users_count?.remaining ?? 0}
+              status={toMeterStatus(usageSummary?.metrics?.users_count?.percent ?? 0)}
             />
           </div>
         </article>
@@ -209,7 +246,7 @@ export default function BillingScreen({ billing, onOpenPlans }) {
         description="Seu plano atual ja esta funcionando para simulacao e operacao assistida. O checkout sera liberado em breve para ativar upgrades reais."
         onUpgrade={() => {
           setUpgradeModalOpen(false);
-          onOpenPlans?.();
+          onToast?.('aviso', 'Upgrade sera ativado em breve.');
         }}
         onClose={() => setUpgradeModalOpen(false)}
       />

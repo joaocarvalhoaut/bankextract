@@ -9,10 +9,15 @@ import {
   RefreshCcw,
   ShieldAlert,
 } from 'lucide-react';
+import CollectionMessagePreview from '../components/CollectionMessagePreview';
 import {
   getRealSendChecklist,
   simulateChargeBatch,
 } from '../services/billingAutomationService';
+import { createAuditEvent } from '../services/auditTimelineService';
+import { createNotification } from '../services/notificationService';
+import { getCollectionToneMeta } from '../services/collectionMessageService';
+import { incrementUsage } from '../services/usageService';
 
 function ChecklistCard({ label, value, tone = 'slate' }) {
   const palette = {
@@ -76,6 +81,7 @@ export default function ChecklistEnvioRealScreen({
   const [simulating, setSimulating] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [data, setData] = useState(null);
+  const [checklistAiMessage, setChecklistAiMessage] = useState('');
 
   const loadChecklist = useCallback(async () => {
     if (!resolvedCompanyId || globalMode) {
@@ -129,6 +135,30 @@ export default function ChecklistEnvioRealScreen({
     setSimulating(true);
     try {
       const result = await simulateChargeBatch(resolvedCompanyId, 10);
+      await incrementUsage(resolvedCompanyId, 'automations_month', 1);
+      await createAuditEvent(resolvedCompanyId, {
+        action: 'automation_simulated',
+        entity_type: 'automacoes_cobranca',
+        title: 'Simulacao geral executada',
+        description: `A simulacao geral processou ${result?.simulated || 0} item(ns).`,
+        metadata: {
+          simulated: result?.simulated || 0,
+        },
+        severity: 'info',
+      });
+      try {
+        await createNotification(resolvedCompanyId, {
+          type: 'automation_executed',
+          title: 'Simulacao de automacao concluida',
+          message: `A simulacao geral de cobranca processou ${result?.simulated || 0} item(ns).`,
+          severity: 'success',
+          metadata: {
+            simulated: result?.simulated || 0,
+          },
+        });
+      } catch {
+        // Mantem a simulacao principal mesmo se a notificacao falhar.
+      }
       await loadChecklist();
       onToast?.('sucesso', `Simulacao geral concluida: ${result?.simulated || 0} item(ns) simulados.`);
     } catch (error) {
@@ -166,6 +196,37 @@ export default function ChecklistEnvioRealScreen({
       setExporting(false);
     }
   }, [data?.checklist, onToast]);
+
+  const handleChecklistAiGenerated = useCallback(
+    async (result) => {
+      const toneMeta = getCollectionToneMeta(result.tone);
+      setChecklistAiMessage(result.message);
+      await createAuditEvent(resolvedCompanyId, {
+        action: 'collection_ai_generated',
+        entity_type: 'checklist_envio',
+        title: 'Mensagem inteligente gerada',
+        description: `IA local gerou uma mensagem com tom ${toneMeta.label.toLowerCase()} para simulacao operacional.`,
+        metadata: {
+          tone: result.tone,
+          tone_label: toneMeta.label,
+        },
+        severity: toneMeta.severity === 'danger' ? 'danger' : toneMeta.severity === 'warning' ? 'warning' : 'info',
+      });
+
+      if (result.tone === 'firme' || result.tone === 'juridico') {
+        await createNotification(resolvedCompanyId, {
+          type: 'collection_ai_tone',
+          title: `Tom ${toneMeta.label} usado no checklist`,
+          message: `Uma mensagem de cobranca foi gerada no checklist com tom ${toneMeta.label.toLowerCase()}.`,
+          severity: result.tone === 'juridico' ? 'danger' : 'warning',
+          metadata: {
+            tone: result.tone,
+          },
+        });
+      }
+    },
+    [resolvedCompanyId]
+  );
 
   if (globalMode || !resolvedCompanyId) {
     return (
@@ -314,6 +375,29 @@ export default function ChecklistEnvioRealScreen({
               )}
             </div>
           </section>
+
+          <CollectionMessagePreview
+            title="IA de cobranca para simulacao operacional"
+            context={{
+              nome: companyName || 'Cliente Exemplo',
+              valor: cards.titulos_monitorados ? 2500 : 0,
+              vencimento: new Date().toISOString().slice(0, 10),
+              diasAtraso: Number(cards.inconsistencias_criticas || 0) > 0 ? 10 : 2,
+              documento: `CHECKLIST-${resolvedCompanyId}`,
+              telefone: 'nao localizado',
+              empresa: companyName || 'Empresa Exemplo',
+              linha_digitavel: 'nao localizado',
+              link_boleto: 'nao localizado',
+              codigo_barras: 'nao localizado',
+              historico: (data?.recommendations || []).slice(0, 2).join('; '),
+            }}
+            initialMessage={checklistAiMessage}
+            restoreMessage={checklistAiMessage}
+            onMessageChange={setChecklistAiMessage}
+            onGenerated={(result) => {
+              handleChecklistAiGenerated(result).catch(() => {});
+            }}
+          />
         </div>
       </section>
     </div>

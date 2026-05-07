@@ -87,6 +87,9 @@ create table if not exists public.audit_logs (
   action text not null,
   entity text not null,
   entity_id text,
+  title text,
+  description text,
+  severity text not null default 'info',
   metadata jsonb not null default '{}'::jsonb,
   ip_address text,
   user_agent text,
@@ -192,6 +195,33 @@ alter table public.audit_logs
 
 alter table public.audit_logs
   add column if not exists user_agent text;
+
+alter table public.audit_logs
+  add column if not exists title text;
+
+alter table public.audit_logs
+  add column if not exists description text;
+
+alter table public.audit_logs
+  add column if not exists severity text not null default 'info';
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conname = 'audit_logs_severity_check'
+      and conrelid = 'public.audit_logs'::regclass
+  ) then
+    alter table public.audit_logs
+      drop constraint audit_logs_severity_check;
+  end if;
+end;
+$$;
+
+alter table public.audit_logs
+  add constraint audit_logs_severity_check
+  check (severity in ('info', 'success', 'warning', 'danger'));
 
 do $$
 begin
@@ -1757,3 +1787,447 @@ to authenticated
 using (
   public.user_can_delete_company(company_id)
 );
+
+create table if not exists public.onboarding_progress (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.empresas(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
+  step_key text not null,
+  completed boolean not null default false,
+  completed_at timestamptz,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.subscription_plans (
+  id uuid primary key default gen_random_uuid(),
+  code text not null unique,
+  name text not null,
+  price_cents integer not null default 0,
+  billing_period text not null default 'monthly',
+  limits_json jsonb not null default '{}'::jsonb,
+  features_json jsonb not null default '[]'::jsonb,
+  active boolean not null default true,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.company_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.empresas(id) on delete cascade,
+  plan_code text not null,
+  status text not null default 'trialing',
+  trial_ends_at timestamptz,
+  current_period_start timestamptz,
+  current_period_end timestamptz,
+  cancel_at_period_end boolean not null default false,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+alter table public.usage_counters
+  add column if not exists imports_month integer not null default 0;
+
+alter table public.usage_counters
+  add column if not exists charges_month integer not null default 0;
+
+alter table public.usage_counters
+  add column if not exists automations_month integer not null default 0;
+
+alter table public.usage_counters
+  add column if not exists users_count integer not null default 0;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'onboarding_progress_company_step_key'
+      and conrelid = 'public.onboarding_progress'::regclass
+  ) then
+    alter table public.onboarding_progress
+      add constraint onboarding_progress_company_step_key unique (company_id, step_key);
+  end if;
+end;
+$$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'company_subscriptions_company_id_key'
+      and conrelid = 'public.company_subscriptions'::regclass
+  ) then
+    alter table public.company_subscriptions
+      add constraint company_subscriptions_company_id_key unique (company_id);
+  end if;
+end;
+$$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'company_subscriptions_plan_code_fkey'
+      and conrelid = 'public.company_subscriptions'::regclass
+  ) then
+    alter table public.company_subscriptions
+      add constraint company_subscriptions_plan_code_fkey
+      foreign key (plan_code) references public.subscription_plans(code);
+  end if;
+end;
+$$;
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conname = 'company_subscriptions_status_check'
+      and conrelid = 'public.company_subscriptions'::regclass
+  ) then
+    alter table public.company_subscriptions
+      drop constraint company_subscriptions_status_check;
+  end if;
+end;
+$$;
+
+alter table public.company_subscriptions
+  add constraint company_subscriptions_status_check
+  check (status in ('active', 'trialing', 'past_due', 'canceled'));
+
+create index if not exists idx_onboarding_progress_company_id on public.onboarding_progress(company_id);
+create index if not exists idx_onboarding_progress_step_key on public.onboarding_progress(step_key);
+create index if not exists idx_company_subscriptions_status on public.company_subscriptions(status);
+create index if not exists idx_company_subscriptions_plan_code on public.company_subscriptions(plan_code);
+
+alter table public.onboarding_progress enable row level security;
+alter table public.subscription_plans enable row level security;
+alter table public.company_subscriptions enable row level security;
+
+drop policy if exists "onboarding_progress_select_access" on public.onboarding_progress;
+drop policy if exists "onboarding_progress_insert_access" on public.onboarding_progress;
+drop policy if exists "onboarding_progress_update_access" on public.onboarding_progress;
+drop policy if exists "onboarding_progress_delete_access" on public.onboarding_progress;
+
+create policy "onboarding_progress_select_access"
+on public.onboarding_progress
+for select
+to authenticated
+using (
+  public.user_has_company_access(company_id)
+);
+
+create policy "onboarding_progress_insert_access"
+on public.onboarding_progress
+for insert
+to authenticated
+with check (
+  public.user_can_write_company(company_id)
+);
+
+create policy "onboarding_progress_update_access"
+on public.onboarding_progress
+for update
+to authenticated
+using (
+  public.user_can_write_company(company_id)
+)
+with check (
+  public.user_can_write_company(company_id)
+);
+
+create policy "onboarding_progress_delete_access"
+on public.onboarding_progress
+for delete
+to authenticated
+using (
+  public.user_can_delete_company(company_id)
+);
+
+drop policy if exists "subscription_plans_select_access" on public.subscription_plans;
+drop policy if exists "subscription_plans_manage_admin" on public.subscription_plans;
+
+create policy "subscription_plans_select_access"
+on public.subscription_plans
+for select
+to authenticated
+using (true);
+
+create policy "subscription_plans_manage_admin"
+on public.subscription_plans
+for all
+to authenticated
+using (public.is_system_admin(auth.uid()))
+with check (public.is_system_admin(auth.uid()));
+
+drop policy if exists "company_subscriptions_select_access" on public.company_subscriptions;
+drop policy if exists "company_subscriptions_insert_access" on public.company_subscriptions;
+drop policy if exists "company_subscriptions_update_access" on public.company_subscriptions;
+drop policy if exists "company_subscriptions_delete_access" on public.company_subscriptions;
+
+create policy "company_subscriptions_select_access"
+on public.company_subscriptions
+for select
+to authenticated
+using (
+  public.user_has_company_access(company_id)
+);
+
+create policy "company_subscriptions_insert_access"
+on public.company_subscriptions
+for insert
+to authenticated
+with check (
+  public.user_can_write_company(company_id)
+);
+
+create policy "company_subscriptions_update_access"
+on public.company_subscriptions
+for update
+to authenticated
+using (
+  public.user_can_write_company(company_id)
+)
+with check (
+  public.user_can_write_company(company_id)
+);
+
+create policy "company_subscriptions_delete_access"
+on public.company_subscriptions
+for delete
+to authenticated
+using (
+  public.user_can_delete_company(company_id)
+);
+
+drop trigger if exists trg_company_subscriptions_updated_at on public.company_subscriptions;
+create trigger trg_company_subscriptions_updated_at
+before update on public.company_subscriptions
+for each row
+execute function public.set_updated_at();
+
+insert into public.subscription_plans (code, name, price_cents, billing_period, limits_json, features_json, active)
+values
+  (
+    'starter',
+    'Starter',
+    19700,
+    'monthly',
+    '{"charges_month": 500, "imports_month": 50, "users": 2, "companies": 1}'::jsonb,
+    '["basic_import", "manual_automation", "basic_dashboard"]'::jsonb,
+    true
+  ),
+  (
+    'pro',
+    'Pro',
+    39700,
+    'monthly',
+    '{"charges_month": 2000, "imports_month": 300, "users": 3, "companies": 1}'::jsonb,
+    '["basic_import", "manual_automation", "advanced_automation", "billing_center", "analytics"]'::jsonb,
+    true
+  ),
+  (
+    'business',
+    'Business',
+    79700,
+    'monthly',
+    '{"charges_month": 10000, "imports_month": 2000, "users": 10, "companies": 3}'::jsonb,
+    '["basic_import", "manual_automation", "advanced_automation", "billing_center", "analytics", "executive_dashboard", "full_audit"]'::jsonb,
+    true
+  )
+on conflict (code) do update
+set
+  name = excluded.name,
+  price_cents = excluded.price_cents,
+  billing_period = excluded.billing_period,
+  limits_json = excluded.limits_json,
+  features_json = excluded.features_json,
+  active = excluded.active;
+
+insert into public.company_subscriptions (
+  company_id,
+  plan_code,
+  status,
+  trial_ends_at,
+  current_period_start,
+  current_period_end,
+  cancel_at_period_end
+)
+select
+  e.id,
+  'starter',
+  'trialing',
+  timezone('utc', now()) + interval '14 days',
+  timezone('utc', now()),
+  timezone('utc', now()) + interval '14 days',
+  false
+from public.empresas e
+where not exists (
+  select 1
+  from public.company_subscriptions cs
+  where cs.company_id = e.id
+);
+
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.empresas(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
+  type text not null,
+  title text not null,
+  message text not null,
+  status text not null default 'unread',
+  severity text not null default 'info',
+  metadata jsonb not null default '{}'::jsonb,
+  read_at timestamptz,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conname = 'notifications_status_check'
+      and conrelid = 'public.notifications'::regclass
+  ) then
+    alter table public.notifications
+      drop constraint notifications_status_check;
+  end if;
+end;
+$$;
+
+alter table public.notifications
+  add constraint notifications_status_check
+  check (status in ('unread', 'read'));
+
+create index if not exists idx_notifications_company_created_at on public.notifications(company_id, created_at desc);
+create index if not exists idx_notifications_company_status on public.notifications(company_id, status);
+create index if not exists idx_notifications_user_id on public.notifications(user_id);
+
+alter table public.notifications enable row level security;
+
+drop policy if exists "notifications_select_access" on public.notifications;
+drop policy if exists "notifications_insert_access" on public.notifications;
+drop policy if exists "notifications_update_access" on public.notifications;
+drop policy if exists "notifications_delete_access" on public.notifications;
+
+create policy "notifications_select_access"
+on public.notifications
+for select
+to authenticated
+using (
+  public.user_has_company_access(company_id)
+);
+
+create policy "notifications_insert_access"
+on public.notifications
+for insert
+to authenticated
+with check (
+  public.user_can_write_company(company_id)
+);
+
+create policy "notifications_update_access"
+on public.notifications
+for update
+to authenticated
+using (
+  public.user_has_company_access(company_id)
+)
+with check (
+  public.user_has_company_access(company_id)
+);
+
+create policy "notifications_delete_access"
+on public.notifications
+for delete
+to authenticated
+using (
+  public.user_can_delete_company(company_id)
+);
+
+create table if not exists public.production_checklist_items (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.empresas(id) on delete cascade,
+  item_key text not null,
+  status text not null default 'pendente',
+  owner_name text,
+  notes text,
+  completed_at timestamptz,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  unique (company_id, item_key)
+);
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conname = 'production_checklist_items_status_check'
+      and conrelid = 'public.production_checklist_items'::regclass
+  ) then
+    alter table public.production_checklist_items
+      drop constraint production_checklist_items_status_check;
+  end if;
+end;
+$$;
+
+alter table public.production_checklist_items
+  add constraint production_checklist_items_status_check
+  check (status in ('pendente', 'em_andamento', 'concluido'));
+
+create index if not exists idx_production_checklist_items_company_status
+  on public.production_checklist_items(company_id, status);
+
+create index if not exists idx_production_checklist_items_company_updated_at
+  on public.production_checklist_items(company_id, updated_at desc);
+
+alter table public.production_checklist_items enable row level security;
+
+drop policy if exists "production_checklist_items_select_access" on public.production_checklist_items;
+drop policy if exists "production_checklist_items_insert_access" on public.production_checklist_items;
+drop policy if exists "production_checklist_items_update_access" on public.production_checklist_items;
+drop policy if exists "production_checklist_items_delete_access" on public.production_checklist_items;
+
+create policy "production_checklist_items_select_access"
+on public.production_checklist_items
+for select
+to authenticated
+using (
+  public.user_has_company_access(company_id)
+);
+
+create policy "production_checklist_items_insert_access"
+on public.production_checklist_items
+for insert
+to authenticated
+with check (
+  public.user_can_write_company(company_id)
+);
+
+create policy "production_checklist_items_update_access"
+on public.production_checklist_items
+for update
+to authenticated
+using (
+  public.user_can_write_company(company_id)
+)
+with check (
+  public.user_can_write_company(company_id)
+);
+
+create policy "production_checklist_items_delete_access"
+on public.production_checklist_items
+for delete
+to authenticated
+using (
+  public.user_can_delete_company(company_id)
+);
+
+drop trigger if exists trg_production_checklist_items_updated_at on public.production_checklist_items;
+create trigger trg_production_checklist_items_updated_at
+before update on public.production_checklist_items
+for each row
+execute function public.set_updated_at();

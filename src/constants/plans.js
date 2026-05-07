@@ -8,25 +8,25 @@ export const PLAN_FEATURES = {
     price: 197,
     price_label: 'R$197/mes',
     badge: 'Essencial',
-    description: 'Para operacoes que querem organizar a cobranca com previsibilidade e auditoria basica.',
-    monthly_send_limit: 200,
+    description: 'Para operacoes que querem organizar a cobranca com previsibilidade e uma base segura de onboarding.',
+    monthly_send_limit: 500,
     recommended: false,
     highlighted: false,
     cta: 'Comecar teste gratis',
     upgrade_target: 'pro',
     theme: 'slate',
     features: [
-      '200 envios/mês inclusos',
-      'Envio manual individual',
-      'Envio em lote manual',
-      'Central operacional',
-      'Auditoria basica',
+      '500 cobrancas/mes inclusas',
+      '1 empresa',
+      '2 usuarios',
+      'Importacoes basicas',
+      'Automacoes manuais',
       'Checklist pre-envio',
     ],
     limitations: [
-      'Sem automacao programada',
-      'Sem retries automaticos',
-      'Sem fila automatica',
+      'Sem automacoes avancadas',
+      'Sem dashboard executivo',
+      'Sem suporte prioritario',
     ],
     capabilities: {
       manual_send: true,
@@ -44,7 +44,7 @@ export const PLAN_FEATURES = {
     price: 397,
     price_label: 'R$397/mes',
     badge: 'Mais indicado',
-    description: 'Para empresas que querem operar cobranca com automacao programada e mais controle operacional.',
+    description: 'Para empresas que precisam de mais volume, automacoes avancadas e leitura operacional da cobranca.',
     monthly_send_limit: 2000,
     recommended: true,
     highlighted: true,
@@ -52,17 +52,16 @@ export const PLAN_FEATURES = {
     upgrade_target: 'business',
     theme: 'emerald',
     features: [
-      '2.000 envios/mês inclusos',
+      '2.000 cobrancas/mes inclusas',
+      '3 usuarios',
       'Tudo do Starter',
-      'Automacao automatica',
-      'Regua programada',
-      'Retries automaticos',
-      'Fila de envio',
-      'Relatorios avancados',
+      'Automacoes avancadas',
+      'Central de cobranca',
+      'Relatorios',
     ],
     limitations: [
-      'Sem multiempresa avancado',
-      'Sem fluxo de aprovacao enterprise',
+      'Sem dashboard executivo completo',
+      'Sem suporte prioritario',
     ],
     capabilities: {
       manual_send: true,
@@ -80,7 +79,7 @@ export const PLAN_FEATURES = {
     price: 797,
     price_label: 'A partir de R$797/mes',
     badge: 'Customizavel',
-    description: 'Para operacoes de maior volume, com governanca, multiempresa e integracoes sob demanda.',
+    description: 'Para operacoes de maior volume, com multiempresa, governanca e acompanhamento executivo.',
     monthly_send_limit: 10000,
     recommended: false,
     highlighted: false,
@@ -88,11 +87,11 @@ export const PLAN_FEATURES = {
     upgrade_target: null,
     theme: 'blue',
     features: [
-      '10.000 envios/mês inclusos',
+      '10.000 cobrancas/mes inclusas',
+      '10 usuarios',
       'Tudo do Pro',
-      'Multiempresa',
-      'Aprovacoes',
-      'Integracoes sob demanda',
+      'Dashboard executivo',
+      'Auditoria completa',
       'Suporte prioritario',
       'Limite personalizado',
     ],
@@ -109,7 +108,11 @@ export const PLAN_FEATURES = {
 };
 
 const COMPARISON_ROWS = [
-  { key: 'monthly_send_limit', label: 'Envios inclusos por mês', formatter: (plan) => `${Number(plan.monthly_send_limit || 0).toLocaleString('pt-BR')}` },
+  {
+    key: 'monthly_send_limit',
+    label: 'Cobrancas inclusas por mes',
+    formatter: (plan) => `${Number(plan.monthly_send_limit || 0).toLocaleString('pt-BR')}`,
+  },
   { key: 'manual_send', label: 'Envio manual individual' },
   { key: 'batch_manual_send', label: 'Envio em lote manual' },
   { key: 'automatic_send', label: 'Automacao programada' },
@@ -143,7 +146,10 @@ export function calculateRemainingSends({
   extra_send_credits = 0,
   used_real_sends = 0,
 } = {}) {
-  return Math.max(0, Number(monthly_send_limit || 0) + Number(extra_send_credits || 0) - Number(used_real_sends || 0));
+  return Math.max(
+    0,
+    Number(monthly_send_limit || 0) + Number(extra_send_credits || 0) - Number(used_real_sends || 0),
+  );
 }
 
 export function isLimitReached(usage = {}) {
@@ -167,11 +173,11 @@ export function getUpgradeRecommendation(planId, usage = {}) {
   const next = getPlanMeta(current.upgrade_target);
   const percent = getUsagePercent(usage);
 
-  let reason = 'Desbloqueie automacao e mais capacidade operacional.';
+  let reason = 'Desbloqueie mais capacidade operacional e recursos comerciais.';
   if (current.id === 'starter') {
-    reason = 'Automacao programada, retries e mais volume ficam liberados no Pro.';
+    reason = 'O plano Pro libera automacoes avancadas, mais usuarios e maior volume mensal.';
   } else if (percent >= 80) {
-    reason = 'Seu uso esta alto para o plano atual. O proximo nivel aumenta o limite mensal.';
+    reason = 'Seu uso esta alto para o plano atual. O proximo nivel amplia o limite mensal.';
   }
 
   return {
@@ -191,6 +197,6 @@ export function buildPlanCatalogForUi() {
     ...plan,
     featured: Boolean(plan.highlighted),
     emphasis: plan.subtitle,
-    limits: `${Number(plan.monthly_send_limit || 0).toLocaleString('pt-BR')} envios/mês`,
+    limits: `${Number(plan.monthly_send_limit || 0).toLocaleString('pt-BR')} cobrancas/mes`,
   }));
 }

@@ -1,8 +1,13 @@
 import { getSupabaseConfigStatus, hasSupabaseConfig, supabase } from './supabaseClient';
+import { createAuditEvent } from './auditTimelineService';
 
 const mockUserId = 'user_demo_1';
 const storageKeyPrefix = 'bankextract.activeCompany.';
 export const GLOBAL_COMPANY_ID = 'TODAS_EMPRESAS';
+const envSystemAdminEmails = String(import.meta.env.VITE_SYSTEM_ADMIN_EMAILS || '')
+  .split(',')
+  .map((item) => item.trim().toLowerCase())
+  .filter(Boolean);
 
 const mockCompanies = [
   {
@@ -131,6 +136,11 @@ const generateUniqueInviteCode = async (client) => {
 
 export const companyService = {
   async isSystemAdmin({ userId, email }) {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (normalizedEmail && envSystemAdminEmails.includes(normalizedEmail)) {
+      return true;
+    }
+
     if (!hasSupabaseConfig || !userId) {
       return mockSystemAdmins.some((item) => item.user_id === (userId || mockUserId) || item.email === email);
     }
@@ -372,6 +382,19 @@ export const companyService = {
           role: 'operador',
           created_at: new Date().toISOString()
         });
+        createAuditEvent(company.id, {
+          action: 'user_joined',
+          entity_type: 'usuarios_empresas',
+          entity_id: userId || mockUserId,
+          title: 'Usuario entrou na empresa',
+          description: 'Um usuario entrou na empresa usando codigo de convite.',
+          metadata: {
+            user_id: userId || mockUserId,
+            invite_code: normalizedCode
+          },
+          severity: 'success',
+          userId: userId || mockUserId
+        }).catch(() => {});
       }
 
       return {
@@ -402,18 +425,24 @@ export const companyService = {
 
     const companyData = resolveRpcRow(rpcData);
     if (!companyData) {
-      throw new Error('Codigo de convite nao encontrado.');
+      throw new Error('Codigo de convite nao reconhecido ou invalido.');
     }
 
-    return {
-      company: mapCompanyToApp(companyData, { role: 'operador' }),
-      membership: {
-        id: `membership_${companyData.id}`,
-        userId,
-        companyId: companyData.id,
-        role: 'operador',
-        createdAt: companyData.created_at || new Date().toISOString()
-      }
-    };
-  }
+    const resolved = await resolveCompany(companyData);
+    await createAuditEvent(resolved.company.id, {
+      action: 'user_joined',
+      entity_type: 'usuarios_empresas',
+      entity_id: userId,
+      title: 'Usuario entrou na empresa',
+      description: 'Um usuario entrou na empresa usando codigo de convite.',
+      metadata: {
+        user_id: userId,
+        invite_code: normalizedCode
+      },
+      severity: 'success',
+      userId
+    });
+
+    return resolved;
+  },
 };

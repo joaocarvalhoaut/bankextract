@@ -103,6 +103,29 @@ const trustMetrics = [
   { value: '100%', label: 'Operacao auditavel por titulo' },
 ];
 
+const faqItems = [
+  {
+    question: 'O sistema envia cobranca automatica?',
+    answer: 'O fluxo ja nasce preparado para simulacao, auditoria e automacao futura. O envio real pode ser ativado em uma fase posterior.',
+  },
+  {
+    question: 'Preciso configurar WhatsApp agora?',
+    answer: 'Nao. Nesta etapa voce consegue organizar carteira, importar dados, simular cobrancas e validar o processo sem integrar um provedor pago.',
+  },
+  {
+    question: 'Posso usar sem dominio proprio?',
+    answer: 'Sim. O BankExtract funciona como plataforma SaaS multiempresa sem exigir dominio proprio para iniciar a operacao.',
+  },
+  {
+    question: 'Os dados sao separados por empresa?',
+    answer: 'Sim. O produto opera com isolamento por company_id, mantendo registros, cobrancas e auditoria separados por empresa.',
+  },
+  {
+    question: 'Posso testar antes de pagar?',
+    answer: 'Sim. O produto foi desenhado para onboarding, simulacao e validacao operacional antes de qualquer integracao comercial paga.',
+  },
+];
+
 function SectionBadge({ children }) {
   return (
     <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
@@ -185,13 +208,10 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
 
               <div className="space-y-5">
                 <h1 className="max-w-4xl text-5xl font-bold leading-[0.92] tracking-[-0.04em] text-slate-950 md:text-6xl xl:text-7xl">
-                  Cobranca automatica por WhatsApp para{' '}
-                  <span className="bg-gradient-to-r from-emerald-600 via-emerald-500 to-blue-600 bg-clip-text text-transparent">
-                    reduzir inadimplencia
-                  </span>
+                  Automatize cobrancas, organize boletos e acompanhe recebimentos em um so lugar.
                 </h1>
                 <p className="max-w-2xl text-base leading-8 text-slate-600 md:text-lg">
-                  Organize sua carteira, encontre inconsistencias, simule cobrancas e acompanhe tudo antes do envio real.
+                  Importe arquivos, concilie recebiveis, prepare cobrancas por WhatsApp e opere com visao financeira centralizada.
                 </p>
               </div>
 
@@ -404,30 +424,9 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                         { label: 'Com inconsistencia', value: '9 itens' },
                         { label: 'Auditoria', value: 'Ativa' },
                       ].map((card) => (
-                        <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
-                          <p className="mt-2 text-xl font-bold text-slate-950">{card.value}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="rounded-[22px] border border-slate-200 bg-white shadow-soft">
-                      <div className="grid grid-cols-[1.3fr_1fr_1fr_1fr] gap-3 border-b border-slate-200 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                        <span>Cliente</span>
-                        <span>Etapa</span>
-                        <span>Boleto</span>
-                        <span>Status</span>
-                      </div>
-                      {[
-                        ['Atacado Norte', 'Preventiva', 'Encontrado', 'Simulado'],
-                        ['Oficina Brasil', 'Atraso', 'Pendente', 'Inconsistencia'],
-                        ['Distribuidora Vale', 'Vencimento', 'Encontrado', 'Auditoria'],
-                      ].map((row) => (
-                        <div key={row.join('-')} className="grid grid-cols-[1.3fr_1fr_1fr_1fr] gap-3 px-4 py-3 text-sm text-slate-700">
-                          <span className="font-medium text-slate-900">{row[0]}</span>
-                          <span>{row[1]}</span>
-                          <span>{row[2]}</span>
-                          <span>{row[3]}</span>
+                        <div key={card.label} className="rounded-xl bg-white/10 p-3">
+                          <p className="text-[11px] text-slate-400">{card.label}</p>
+                          <p className="mt-0.5 text-sm font-bold text-white">{card.value}</p>
                         </div>
                       ))}
                     </div>
@@ -435,122 +434,8 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                 </div>
               </div>
             </div>
-
-            <div className="fade-up">
-              <SectionBadge>Preview do produto</SectionBadge>
-              <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
-                Visao completa para decidir antes de cobrar
-              </h2>
-              <p className="mt-3 text-base leading-relaxed text-slate-600">
-                O BankExtract mostra sua operacao com clareza antes de qualquer envio real.
-              </p>
-
-              <div className="mt-6 space-y-3">
-                {[
-                  'Simulacao antes do envio real',
-                  'Isolamento por empresa',
-                  'Historico auditavel',
-                  'Painel de inconsistencias',
-                  'Checklist de prontidao',
-                  'Preparado para integracao WhatsApp',
-                ].map((item) => (
-                  <div key={item} className="fade-up flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-soft">
-                    <CheckCircle2 size={16} className="text-emerald-600" />
-                    <span className="text-sm font-medium text-slate-700">{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         </section>
-
-        <section className="rounded-[32px] border border-slate-200 bg-slate-50 px-8 py-10 shadow-soft lg:px-10">
-          <div className="max-w-3xl fade-up">
-            <SectionBadge>Resultados e beneficios</SectionBadge>
-            <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
-              Menos cobranca manual. Mais controle financeiro.
-            </h2>
-          </div>
-          <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {outcomes.map((item) => (
-              <div
-                key={item}
-                className="fade-up rounded-[24px] border border-slate-200 bg-white p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card"
-              >
-                <CheckCircle2 size={18} className="text-emerald-600" />
-                <p className="mt-4 text-base font-semibold text-slate-950">{item}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section id="planos" className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-soft lg:p-10">
-          <div className="max-w-3xl fade-up">
-            <SectionBadge>Planos</SectionBadge>
-            <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">Planos para cada fase da sua operacao</h2>
-          </div>
-          <div className="mt-8 grid gap-4 xl:grid-cols-3">
-            {plans.map((plan) => (
-              <PlanCard
-                key={plan.id}
-                plan={plan}
-                onAction={plan.id === 'business' ? handlePlans : handleStart}
-                footer="Envios inclusos por mês."
-              />
-            ))}
-          </div>
-          <p className="mt-6 text-sm leading-relaxed text-slate-500">
-            Envios inclusos por mes. Pacotes extras e integracoes podem ser contratados separadamente.
-          </p>
-        </section>
-
-        <section className="rounded-[32px] border border-slate-200 bg-white px-8 py-10 shadow-card lg:px-10">
-          <div className="mx-auto max-w-3xl text-center fade-up">
-            <SectionBadge>Proximo passo</SectionBadge>
-            <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
-              Pronto para transformar sua cobranca em processo?
-            </h2>
-            <p className="mt-3 text-base leading-relaxed text-slate-600">
-              Comece com simulacao segura, organize sua carteira e prepare sua empresa para cobranca automatica.
-            </p>
-            <div className="mt-6 flex flex-wrap justify-center gap-3">
-              <PublicButton primary onClick={handleStart}>
-                Comecar teste gratis
-                <ArrowRight size={16} />
-              </PublicButton>
-              <PublicButton onClick={handlePlans}>
-                Ver demonstracao
-                <ChevronRight size={16} />
-              </PublicButton>
-            </div>
-          </div>
-        </section>
-
-        <footer className="rounded-[28px] border border-slate-200 bg-white px-6 py-6 shadow-soft">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-base font-bold text-slate-950">BankExtract Pro</p>
-              <p className="text-sm text-slate-500">Gestao Financeira & Cobranca</p>
-            </div>
-
-            <div className="flex flex-wrap gap-5 text-sm font-medium text-slate-600">
-              <a href="#recursos" className="transition hover:text-slate-950">Recursos</a>
-              <a href="#planos" className="transition hover:text-slate-950">Planos</a>
-              <button type="button" onClick={handleStart} className="transition hover:text-slate-950">Entrar</button>
-              <a href="mailto:contato@bankextract.pro" className="transition hover:text-slate-950">Contato</a>
-            </div>
-          </div>
-          <div className="mt-5 border-t border-slate-200 pt-4 text-sm text-slate-500">
-            © BankExtract Pro. Todos os direitos reservados.
-          </div>
-        </footer>
-      </div>
-
-      <div className="fixed bottom-4 left-4 right-4 z-50 md:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <PublicButton primary fullWidth onClick={handleStart}>
-          Comecar teste gratis
-          <ArrowRight size={16} />
-        </PublicButton>
       </div>
     </div>
   );

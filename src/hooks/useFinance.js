@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { financeService, tenantContext } from '../services/financeService';
+import { financeService } from '../services/financeService';
 import { GLOBAL_COMPANY_ID } from '../services/companyService';
+import { createNotification } from '../services/notificationService';
+import { tenantContext } from '../services/tenantContext.js';
+import { incrementUsage } from '../services/usageService';
 import { useAutoGoogleSheetsSync } from './useAutoGoogleSheetsSync';
 import { sendWhatsAppCharges as zapiSendCharges } from '../services/whatsappService';
 import { auditLog } from '../services/auditService';
@@ -557,6 +560,21 @@ Total Geral: 24.479,32`;
         );
 
         setHistory((prev) => [historyEntry, ...prev]);
+        await incrementUsage(activeCompanyId, 'imports_month', 1);
+        try {
+          await createNotification(activeCompanyId, {
+            type: 'import_completed',
+            title: 'Liquidacao importada',
+            message: `${rowsToUpdate.length} registro(s) foram baixados manualmente a partir do arquivo ${preview.origem || 'sem nome'}.`,
+            severity: 'success',
+            metadata: {
+              import_type: 'liquidacao',
+              file_name: preview.origem || '',
+            },
+          });
+        } catch {
+          // Nao interrompe a importacao legado por falha de notificacao.
+        }
         showMessage('sucesso', `${rowsToUpdate.length} registro(s) baixado(s) manualmente.`);
         triggerSync('confirmLiquidacao');
       } else {
@@ -612,6 +630,21 @@ Total Geral: 24.479,32`;
           },
           ...prev
         ]);
+        await incrementUsage(activeCompanyId, 'imports_month', 1);
+        try {
+          await createNotification(activeCompanyId, {
+            type: 'import_completed',
+            title: 'Importacao concluida',
+            message: `${newRows.length} registro(s) foram enviados para a Visao Geral a partir do arquivo ${preview.origem || 'sem nome'}.`,
+            severity: 'success',
+            metadata: {
+              import_type: preview?.tipo || 'vencidos',
+              file_name: preview.origem || '',
+            },
+          });
+        } catch {
+          // Nao interrompe a importacao legado por falha de notificacao.
+        }
         showMessage('sucesso', `${newRows.length} registro(s) enviado(s) para Visao Geral.`);
         triggerSync('confirmImportVencidos');
         auditLog.importConfirmed(activeCompanyId, { arquivo: preview?.arquivo || '', registros: newRows.length, tipo: preview?.tipo || 'vencidos' });
@@ -1212,6 +1245,21 @@ Total Geral: 24.479,32`;
       });
       setWhatsappModal((prev) => (prev ? { ...prev, sending: false, results: resultsMap, mocked: data.mocked || false } : null));
       if ((data.summary?.sent || 0) > 0) {
+        await incrementUsage(activeCompanyId, 'charges_month', data.summary.sent);
+        try {
+          await createNotification(activeCompanyId, {
+            type: 'charge_sent',
+            title: 'Cobrancas registradas',
+            message: `${data.summary.sent} cobranca(s) foram processadas no lote manual assistido.`,
+            severity: data.mocked ? 'info' : 'success',
+            metadata: {
+              sent: data.summary.sent,
+              mocked: data.mocked || false,
+            },
+          });
+        } catch {
+          // Nao interrompe o lote legado por falha de notificacao.
+        }
         auditLog.whatsappChargesSent(activeCompanyId, { count: data.summary.sent, mocked: data.mocked || false });
         window.dispatchEvent(new CustomEvent('bankextract:dashboard-refresh'));
         triggerSync('sendWhatsAppCharges');
@@ -1239,97 +1287,41 @@ Total Geral: 24.479,32`;
     setImportType,
     activeConfig: computedConfig,
     activeRecords,
-    updateConfig,
-    stats,
-    processingFiles,
-    pastedText,
-    setPastedText,
-    handleFiles,
-    processPastedText,
-    dragging,
-    setDragging,
-    preview,
-    previewSearch,
-    setPreviewSearch,
-    previewFilter,
-    setPreviewFilter,
-    analyzedPreviewRows,
-    visiblePreviewRows,
-    previewStats,
-    editingPreviewCell,
-    editingPreviewValue,
-    setEditingPreviewValue,
-    startPreviewEdit,
-    savePreviewEdit,
-    cancelPreviewEdit,
-    togglePreviewSelection,
-    selectAllPreview,
-    clearPreviewSelection,
-    selectPreviewWithoutProblems,
-    removePreviewRow,
-    cancelPreview,
-    confirmImport,
-    filteredRows,
-    paginatedRows,
-    search,
-    setSearch,
-    filters,
-    toggleFilter,
-    clearFilters,
-    sortBy,
-    toggleSort,
-    page,
-    setPage,
-    totalPages,
-    historyRowsByScope,
+    activeRepresentatives,
+    activeHistoryRows,
+    filteredRecords,
     selectedRows,
-    toggleRowSelection,
-    toggleAllPageRows,
-    deleteSelectedRows,
-    selectedHistoryRows,
-    toggleHistorySelection,
-    toggleAllHistoryRows,
-    deleteSelectedHistory,
+    toggleRow,
+    toggleAllRows,
+    clearSelection,
+    sortConfig,
+    setSortConfig,
+    filters,
+    setFilters,
+    preview,
+    setPreview,
+    previewCellEdits,
+    editingPreviewCell,
+    setEditingPreviewCell,
+    handlePreviewCellChange,
+    confirmPreviewCellEdit,
     editingCell,
     editingValue,
     setEditingValue,
     startCellEdit,
     saveCellEdit,
     cancelCellEdit,
-    openFilterDropdown,
-    setOpenFilterDropdown,
-    openRepresentativeDropdown,
-    setOpenRepresentativeDropdown,
-    representativeSearch,
-    setRepresentativeSearch,
-    representativesFiltered,
-    activeRepresentatives,
+    deleteRecord,
+    deleteSelectedRecords,
+    sendWhatsappCharge,
+    chargeState,
     assignRepresentative,
-    representativeModal,
-    setRepresentativeModal,
-    openNewRepresentativeModal,
-    openEditRepresentativeModal,
-    saveRepresentative,
-    deleteRepresentative,
-    exportRows,
-    clearOverviewModalOpen,
-    clearingOverview,
-    openClearOverviewModal,
-    closeClearOverviewModal,
-    confirmClearOverview,
-    getUniqueColumnValues,
-    companyHistory,
-    setRecords,
-    showMessage,
-    // WhatsApp Z-API
-    whatsappModal,
-    openWhatsAppChargeModal,
-    closeWhatsAppModal,
-    updateWhatsAppMessage,
-    sendWhatsAppCharges: doSendWhatsAppCharges,
-    // Google Sheets auto-sync
-    syncStatus,
-    googleSyncMessage,
+    refreshRepresentatives,
+    summary,
+    refreshAll,
     invalidateConfigCache,
+    showMessage,
+    triggerSync,
+    currentUserId,
   };
-};
+}

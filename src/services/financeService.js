@@ -1,5 +1,4 @@
 import {
-  getFallbackTenantIds,
   getSupabaseConfigStatus,
   getSupabaseSessionUser,
   hasSupabaseConfig,
@@ -7,86 +6,39 @@ import {
 } from './supabaseClient';
 import { GLOBAL_COMPANY_ID } from './companyService';
 import { buildPlanCatalogForUi, getPlanMeta, normalizePlanId } from '../constants/plans';
+import {
+  currentTenantUserId as currentUserId,
+  defaultTenantCompanyId as defaultCompanyId,
+  fallbackTenantIds,
+  tenantContext,
+} from './tenantContext.js';
+import {
+  buildLocalBootstrap,
+  buildLocalCompanyDataset,
+  clone,
+  createDefaultFinanceConfig,
+  db,
+  defaultAutomationRules,
+  localDelay,
+  mapEmpresaToApp,
+  sampleNames,
+  samplePhones,
+} from './financeDataset.js';
+import {
+  mapConfiguracaoToApp,
+  mapConfiguracaoToDb,
+  mapImportacaoToApp,
+  mapImportacaoToDb,
+  mapRegistroToApp,
+  mapRegistroToDb,
+  mapRepresentanteToApp,
+  mapRepresentanteToDb,
+  normalizeRepresentativeList,
+} from './financeAdapters.js';
+import { normalizeText } from './financeNormalizers.js';
 
-const mockUserId = 'user_demo_1';
-const mockDefaultCompanyId = 'emp1';
 const isProduction = import.meta.env.PROD;
 const isDevelopment = import.meta.env.DEV;
-
-const fallbackTenantIds = getFallbackTenantIds();
-
-const currentUserId = fallbackTenantIds.userId || mockUserId;
-const defaultCompanyId = fallbackTenantIds.companyId || mockDefaultCompanyId;
-
-const empresas = [
-  { id: 'emp1', nome: 'Construtora Vale Ltda', cnpj: '12.345.678/0001-90', invite_code: 'VALE-2026', user_id: currentUserId },
-  { id: 'emp2', nome: 'Comercial Horizonte SA', cnpj: '98.765.432/0001-10', invite_code: 'HORIZ-2026', user_id: currentUserId },
-  { id: 'emp3', nome: 'Servicos Integrados ME', cnpj: '55.444.333/0001-22', invite_code: 'SERV-2026', user_id: currentUserId }
-];
-
-const representantes = [
-  { id: 'r1', company_id: 'emp1', user_id: currentUserId, nome: 'Carlos Mendes', telefone: '(77) 99111-2233', email: 'carlos@vale.com.br', observacao: 'Regiao Sul', ativo: true },
-  { id: 'r2', company_id: 'emp1', user_id: currentUserId, nome: 'Juliana Prado', telefone: '(77) 99222-3344', email: 'juliana@vale.com.br', observacao: 'Grandes contas', ativo: true },
-  { id: 'r3', company_id: 'emp1', user_id: currentUserId, nome: 'Rogerio Lima', telefone: '(77) 99333-4455', email: 'rogerio@vale.com.br', observacao: '', ativo: false },
-  { id: 'r4', company_id: 'emp2', user_id: currentUserId, nome: 'Beatriz Martins', telefone: '(11) 98877-6655', email: 'bia@horizonte.com', observacao: 'Varejo', ativo: true },
-  { id: 'r5', company_id: 'emp2', user_id: currentUserId, nome: 'Thiago Araujo', telefone: '(11) 97766-5544', email: 'thiago@horizonte.com', observacao: '', ativo: true },
-  { id: 'r6', company_id: 'emp3', user_id: currentUserId, nome: 'Patricia Nogueira', telefone: '(31) 99988-7766', email: 'patricia@si.com.br', observacao: 'Atendimento unico', ativo: true }
-];
-
-const registros = [
-  { id: '1', company_id: 'emp1', user_id: currentUserId, batchId: 'batch-h1', nome: 'DIOCLECIO XAVIER', numeroBoleto: '2056-3', dataVencimento: '2026-03-18', valor: 1755.77, representanteId: 'r1', telefone: '(77) 99111-2233', observacao: 'Cliente priorizado', status: 'pendente', importadoEm: '2026-04-15T10:00:00Z', liquidadoEm: null },
-  { id: '2', company_id: 'emp1', user_id: currentUserId, batchId: 'batch-h1', nome: 'VALERIA CORDEIRO DE SOUZA', numeroBoleto: '2057-8', dataVencimento: '2026-03-18', valor: 771.4, representanteId: 'r2', telefone: '(77) 99222-3344', observacao: '', status: 'pendente', importadoEm: '2026-04-15T10:00:00Z', liquidadoEm: null },
-  { id: '3', company_id: 'emp1', user_id: currentUserId, batchId: 'batch-h1', nome: 'MARCOS ANTONIO PEREIRA', numeroBoleto: '2058-1', dataVencimento: '2026-04-22', valor: 2340.5, representanteId: 'r1', telefone: '', observacao: 'Aguardando retorno', status: 'negociacao', importadoEm: '2026-04-15T10:00:00Z', liquidadoEm: null },
-  { id: '4', company_id: 'emp1', user_id: currentUserId, batchId: 'batch-h1', nome: 'ANA CAROLINA SANTOS', numeroBoleto: '2059-5', dataVencimento: '2026-04-10', valor: 890, representanteId: null, telefone: '', observacao: '', status: 'pendente', importadoEm: '2026-04-15T10:00:00Z', liquidadoEm: null },
-  { id: '5', company_id: 'emp1', user_id: currentUserId, batchId: 'batch-h1', nome: 'JOSE RIBEIRO DA SILVA', numeroBoleto: '2060-7', dataVencimento: '2026-05-05', valor: 4521.3, representanteId: 'r2', telefone: '', observacao: '', status: 'pendente', importadoEm: '2026-04-15T10:00:00Z', liquidadoEm: null },
-  { id: '6', company_id: 'emp1', user_id: currentUserId, batchId: 'batch-h1', nome: 'FERNANDA OLIVEIRA COSTA', numeroBoleto: '2061-2', dataVencimento: '2026-04-28', valor: 1200, representanteId: null, telefone: '(77) 99999-0000', observacao: 'Sem retorno', status: 'pendente', importadoEm: '2026-04-15T10:00:00Z', liquidadoEm: null },
-  { id: '7', company_id: 'emp1', user_id: currentUserId, batchId: 'batch-h1', nome: 'ROBERTO ALMEIDA LIMA', numeroBoleto: '2062-9', dataVencimento: '2026-03-30', valor: 3150.8, representanteId: 'r1', telefone: '', observacao: '', status: 'pendente', importadoEm: '2026-04-15T10:00:00Z', liquidadoEm: null },
-  { id: '8', company_id: 'emp1', user_id: currentUserId, batchId: 'batch-h1', nome: 'PATRICIA GOMES FERREIRA', numeroBoleto: '2063-4', dataVencimento: '2026-05-15', valor: 675.45, representanteId: null, telefone: '', observacao: '', status: 'pendente', importadoEm: '2026-04-15T10:00:00Z', liquidadoEm: null },
-  { id: '9', company_id: 'emp2', user_id: currentUserId, batchId: 'batch-emp2-1', nome: 'LOJAS CENTRO SUL LTDA', numeroBoleto: '8801-1', dataVencimento: '2026-05-10', valor: 12450, representanteId: 'r4', telefone: '(11) 98877-6655', observacao: '', status: 'pendente', importadoEm: '2026-04-10T09:00:00Z', liquidadoEm: null },
-  { id: '10', company_id: 'emp2', user_id: currentUserId, batchId: 'batch-emp2-1', nome: 'MERCADO BOM PRECO', numeroBoleto: '8802-6', dataVencimento: '2026-04-30', valor: 3890.5, representanteId: 'r5', telefone: '', observacao: '', status: 'pendente', importadoEm: '2026-04-10T09:00:00Z', liquidadoEm: null },
-  { id: '11', company_id: 'emp3', user_id: currentUserId, batchId: 'batch-emp3-1', nome: 'CLIENTE SERVICOS UNICO', numeroBoleto: '1001-5', dataVencimento: '2026-05-20', valor: 2500, representanteId: 'r6', telefone: '(31) 99988-7766', observacao: '', status: 'pendente', importadoEm: '2026-04-12T14:30:00Z', liquidadoEm: null }
-];
-
-const importacoes = [
-  { id: 'h1', company_id: 'emp1', user_id: currentUserId, batchId: 'batch-h1', arquivo: 'sicoob_marco_2026.pdf', tipo: 'vencidos', registros: 8, status: 'concluida', created_at: '2026-04-15T10:00:00Z' }
-];
-
-const configuracoes = {
-  emp1: { company_id: 'emp1', user_id: currentUserId, multaPercentual: 2, jurosPercentualDia: 0.033 },
-  emp2: { company_id: 'emp2', user_id: currentUserId, multaPercentual: 2, jurosPercentualDia: 0.033 },
-  emp3: { company_id: 'emp3', user_id: currentUserId, multaPercentual: 2, jurosPercentualDia: 0.033 }
-};
-
-const cobrancasWhatsapp = [];
-const whatsappCobrancaConfig = {};
-
-const db = {
-  empresas,
-  representantes,
-  registros,
-  importacoes,
-  configuracoes,
-  cobrancasWhatsapp,
-  whatsappCobrancaConfig
-};
-
-const defaultAutomationRules = {
-  active: false,
-  horario: '08:00',
-  canal: 'WhatsApp',
-  intervalo_dias: 5,
-  cobrar_apos_dias_vencido: 1,
-  protesto_apos_5_dias: true,
-  mensagem_template: '',
-  rules: []
-};
-
-const clone = (value) => JSON.parse(JSON.stringify(value));
-
-const localDelay = async (payload) => {
-  await new Promise((resolve) => setTimeout(resolve, 60));
-  return clone(payload);
-};
 
 const isUuid = (value) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
@@ -151,7 +103,7 @@ const getSupabaseSessionState = async () => {
 const getEffectiveTenant = async ({ userId, companyId } = {}) => {
   const sessionState = await getSupabaseSessionState();
   const sessionUser = sessionState.user;
-  const resolvedUserId = userId || sessionUser?.id || fallbackTenantIds.userId || mockUserId;
+  const resolvedUserId = userId || sessionUser?.id || fallbackTenantIds.userId || currentUserId;
   const configuredCompanyId =
     (companyId && String(companyId).trim()) ||
     (fallbackTenantIds.companyId && String(fallbackTenantIds.companyId).trim()) ||
@@ -194,109 +146,6 @@ const getEffectiveTenant = async ({ userId, companyId } = {}) => {
   };
 };
 
-const mapEmpresaToApp = (row) => ({
-  id: row.id,
-  nome: row.nome,
-  cnpj: row.cnpj || '',
-  inviteCode: row.invite_code || ''
-});
-
-const mapRepresentanteToApp = (row) => ({
-  id: row.id,
-  company_id: row.company_id,
-  user_id: row.user_id,
-  nome: row.nome,
-  telefone: row.telefone || '',
-  email: row.email || '',
-  observacao: row.observacao || '',
-  ativo: row.ativo !== false
-});
-
-const mapRepresentanteToDb = (row) => ({
-  id: row.id,
-  company_id: row.company_id,
-  user_id: row.user_id,
-  nome: row.nome,
-  telefone: row.telefone || '',
-  email: row.email || '',
-  observacao: row.observacao || '',
-  ativo: row.ativo !== false
-});
-
-const mapRegistroToApp = (row) => ({
-  id: row.id,
-  company_id: row.company_id,
-  user_id: row.user_id,
-  batchId: row.batch_id ?? row.batchId ?? null,
-  nome: row.nome,
-  empresaNome: row.empresaNome || row.empresa_nome || '',
-  numeroBoleto: row.numero_boleto ?? row.numeroBoleto ?? '',
-  dataVencimento: row.data_vencimento ?? row.dataVencimento ?? '',
-  valor: Number(row.valor || 0),
-  representanteId: row.representante_id ?? row.representanteId ?? null,
-  telefone: row.telefone || '',
-  observacao: row.observacao || '',
-  status: row.status || 'pendente',
-  importadoEm: row.importado_em ?? row.importadoEm ?? null,
-  liquidadoEm: row.liquidado_em ?? row.liquidadoEm ?? null
-});
-
-const mapRegistroToDb = (row) => ({
-  id: row.id,
-  company_id: row.company_id,
-  user_id: row.user_id,
-  batch_id: row.batchId ?? row.batch_id ?? null,
-  nome: row.nome,
-  numero_boleto: row.numeroBoleto ?? row.numero_boleto ?? '',
-  data_vencimento: row.dataVencimento ?? row.data_vencimento ?? null,
-  valor: Number(row.valor || 0),
-  representante_id: row.representanteId ?? row.representante_id ?? null,
-  telefone: row.telefone || '',
-  observacao: row.observacao || '',
-  status: row.status || 'pendente',
-  importado_em: row.importadoEm ?? row.importado_em ?? null,
-  liquidado_em: row.liquidadoEm ?? row.liquidado_em ?? null
-});
-
-const mapConfiguracaoToApp = (row) => ({
-  company_id: row.company_id,
-  user_id: row.user_id,
-  multaPercentual: Number(row.multa_percentual ?? row.multaPercentual ?? 2),
-  jurosPercentualDia: Number(row.juros_percentual_dia ?? row.jurosPercentualDia ?? 0.033)
-});
-
-const mapConfiguracaoToDb = (row) => ({
-  company_id: row.company_id,
-  user_id: row.user_id,
-  multa_percentual: Number(row.multaPercentual ?? row.multa_percentual ?? 2),
-  juros_percentual_dia: Number(row.jurosPercentualDia ?? row.juros_percentual_dia ?? 0.033)
-});
-
-const mapImportacaoToApp = (row) => ({
-  id: row.id,
-  company_id: row.company_id,
-  user_id: row.user_id,
-  batchId: row.batch_id ?? row.batchId ?? null,
-  arquivo: row.arquivo,
-  empresaNome: row.empresaNome || row.empresa_nome || '',
-  tipo: row.tipo || 'vencidos',
-  registros: Number(row.registros || 0),
-  status: row.status || 'concluida',
-  data: row.created_at ?? row.data ?? new Date().toISOString()
-});
-
-const mapImportacaoToDb = (row) => ({
-  id: row.id,
-  company_id: row.company_id,
-  user_id: row.user_id,
-  batch_id: row.batchId ?? row.batch_id ?? null,
-  arquivo: row.arquivo,
-  tipo: row.tipo || row.status || 'vencidos',
-  registros: Number(row.registros || 0),
-  status: row.status === 'erro' ? 'erro' : 'concluida',
-  created_at: row.data || row.created_at || new Date().toISOString()
-});
-
 const normalizeIsoDate = (value) => {
   if (!value) return null;
 
@@ -306,30 +155,6 @@ const normalizeIsoDate = (value) => {
   }
 
   return date.toISOString();
-};
-
-const normalizeRepresentativeList = (items = []) => {
-  const unique = new Map();
-
-  (items || []).forEach((item) => {
-    const rawName = item?.nome ?? item?.name ?? item?.representante ?? item?.representative ?? '';
-    const nome = String(rawName || '').trim();
-    if (!nome) return;
-
-    const normalizedKey = normalizeText(nome);
-    const id = item?.id || normalizedKey;
-    if (!unique.has(normalizedKey)) {
-      unique.set(normalizedKey, {
-        id,
-        nome,
-        telefone: item?.telefone || '',
-        observacao: item?.observacao || '',
-        ativo: item?.ativo !== false,
-      });
-    }
-  });
-
-  return Array.from(unique.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 };
 
 export async function getRepresentatives(companyId, tenantOptions = {}) {
@@ -523,13 +348,7 @@ export const financeService = {
       };
     }
 
-    return localDelay({
-      empresas: db.empresas.filter((item) => item.user_id === tenant.userId).map(mapEmpresaToApp),
-      registros: db.registros.filter((item) => item.user_id === tenant.userId),
-      representantes: db.representantes.filter((item) => item.user_id === tenant.userId),
-      historico: db.importacoes.filter((item) => item.user_id === tenant.userId).map(mapImportacaoToApp),
-      configuracoes: Object.values(db.configuracoes).filter((item) => item.user_id === tenant.userId)
-    });
+    return localDelay(buildLocalBootstrap({ userId: tenant.userId }));
   },
 
   async fetchCompanyDataset({ companyId, userId } = {}) {
@@ -601,37 +420,13 @@ export const financeService = {
       };
     }
 
-    const globalMode = tenant.companyId === GLOBAL_COMPANY_ID;
-    const selectedCompanyIds = globalMode ? db.empresas.map((item) => item.id) : [tenant.companyId];
-    const companyMap = new Map(db.empresas.map((company) => [company.id, mapEmpresaToApp(company)]));
-
-    return localDelay({
-      companies: db.empresas.map(mapEmpresaToApp),
-      records: db.registros
-        .filter((item) => selectedCompanyIds.includes(item.company_id) && item.user_id === tenant.userId)
-        .map((item) => ({
-          ...item,
-          empresaNome: companyMap.get(item.company_id)?.nome || 'Empresa desconhecida'
-        })),
-      representatives: db.representantes.filter((item) => selectedCompanyIds.includes(item.company_id) && item.user_id === tenant.userId),
-      history: db.importacoes
-        .filter((item) => selectedCompanyIds.includes(item.company_id) && item.user_id === tenant.userId)
-        .map((item) => mapImportacaoToApp({
-          ...item,
-          empresa_nome: companyMap.get(item.company_id)?.nome || 'Empresa desconhecida'
-        })),
-      config: globalMode ? {
-        company_id: GLOBAL_COMPANY_ID,
-        user_id: tenant.userId,
-        multaPercentual: 2,
-        jurosPercentualDia: 0.033
-      } : (db.configuracoes[tenant.companyId] || {
-        company_id: tenant.companyId,
-        user_id: tenant.userId,
-        multaPercentual: 2,
-        jurosPercentualDia: 0.033
+    return localDelay(
+      buildLocalCompanyDataset({
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        isGlobalMode: tenant.companyId === GLOBAL_COMPANY_ID,
       })
-    });
+    );
   },
 
   async fetchRegistros({ companyId, userId } = {}) {
@@ -819,17 +614,9 @@ export const financeService = {
         companyId,
         userId: tenantOptions.userId
       });
-      return dataset.config || {
-        company_id: companyId,
-        multaPercentual: 2,
-        jurosPercentualDia: 0.033,
-      };
+      return dataset.config || createDefaultFinanceConfig(companyId);
     } catch {
-      return {
-        company_id: companyId,
-        multaPercentual: 2,
-        jurosPercentualDia: 0.033,
-      };
+      return createDefaultFinanceConfig(companyId);
     }
   },
 
@@ -1470,9 +1257,4 @@ export const financeService = {
     db.registros = db.registros.filter((item) => item.company_id !== tenant.companyId);
     return localDelay(true);
   },
-};
-
-export const tenantContext = {
-  get currentUserId() { return currentUserId; },
-  get defaultCompanyId() { return defaultCompanyId; },
 };

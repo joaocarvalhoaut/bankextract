@@ -4,12 +4,19 @@ import EmpresaModal from './components/EmpresaModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import MessagePreviewModal from './components/MessagePreviewModal';
 import Sidebar from './components/Sidebar';
+import { buildDashboardFinancialData } from './services/analyticsService';
+import { getCollectionToneMeta } from './services/collectionMessageService';
 import { useEmpresa } from './hooks/useEmpresa';
 import { useSupabaseAuth } from './hooks/useSupabaseAuth';
+import { getOnboardingStatus, markOnboardingStep } from './services/onboardingService';
+import { createNotification, syncTrialEndingNotification } from './services/notificationService';
+import { getPlans, getUsageLimits, updateCompanyPlan } from './services/subscriptionService';
+import { incrementUsage } from './services/usageService';
 import { financeService, sanitizeSpreadsheetCell } from './services/financeService.ts';
 import LoginScreen from './screens/LoginScreen';
 import { GLOBAL_COMPANY_ID } from './services/companyService';
 import { auditLog } from './services/auditService';
+import { createAuditEvent } from './services/auditTimelineService';
 import { canUserPerformAction } from './security/permissions';
 
 const DashboardScreen = lazy(() => import('./screens/DashboardScreen'));
@@ -29,6 +36,12 @@ const LandingPage = lazy(() => import('./screens/LandingPage'));
 const OnboardingScreen = lazy(() => import('./screens/OnboardingScreen'));
 const PlanosScreen = lazy(() => import('./screens/PlanosScreen'));
 const BillingScreen = lazy(() => import('./screens/BillingScreen'));
+const AnalyticsScreen = lazy(() => import('./screens/AnalyticsScreen'));
+const AdminSaasScreen = lazy(() => import('./screens/AdminSaasScreen'));
+const NotificationsScreen = lazy(() => import('./screens/NotificationsScreen'));
+const AuditTimelineScreen = lazy(() => import('./screens/AuditTimelineScreen'));
+const HelpCenterScreen = lazy(() => import('./screens/HelpCenterScreen'));
+const ProductionChecklistScreen = lazy(() => import('./screens/ProductionChecklistScreen'));
 
 const makeUuid = () => {
   if (globalThis.crypto?.randomUUID) {
@@ -186,9 +199,71 @@ const headerMap = {
     title: 'Billing comercial',
     subtitle: 'Plano atual, consumo e proxima cobranca em modo mock.',
   },
+  analytics: {
+    title: 'Analytics interno',
+    subtitle: 'Indicadores financeiros, cobrancas simuladas e leituras operacionais por empresa.',
+  },
+  audit: {
+    title: 'Auditoria visual',
+    subtitle: 'Timeline operacional com eventos financeiros, comerciais e administrativos por empresa.',
+  },
+  notifications: {
+    title: 'Centro de notificacoes',
+    subtitle: 'Eventos operacionais, alertas de plano e sinais comerciais por empresa.',
+  },
+  help: {
+    title: 'Central de ajuda',
+    subtitle: 'Guias praticos, onboarding rico e perguntas frequentes para operar o BankExtract.',
+  },
+  'production-checklist': {
+    title: 'Checklist de producao',
+    subtitle: 'Validacao interna para garantir que o BankExtract esta pronto para cliente piloto.',
+  },
+  'admin-saas': {
+    title: 'Admin SaaS',
+    subtitle: 'Painel master para acompanhar empresas, assinaturas internas, uso e auditoria.',
+  },
 };
 
-const companyDependentTabs = new Set(['importacao', 'visao-geral', 'historico', 'cobrancas', 'central-cobranca', 'historico-cobranca', 'inconsistencias', 'pronto-envio', 'automacoes', 'integracoes']);
+const companyDependentTabs = new Set(['importacao', 'visao-geral', 'historico', 'cobrancas', 'central-cobranca', 'historico-cobranca', 'inconsistencias', 'pronto-envio', 'automacoes', 'integracoes', 'analytics', 'notifications', 'audit', 'production-checklist']);
+
+const tabPathMap = {
+  dashboard: '/dashboard',
+  onboarding: '/onboarding',
+  importacao: '/importacao',
+  'visao-geral': '/visao-geral',
+  historico: '/historico',
+  analytics: '/analytics',
+  notifications: '/notifications',
+  audit: '/audit',
+  help: '/help',
+  'production-checklist': '/production-checklist',
+  cobrancas: '/cobrancas',
+  'central-cobranca': '/central-cobranca',
+  'historico-cobranca': '/historico-cobranca',
+  inconsistencias: '/inconsistencias',
+  'pronto-envio': '/pronto-envio',
+  automacoes: '/automacoes',
+  integracoes: '/integracoes',
+  configuracoes: '/configuracoes',
+  'status-sistema': '/status-sistema',
+  planos: '/planos',
+  billing: '/billing',
+  'admin-saas': '/admin-saas',
+};
+
+const pathTabMap = Object.fromEntries(Object.entries(tabPathMap).map(([tab, path]) => [path, tab]));
+
+const getCurrentPathname = () => (typeof window !== 'undefined' ? window.location.pathname || '/' : '/');
+
+const resolveTabFromPath = (pathname) => pathTabMap[pathname] || 'dashboard';
+
+const resolvePublicScreenFromPath = (pathname) => {
+  if (pathname === '/') return 'landing';
+  if (pathname === '/planos') return 'planos';
+  if (pathname === '/login') return 'login';
+  return 'login';
+};
 
 function ScreenFallback() {
   return (
@@ -215,8 +290,9 @@ export default function App() {
     authEnabled: auth.authEnabled,
   });
 
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [publicScreen, setPublicScreen] = useState('landing');
+  const initialPath = getCurrentPathname();
+  const [activeTab, setActiveTab] = useState(() => resolveTabFromPath(initialPath));
+  const [publicScreen, setPublicScreen] = useState(() => resolvePublicScreenFromPath(initialPath));
   const [appLoading, setAppLoading] = useState(false);
   const [toast, setToast] = useState(null);
   const [pageError, setPageError] = useState('');
@@ -233,6 +309,8 @@ export default function App() {
   const [onboardingData, setOnboardingData] = useState(null);
   const [plansCatalog, setPlansCatalog] = useState([]);
   const [billingOverview, setBillingOverview] = useState(null);
+  const [markingOnboardingStepId, setMarkingOnboardingStepId] = useState('');
+  const [skippedOnboardingStepIds, setSkippedOnboardingStepIds] = useState([]);
 
   const [financialConfig, setFinancialConfig] = useState({
     multaPercentual: 2,
@@ -266,6 +344,18 @@ export default function App() {
   );
   const currentUserRole = empresa.userRole;
   const currentUserId = auth.user?.id || '';
+  const onboardingSkipStorageKey = `bankextract.onboarding.skipped.${currentCompanyId || 'sem-empresa'}`;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(onboardingSkipStorageKey);
+      const parsed = raw ? JSON.parse(raw) : [];
+      setSkippedOnboardingStepIds(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      setSkippedOnboardingStepIds([]);
+    }
+  }, [onboardingSkipStorageKey]);
 
   useEffect(() => {
     financeService.setRuntimeContext({
@@ -281,7 +371,7 @@ export default function App() {
   useEffect(() => {
     let alive = true;
 
-    financeService.getPlansCatalog().then((plans) => {
+    getPlans().then((plans) => {
       if (alive) {
         setPlansCatalog(plans || []);
       }
@@ -292,6 +382,48 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const syncFromLocation = () => {
+      const pathname = getCurrentPathname();
+      setActiveTab(resolveTabFromPath(pathname));
+
+      if (!auth.user) {
+        setPublicScreen(resolvePublicScreenFromPath(pathname));
+        return;
+      }
+
+      if (pathname === '/') {
+        setPublicScreen('public-landing-auth');
+      } else if (pathname === '/planos') {
+        setPublicScreen('public-planos-auth');
+      } else {
+        setPublicScreen('app');
+      }
+    };
+
+    window.addEventListener('popstate', syncFromLocation);
+    return () => window.removeEventListener('popstate', syncFromLocation);
+  }, [auth.user]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let nextPath = '/dashboard';
+    if (!auth.user) {
+      nextPath = publicScreen === 'planos' ? '/planos' : publicScreen === 'login' ? '/login' : '/';
+    } else if (publicScreen === 'public-landing-auth') {
+      nextPath = '/';
+    } else if (publicScreen === 'public-planos-auth') {
+      nextPath = '/planos';
+    } else {
+      nextPath = tabPathMap[activeTab] || '/dashboard';
+    }
+
+    if (window.location.pathname !== nextPath) {
+      window.history.replaceState({}, '', nextPath);
+    }
+  }, [activeTab, auth.user, publicScreen]);
+
   const showToast = useCallback((type, text) => {
     setToast({ type, text });
     window.clearTimeout(window.__bankextractToastTimeout);
@@ -300,6 +432,11 @@ export default function App() {
 
   const handleViewPublicSite = useCallback(() => {
     setPublicScreen('public-landing-auth');
+  }, []);
+
+  const handleOpenNotifications = useCallback(() => {
+    setPublicScreen('app');
+    setActiveTab('notifications');
   }, []);
 
   const handleSignOut = useCallback(async () => {
@@ -325,7 +462,7 @@ export default function App() {
       setChargeRows([]);
       setSettingsOverview(null);
       setSystemStatus(null);
-      setOnboardingData(null);
+      setOnboardingData(await getOnboardingStatus(''));
       setBillingOverview(null);
       return;
     }
@@ -346,12 +483,32 @@ export default function App() {
           financeService.getSettingsOverview(currentCompanyId, realCompanies),
           financeService.getFinancialConfig(currentCompanyId),
           financeService.getSystemStatus(currentCompanyId),
-          financeService.getOnboardingStatus(currentCompanyId),
-          financeService.getPlansCatalog(),
-          financeService.getBillingOverview(currentCompanyId),
+          getOnboardingStatus(currentCompanyId),
+          getPlans(),
+          getUsageLimits(currentCompanyId),
         ]);
 
-      setDashboardMetrics(metrics);
+      const dashboardFinancial = buildDashboardFinancialData(records || []);
+      setDashboardMetrics({
+        ...(metrics || {}),
+        kpis: dashboardFinancial.kpis,
+        charts: {
+          aging: dashboardFinancial.charts?.aging || [],
+          importacoes: dashboardFinancial.charts?.importacoes || [],
+          statusDistribution: dashboardFinancial.charts?.statusDistribution || [],
+        },
+        financialSummary: dashboardFinancial.summary,
+        nextDueRows: dashboardFinancial.nextDueRows || [],
+        biggestOpenRows: dashboardFinancial.biggestOpenRows || [],
+        hasFinancialData: dashboardFinancial.hasData,
+        operational: {
+          autoChargeActive: metrics?.autoChargeActive || false,
+          whatsappMockMode: metrics?.whatsappMockMode || false,
+          lastAutoExecution: metrics?.lastAutoExecution || 'Nunca executada',
+          nextRunHint: metrics?.autoChargeHour ? `Janela ${metrics.autoChargeHour}` : 'Automacao inativa',
+          recentAuditAction: metrics?.recentAuditLogs?.[0]?.action || 'Sem atividade',
+        },
+      });
       setFinancialRecords(records);
       setHistoryRows(history);
       setChargeRows(charges);
@@ -362,6 +519,38 @@ export default function App() {
       setOnboardingData(onboarding);
       setPlansCatalog(plans || []);
       setBillingOverview(billing);
+
+      const overdueCount = (records || []).filter((row) => {
+        const dueDate = row?.data_vencimento || row?.vencimento || row?.due_date;
+        const statusValue = String(row?.status || '').toLowerCase();
+        if (!dueDate || statusValue === 'liquidado' || statusValue === 'pago') return false;
+        return new Date(`${dueDate}T00:00:00`).getTime() < Date.now();
+      }).length;
+
+      if (currentCompanyId && overdueCount > 0) {
+        try {
+          await createNotification(currentCompanyId, {
+            type: 'boleto_overdue',
+            title: 'Titulos vencidos em acompanhamento',
+            message: `Existem ${overdueCount} boleto(s) vencido(s) aguardando acao na empresa ativa.`,
+            severity: overdueCount >= 10 ? 'danger' : 'warning',
+            metadata: {
+              overdue_count: overdueCount,
+              dedupe_key: `overdue:${currentCompanyId}:${new Date().toISOString().slice(0, 10)}`,
+            },
+          });
+        } catch {
+          // Nao interrompe o carregamento principal por falha no centro de notificacoes.
+        }
+      }
+
+      if (currentCompanyId && billing) {
+        try {
+          await syncTrialEndingNotification(currentCompanyId, billing);
+        } catch {
+          // Nao interrompe o carregamento principal por falha no centro de notificacoes.
+        }
+      }
     } catch (error) {
       setPageError(error.message || 'Falha ao carregar os dados do frontend premium.');
     } finally {
@@ -448,6 +637,18 @@ export default function App() {
 
       const processed = await financeService.processImportFile(selectedFile, importType, currentCompanyId);
       setPreview(processed);
+      createAuditEvent(currentCompanyId, {
+        action: 'import_created',
+        entity_type: 'importacoes',
+        title: 'Previa de importacao criada',
+        description: `Arquivo ${selectedFile?.name || 'sem nome'} processado para revisao antes da confirmacao.`,
+        metadata: {
+          arquivo: selectedFile?.name || '',
+          tipo: importType,
+        },
+        userId: currentUserId,
+        severity: 'info',
+      }).catch(() => {});
       showToast('sucesso', 'Previa gerada com sucesso.');
     } catch (error) {
       showToast('erro', error.message || 'Nao foi possivel processar o arquivo.');
@@ -477,6 +678,20 @@ export default function App() {
         registros: (preview?.rows || []).filter((row) => row.selected !== false).length,
         tipo: importType,
       }, currentUserId);
+      try {
+        await createNotification(currentCompanyId, {
+          type: 'import_completed',
+          title: 'Importacao concluida',
+          message: `${(preview?.rows || []).filter((row) => row.selected !== false).length} registro(s) foram confirmados no lote ${preview.fileName || 'sem nome'}.`,
+          severity: 'success',
+          metadata: {
+            import_type: importType,
+            file_name: preview.fileName || '',
+          },
+        });
+      } catch {
+        // Mantem a importacao concluida mesmo sem persistir a notificacao.
+      }
       setPreview(null);
       setSelectedFile(null);
       await refreshAllData();
@@ -687,6 +902,7 @@ export default function App() {
           mensagem: message,
         },
         message,
+        originalMessage: message,
       });
     },
     [currentCompanyName]
@@ -712,23 +928,93 @@ export default function App() {
         };
 
         const result = await financeService.sendWhatsAppCharge(payload, 'manual');
-        await auditLog.whatsappSent(
-          payload.company_id || currentCompanyId,
-          result?.chargeId || payload.registro_id || payload.id,
-          { mocked: Boolean(result?.mocked), status: result?.status, mode: 'manual' },
-          currentUserId
-        );
+        if (result?.mocked) {
+          await createAuditEvent(payload.company_id || currentCompanyId, {
+            action: 'whatsapp_simulated',
+            entity_type: 'cobrancas_whatsapp',
+            entity_id: result?.chargeId || payload.registro_id || payload.id,
+            title: 'Cobranca simulada',
+            description: `Cobranca simulada para ${payload.cliente || 'cliente selecionado'}.`,
+            metadata: {
+              mocked: true,
+              status: result?.status,
+              mode: 'manual',
+              documento: payload.documento || payload.numero_boleto || '',
+            },
+            severity: 'info',
+          });
+        } else {
+          await auditLog.whatsappSent(
+            payload.company_id || currentCompanyId,
+            result?.chargeId || payload.registro_id || payload.id,
+            { mocked: false, status: result?.status, mode: 'manual' },
+            currentUserId
+          );
+        }
         const nextCharges = await financeService.getCharges(currentCompanyId);
         setChargeRows(nextCharges);
         await refreshAllData();
         if (result?.mocked) {
+          await incrementUsage(payload.company_id || currentCompanyId, 'charges_month', 1);
+          try {
+            await createNotification(payload.company_id || currentCompanyId, {
+              type: 'charge_sent',
+              title: 'Cobranca registrada',
+              message: `A cobranca do documento ${payload.documento || payload.numero_boleto || 'sem identificacao'} foi registrada em modo simulacao.`,
+              severity: 'info',
+              metadata: {
+                registro_id: payload.registro_id || payload.id || null,
+                mocked: true,
+              },
+            });
+          } catch {
+            // Nao interrompe o fluxo principal de cobranca.
+          }
           showToast('aviso', 'Cobranca registrada em modo teste (mock_enviado). Configure os secrets Z-API para envio real.');
         } else if (result?.status === 'sem telefone') {
           showToast('aviso', 'Registro sem telefone - cobranca nao enviada.');
         } else {
+          await incrementUsage(payload.company_id || currentCompanyId, 'charges_month', 1);
+          try {
+            await createNotification(payload.company_id || currentCompanyId, {
+              type: 'charge_sent',
+              title: 'Cobranca enviada',
+              message: `A cobranca do documento ${payload.documento || payload.numero_boleto || 'sem identificacao'} foi enviada com sucesso.`,
+              severity: 'success',
+              metadata: {
+                registro_id: payload.registro_id || payload.id || null,
+                mocked: false,
+              },
+            });
+          } catch {
+            // Nao interrompe o fluxo principal de cobranca.
+          }
           showToast('sucesso', 'Cobranca enviada com sucesso via WhatsApp.');
         }
       } catch (error) {
+        await auditLog.whatsappFailed(
+          row.company_id || currentCompanyId,
+          row.registro_id || row.id || null,
+          {
+            error: error.message || 'Falha ao enviar a cobranca via WhatsApp.',
+            mode: 'manual',
+            documento: row.documento || row.numero_boleto || '',
+          },
+          currentUserId
+        );
+        try {
+          await createNotification(row.company_id || currentCompanyId, {
+            type: 'charge_failed',
+            title: 'Falha no envio da cobranca',
+            message: error.message || 'Falha ao enviar a cobranca via WhatsApp.',
+            severity: 'danger',
+            metadata: {
+              registro_id: row.registro_id || row.id || null,
+            },
+          });
+        } catch {
+          // Nao sobrescreve o erro principal de cobranca.
+        }
         showToast('erro', error.message || 'Falha ao enviar cobranca via WhatsApp.');
       }
     },
@@ -778,6 +1064,42 @@ export default function App() {
     }
   }, [chargePreviewModal, handleSendCharge]);
 
+  const handleChargePreviewCollectionGenerated = useCallback(
+    async (result) => {
+      const toneMeta = getCollectionToneMeta(result.tone);
+      const row = chargePreviewModal?.row;
+      if (!row) return;
+
+      await createAuditEvent(row.company_id || currentCompanyId, {
+        action: 'collection_ai_generated',
+        entity_type: 'cobrancas_whatsapp',
+        entity_id: row.registro_id || row.id || null,
+        title: 'Mensagem inteligente gerada',
+        description: `IA local gerou uma mensagem com tom ${toneMeta.label.toLowerCase()}.`,
+        metadata: {
+          tone: result.tone,
+          tone_label: toneMeta.label,
+          documento: row.documento || row.numero_boleto || '',
+        },
+        severity: toneMeta.severity === 'danger' ? 'danger' : toneMeta.severity === 'warning' ? 'warning' : 'info',
+      });
+
+      if (result.tone === 'firme' || result.tone === 'juridico') {
+        await createNotification(row.company_id || currentCompanyId, {
+          type: 'collection_ai_tone',
+          title: `Tom ${toneMeta.label} usado no modal principal`,
+          message: `Uma mensagem de cobranca foi gerada com tom ${toneMeta.label.toLowerCase()}.`,
+          severity: result.tone === 'juridico' ? 'danger' : 'warning',
+          metadata: {
+            tone: result.tone,
+            documento: row.documento || row.numero_boleto || '',
+          },
+        });
+      }
+    },
+    [chargePreviewModal?.row, currentCompanyId]
+  );
+
   const handleToggleAutomationRule = useCallback((day) => {
     setAutomationRules((prev) => ({
       ...prev,
@@ -802,6 +1124,14 @@ export default function App() {
         ...nextRules,
       }));
     }
+    createAuditEvent(currentCompanyId, {
+      action: 'automation_scheduled',
+      entity_type: 'automacoes',
+      title: 'Automação salva',
+      description: 'Regras de cobrança automática atualizadas',
+      userId: currentUserId,
+      severity: 'info',
+    }).catch(() => {});
     await refreshAllData();
     showToast('sucesso', 'Regras de automacao salvas.');
   }, [automationRules, currentCompanyId, currentUserRole, refreshAllData, showToast]);
@@ -812,13 +1142,83 @@ export default function App() {
     }
   }, []);
 
+  const handleOpenHelpArticle = useCallback((articleId) => {
+    setActiveTab('help');
+    if (articleId && typeof window !== 'undefined') {
+      window.setTimeout(() => {
+        const element = document.getElementById(`help-article-${articleId}`);
+        element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
+    }
+  }, []);
+
+  const handleMarkOnboardingStep = useCallback(
+    async (step) => {
+      if (!currentCompanyId) {
+        showToast('erro', 'Selecione uma empresa antes de marcar uma etapa do onboarding.');
+        return;
+      }
+
+      if (!step?.id) return;
+
+      setMarkingOnboardingStepId(step.id);
+      try {
+        await markOnboardingStep(currentCompanyId, step.id);
+        setSkippedOnboardingStepIds((current) => {
+          const next = current.filter((item) => item !== step.id);
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem(onboardingSkipStorageKey, JSON.stringify(next));
+          }
+          return next;
+        });
+        const refreshed = await getOnboardingStatus(currentCompanyId);
+        setOnboardingData(refreshed);
+        showToast('sucesso', 'Etapa do onboarding marcada como concluida.');
+      } catch (error) {
+        showToast('erro', error.message || 'Nao foi possivel marcar a etapa do onboarding.');
+      } finally {
+        setMarkingOnboardingStepId('');
+      }
+    },
+    [currentCompanyId, onboardingSkipStorageKey, showToast]
+  );
+
+  const handleSkipOnboardingStep = useCallback((step) => {
+    if (!step?.id) return;
+    setSkippedOnboardingStepIds((current) => {
+      if (current.includes(step.id)) return current;
+      const next = [...current, step.id];
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(onboardingSkipStorageKey, JSON.stringify(next));
+      }
+      return next;
+    });
+    showToast('aviso', 'Etapa pulada por enquanto. Voce pode retoma-la a qualquer momento na Central de Ajuda ou no Onboarding.');
+  }, [onboardingSkipStorageKey, showToast]);
+
   const handleChoosePlan = useCallback(
-    (plan) => {
+    async (plan) => {
       if (!plan?.id) return;
-      showToast('sucesso', `Plano ${plan.name} selecionado no modo comercial. Conecte o billing real depois.`);
+      if (!currentCompanyId) {
+        showToast('erro', 'Selecione uma empresa antes de alterar o plano.');
+        return;
+      }
+
+      await updateCompanyPlan(currentCompanyId, plan.id);
+      createAuditEvent(currentCompanyId, {
+        action: 'plan_changed',
+        entity_type: 'empresas',
+        title: 'Plano alterado',
+        description: `Plano atualizado para ${plan.name}`,
+        metadata: { to: plan.id, plan_name: plan.name },
+        userId: currentUserId,
+        severity: 'info',
+      }).catch(() => {});
+      await refreshAllData();
+      showToast('sucesso', `Plano ${plan.name} atualizado na estrutura interna do SaaS.`);
       setActiveTab('billing');
     },
-    [showToast]
+    [currentCompanyId, currentUserId, refreshAllData, showToast]
   );
 
   const sectionHeader = headerMap[activeTab] || headerMap.dashboard;
@@ -847,14 +1247,20 @@ export default function App() {
         );
         break;
       case 'dashboard':
-        currentContent = <DashboardScreen metrics={dashboardMetrics} />;
+        currentContent = <DashboardScreen metrics={dashboardMetrics} errorMessage={pageError} onRetry={refreshAllData} companyId={globalMode ? null : currentCompanyId} allCompanies={globalMode && empresa.isSystemAdmin} onNavigate={setActiveTab} onboarding={onboardingData} />;
         break;
       case 'onboarding':
         currentContent = (
           <OnboardingScreen
             onboarding={onboardingData}
             companyName={currentCompanyName}
+            companyId={currentCompanyId}
             onOpenStep={handleOpenOnboardingStep}
+            onMarkStep={handleMarkOnboardingStep}
+            onSkipStep={handleSkipOnboardingStep}
+            onOpenArticle={handleOpenHelpArticle}
+            markingStepId={markingOnboardingStepId}
+            skippedStepIds={skippedOnboardingStepIds}
           />
         );
         break;
@@ -878,6 +1284,7 @@ export default function App() {
             onDiscardPreview={() => setPreview(null)}
             onImportSelected={handleImportSelected}
             userRole={empresa.userRole}
+            onOpenPlans={() => setActiveTab('planos')}
           />
         );
         break;
@@ -913,6 +1320,60 @@ export default function App() {
             rows={historyRows}
             onViewBatch={handleViewBatch}
             onDeleteItem={handleDeleteHistory}
+          />
+        );
+        break;
+      case 'analytics':
+        currentContent = (
+          <AnalyticsScreen
+            companyId={globalMode ? null : currentCompanyId}
+            companyName={currentCompanyName}
+            onToast={showToast}
+          />
+        );
+        break;
+      case 'notifications':
+        currentContent = (
+          <NotificationsScreen
+            companyId={globalMode ? null : currentCompanyId}
+            companyName={currentCompanyName}
+            onToast={showToast}
+          />
+        );
+        break;
+      case 'audit':
+        currentContent = (
+          <AuditTimelineScreen
+            companyId={globalMode ? null : currentCompanyId}
+            companyName={currentCompanyName}
+            onToast={showToast}
+            allCompanies={globalMode && empresa.isSystemAdmin}
+          />
+        );
+        break;
+      case 'help':
+        currentContent = (
+          <HelpCenterScreen
+            onboarding={onboardingData}
+            companyId={currentCompanyId}
+            onOpenTab={setActiveTab}
+            onOpenStep={handleOpenOnboardingStep}
+            onMarkStep={handleMarkOnboardingStep}
+            onSkipStep={handleSkipOnboardingStep}
+            onOpenArticle={handleOpenHelpArticle}
+            markingStepId={markingOnboardingStepId}
+            skippedStepIds={skippedOnboardingStepIds}
+          />
+        );
+        break;
+      case 'production-checklist':
+        currentContent = (
+          <ProductionChecklistScreen
+            companyId={globalMode ? null : currentCompanyId}
+            companyName={currentCompanyName}
+            onToast={showToast}
+            currentUserLabel={auth.user?.email || auth.user?.user_metadata?.name || ''}
+            onOpenTab={setActiveTab}
           />
         );
         break;
@@ -1026,14 +1487,32 @@ export default function App() {
             plans={plansCatalog}
             currentPlanId={billingOverview?.currentPlan?.id}
             onChoosePlan={handleChoosePlan}
+            companyId={currentCompanyId}
+            onToast={showToast}
           />
         );
         break;
       case 'billing':
-        currentContent = <BillingScreen billing={billingOverview} onOpenPlans={() => setActiveTab('planos')} />;
+        currentContent = (
+          <BillingScreen
+            billing={billingOverview}
+            onOpenPlans={() => setActiveTab('planos')}
+            companyId={currentCompanyId}
+            onToast={showToast}
+          />
+        );
+        break;
+      case 'admin-saas':
+        currentContent = (
+          <AdminSaasScreen
+            user={auth.user}
+            isSystemAdminUser={empresa.isSystemAdmin}
+            onToast={showToast}
+          />
+        );
         break;
       default:
-        currentContent = <DashboardScreen metrics={dashboardMetrics} companyId={currentCompanyId} />;
+        currentContent = <DashboardScreen metrics={dashboardMetrics} errorMessage={pageError} onRetry={refreshAllData} companyId={globalMode ? null : currentCompanyId} allCompanies={globalMode && empresa.isSystemAdmin} onNavigate={setActiveTab} />;
         break;
     }
   }
@@ -1073,7 +1552,7 @@ export default function App() {
                 <h1 className="text-2xl font-semibold text-slate-900">Planos do BankExtract</h1>
                 <p className="text-sm text-slate-500">Compare os pacotes comerciais antes do login.</p>
               </div>
-            <div className="flex gap-3">
+              <div className="flex gap-3">
                 <button
                   type="button"
                   onClick={() => setPublicScreen('landing')}
@@ -1091,47 +1570,12 @@ export default function App() {
               </div>
             </div>
             <Suspense fallback={<ScreenFallback />}>
-              <PlanosScreen plans={plansCatalog} currentPlanId={null} onChoosePlan={() => setPublicScreen('login')} />
-            </Suspense>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <LoginScreen
-        onSignIn={auth.signIn}
-        onSignUp={auth.signUp}
-        loading={auth.submitting}
-        error={auth.error}
-        onBackToLanding={() => setPublicScreen('landing')}
-      />
-    );
-  }
-
-  if (auth.authEnabled && auth.user && (publicScreen === 'public-landing-auth' || publicScreen === 'public-planos-auth')) {
-    if (publicScreen === 'public-landing-auth') {
-      return (
-        <div className="min-h-screen bg-[#F7F9FC] px-4 py-6 lg:px-6">
-          <div className="mx-auto max-w-7xl space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[28px] border border-slate-200 bg-white px-5 py-4 shadow-soft">
-              <div>
-                <h1 className="text-2xl font-semibold text-slate-900">Visualizando o site público</h1>
-                <p className="text-sm text-slate-500">Sua sessão continua ativa. Volte ao painel quando quiser.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPublicScreen('app')}
-                className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800"
-              >
-                Voltar ao painel
-              </button>
-            </div>
-            <Suspense fallback={<ScreenFallback />}>
-              <LandingPage
-                isAuthenticated
-                onStartNow={() => setPublicScreen('app')}
-                onOpenPlans={() => setPublicScreen('public-planos-auth')}
+              <PlanosScreen
+                plans={plansCatalog}
+                currentPlanId={null}
+                onChoosePlan={() => setPublicScreen('login')}
+                companyId={null}
+                onToast={showToast}
               />
             </Suspense>
           </div>
@@ -1140,41 +1584,21 @@ export default function App() {
     }
 
     return (
-      <div className="min-h-screen bg-[#F7F9FC] px-4 py-6 lg:px-6">
-        <div className="mx-auto max-w-6xl space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[28px] border border-slate-200 bg-white px-5 py-4 shadow-soft">
-            <div>
-              <h1 className="text-2xl font-semibold text-slate-900">Planos do BankExtract</h1>
-              <p className="text-sm text-slate-500">Compare os pacotes comerciais sem sair da sua sessão.</p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setPublicScreen('public-landing-auth')}
-                className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Ver site público
-              </button>
-              <button
-                type="button"
-                onClick={() => setPublicScreen('app')}
-                className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800"
-              >
-                Voltar ao painel
-              </button>
-            </div>
-          </div>
-          <Suspense fallback={<ScreenFallback />}>
-            <PlanosScreen plans={plansCatalog} currentPlanId={billingOverview?.currentPlan?.id || null} onChoosePlan={() => setPublicScreen('app')} />
-          </Suspense>
-        </div>
+      <div className="flex min-h-screen items-center justify-center bg-[#F7F9FC] px-4">
+        <Suspense fallback={<ScreenFallback />}>
+          <LoginScreen
+            onLogin={auth.signIn}
+            loading={auth.loading}
+            error={auth.error}
+          />
+        </Suspense>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F9FC] text-slate-900">
-      <div className="flex min-h-screen flex-col lg:flex-row">
+    <div className="min-h-screen bg-[#F7F9FC]">
+      <div className="flex flex-col lg:flex-row">
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -1184,92 +1608,67 @@ export default function App() {
           activeCompany={empresa.activeCompany}
           stats={sidebarStats}
           isSystemAdmin={empresa.isSystemAdmin}
-          onOpenCompanyModal={empresa.openCompanyModal}
+          onOpenCompanyModal={handleOpenEmpresaModal}
+          onOpenPlans={() => setActiveTab('planos')}
         />
 
-        <main className="flex-1 p-4 lg:p-6">
-          <Header
-            title={sectionHeader.title}
-            subtitle={sectionHeader.subtitle}
-            companyName={currentCompanyName}
-            userEmail={auth.user?.email || ''}
-            onViewPublicSite={handleViewPublicSite}
-            onSignOut={handleSignOut}
-            signOutLoading={auth.submitting}
-          />
+        <div className="flex-1 px-4 py-6 lg:px-6">
+          <div className="mx-auto max-w-7xl space-y-6">
+            <Header
+              title={sectionHeader.title}
+              subtitle={sectionHeader.subtitle}
+              user={auth.user}
+              onSignOut={auth.signOut}
+              companyName={currentCompanyName}
+              notificationCount={notificationCount}
+              onOpenNotifications={() => setActiveTab('notifications')}
+            />
 
-          {auth.authEnabled && auth.user ? (
-            <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-soft">
-              Sessao ativa: <span className="font-medium text-slate-900">{auth.user.email}</span>
-            </div>
-          ) : null}
-
-          {empresa.error ? (
-            <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {empresa.error}
-            </div>
-          ) : null}
-
-          {pageError ? (
-            <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {pageError}
-            </div>
-          ) : null}
-
-          {toast ? (
-            <div className="mb-4">
+            {toast && (
               <div
-                className={`inline-flex max-w-2xl items-start gap-2 rounded-2xl border px-4 py-3 text-sm font-medium shadow-soft ${
-                  toast.type === 'sucesso'
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                    : toast.type === 'aviso'
-                      ? 'border-amber-200 bg-amber-50 text-amber-800'
-                      : 'border-red-200 bg-red-50 text-red-800'
+                className={`rounded-2xl px-5 py-4 text-sm font-medium shadow-soft ${
+                  toast.type === 'erro'
+                    ? 'border border-red-200 bg-red-50 text-red-700'
+                    : 'border border-emerald-200 bg-emerald-50 text-emerald-800'
                 }`}
               >
-                <span className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full bg-current/80" />
-                <span>{toast.text}</span>
+                {toast.message}
               </div>
-            </div>
-          ) : null}
+            )}
 
-          {empresa.loading || appLoading ? (
-            <div className="rounded-[32px] border border-slate-200 bg-white p-10 text-center text-sm text-slate-500 shadow-soft">
-              {empresa.loading ? 'Carregando empresas e permissoes...' : 'Atualizando dados da tela...'}
-            </div>
-          ) : (
-            <Suspense fallback={<ScreenFallback />}>
-              <ErrorBoundary key={activeTab}>
+            <ErrorBoundary>
+              <Suspense fallback={<ScreenFallback />}>
                 {currentContent}
-              </ErrorBoundary>
-            </Suspense>
-          )}
-
-          <MessagePreviewModal
-            modal={chargePreviewModal}
-            sending={chargePreviewSending}
-            onClose={() => (chargePreviewSending ? null : setChargePreviewModal(null))}
-            onChangeMessage={handleChargePreviewMessageChange}
-            onCopy={handleCopyChargeMessage}
-            onSend={handleSendChargeFromPreview}
-          />
-        </main>
+              </Suspense>
+            </ErrorBoundary>
+          </div>
+        </div>
       </div>
 
-      <EmpresaModal
-        isOpen={empresa.modalOpen}
-        mode={empresa.modalMode}
-          setMode={empresa.setModalMode}
-          allowCreate={empresa.isSystemAdmin}
+      {empresa.modalMode && (
+        <EmpresaModal
+          mode={empresa.modalMode}
+          empresaData={empresa.editingEmpresa}
           onClose={empresa.closeModal}
-          onContinueWithoutCompany={empresa.continueWithoutCompany}
-          form={empresa.modalForm}
-          setField={empresa.setModalField}
-          error={empresa.modalError}
+          onSave={empresa.saveEmpresa}
+          onDelete={empresa.deleteEmpresa}
           saving={empresa.saving}
-          onCreate={empresa.createCompany}
-          onJoin={empresa.joinCompany}
         />
+      )}
+
+      {chargePreviewModal && (
+        <MessagePreviewModal
+          modal={chargePreviewModal}
+          onClose={() => setChargePreviewModal(null)}
+          onChangeMessage={handleChargePreviewMessageChange}
+          onCopy={handleCopyChargeMessage}
+          onCollectionGenerated={(result) => {
+            handleChargePreviewCollectionGenerated(result).catch(() => {});
+          }}
+          onSend={handleSendChargeFromPreview}
+          sending={chargePreviewSending}
+        />
+      )}
     </div>
   );
 }

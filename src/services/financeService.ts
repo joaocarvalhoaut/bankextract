@@ -1,13 +1,18 @@
-import { financeService as legacyFinanceService, tenantContext } from './financeService.js';
+import { financeService as legacyFinanceService } from './financeService.js';
 import { GLOBAL_COMPANY_ID } from './companyService.js';
 import { supabase, hasSupabaseConfig } from './supabaseClient.js';
 import { canUserPerformAction } from '../security/permissions';
 import { buildPlanCatalogForUi, getPlanMeta, normalizePlanId } from '../constants/plans.js';
+import { buildCompanyNameMap, normalizeRepresentativeList, toUiHistoryRow } from './financeAdapters.js';
+import { normalizeMoney, normalizeText, toDate } from './financeNormalizers.js';
+import { tenantContext } from './tenantContext.js';
 import {
   defaultWhatsAppAutoConfig,
   getWhatsAppAutoConfig,
   saveWhatsAppAutoConfig,
 } from './whatsappAutoService.js';
+
+export { tenantContext } from './tenantContext.js';
 
 const isProduction = import.meta.env.PROD;
 const isDevelopment = import.meta.env.DEV;
@@ -73,65 +78,9 @@ const makeUuid = () => {
   });
 };
 
-const money = (value) => Math.round(Number(value || 0) * 100) / 100;
-
 const toIsoDate = (date) => {
   if (!date) return '';
   return new Date(date).toISOString().slice(0, 10);
-};
-
-const parseDate = (value) => {
-  if (!value) return null;
-  if (value instanceof Date) return value;
-
-  const raw = String(value).trim();
-  if (!raw) return null;
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    return new Date(`${raw}T00:00:00`);
-  }
-
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
-    const [day, month, year] = raw.split('/');
-    return new Date(`${year}-${month}-${day}T00:00:00`);
-  }
-
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-
-  return parsed;
-};
-
-const normalizeText = (value) =>
-  String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-
-const normalizeRepresentativeList = (items = []) => {
-  const unique = new Map();
-
-  (items || []).forEach((item) => {
-    const rawName = item?.nome ?? item?.name ?? item?.representante ?? item?.representative ?? '';
-    const nome = String(rawName || '').trim();
-    if (!nome) return;
-
-    const normalizedKey = normalizeText(nome);
-    const id = item?.id || normalizedKey;
-    if (!unique.has(normalizedKey)) {
-      unique.set(normalizedKey, {
-        id,
-        nome,
-        telefone: item?.telefone || '',
-        observacao: item?.observacao || '',
-        ativo: item?.ativo !== false,
-      });
-    }
-  });
-
-  return Array.from(unique.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 };
 
 const getContext = (overrides = {}) => ({
@@ -145,11 +94,8 @@ const ensureSupabaseOrDevelopmentMock = () => {
   }
 };
 
-const companyNameMap = (companies = []) =>
-  new Map((companies || []).filter(Boolean).map((company) => [company.id, company.nome]));
-
 const normalizeRecordStatus = (row) => {
-  const dueDate = parseDate(row.data_vencimento);
+  const dueDate = toDate(row.data_vencimento);
   const currentStatus = String(row.status || '').trim().toLowerCase();
 
   if (currentStatus === 'liquidado') {
@@ -227,7 +173,7 @@ const safeSupabaseSelect = async (buildQuery, fallback = []) => {
 };
 
 const toUiRecord = (row, companies = []) => {
-  const companyNames = companyNameMap(companies);
+  const companyNames = buildCompanyNameMap(companies);
   const batchId = row.batch_id ?? row.batchId ?? null;
   const companyId = row.company_id ?? row.companyId ?? '';
   const dueDate = row.data_vencimento ?? row.dataVencimento ?? '';
@@ -244,7 +190,7 @@ const toUiRecord = (row, companies = []) => {
     numero_boleto: row.numero_boleto ?? row.numeroBoleto ?? row.documento ?? '',
     documento: row.documento ?? row.numero_boleto ?? row.numeroBoleto ?? '',
     data_vencimento: dueDate,
-    valor: money(row.valor),
+    valor: normalizeMoney(row.valor),
     representante_id: row.representante_id ?? row.representanteId ?? null,
     telefone: row.telefone || '',
     observacoes: row.observacoes ?? row.observacao ?? '',
@@ -267,7 +213,7 @@ const toLegacyRecord = (row, context) => ({
   nome: row.nome || '',
   numeroBoleto: row.numero_boleto ?? row.documento ?? row.numeroBoleto ?? '',
   dataVencimento: row.data_vencimento ?? row.dataVencimento ?? '',
-  valor: money(row.valor),
+  valor: normalizeMoney(row.valor),
   representanteId: row.representante_id ?? row.representanteId ?? null,
   telefone: row.telefone || '',
   observacao: row.observacoes ?? row.observacao ?? '',
@@ -275,28 +221,6 @@ const toLegacyRecord = (row, context) => ({
   importadoEm: row.importado_em ?? row.importadoEm ?? null,
   liquidadoEm: row.liquidado_em ?? row.liquidadoEm ?? null,
 });
-
-const toUiHistoryRow = (row, companies = []) => {
-  const companyNames = companyNameMap(companies);
-  const companyId = row.company_id ?? row.companyId ?? '';
-  const batchId = row.batch_id ?? row.batchId ?? null;
-
-  return {
-    id: row.id,
-    company_id: companyId,
-    companyId,
-    batch_id: batchId,
-    batchId,
-    user_id: row.user_id ?? row.userId ?? null,
-    arquivo: row.arquivo || '',
-    empresa_nome: row.empresa_nome || row.empresaNome || companyNames.get(companyId) || 'Empresa',
-    tipo: row.tipo || 'vencidos',
-    quantidade_registros: Number(row.quantidade_registros ?? row.registros ?? 0),
-    valor_total: money(row.valor_total ?? row.valorTotal ?? 0),
-    status: row.status || 'concluida',
-    created_at: row.created_at ?? row.data ?? new Date().toISOString(),
-  };
-};
 
 const toLegacyImportEntry = (entry, context) => ({
   id: entry.id || makeUuid(),
@@ -355,11 +279,11 @@ const deriveDashboardMetrics = (records, history, extras = {}) => {
   const today = new Date();
   const openRows = records.filter((item) => item.status !== 'liquidado');
   const vencidos = openRows.filter((item) => {
-    const dueDate = parseDate(item.data_vencimento);
+    const dueDate = toDate(item.data_vencimento);
     return dueDate && dueDate < today;
   });
   const aVencer = openRows.filter((item) => {
-    const dueDate = parseDate(item.data_vencimento);
+    const dueDate = toDate(item.data_vencimento);
     return dueDate && dueDate >= today;
   });
   const liquidado = records.filter((item) => item.status === 'liquidado');
@@ -391,7 +315,7 @@ const deriveDashboardMetrics = (records, history, extras = {}) => {
           label: 'Vencido ate 5d',
           value: vencidos
             .filter((item) => {
-              const dueDate = parseDate(item.data_vencimento);
+              const dueDate = toDate(item.data_vencimento);
               if (!dueDate) return false;
               return (today.getTime() - dueDate.getTime()) / 86400000 <= 5;
             })
@@ -402,7 +326,7 @@ const deriveDashboardMetrics = (records, history, extras = {}) => {
           label: 'Vencido > 5d',
           value: vencidos
             .filter((item) => {
-              const dueDate = parseDate(item.data_vencimento);
+              const dueDate = toDate(item.data_vencimento);
               if (!dueDate) return false;
               return (today.getTime() - dueDate.getTime()) / 86400000 > 5;
             })
@@ -759,13 +683,6 @@ export const financeService = {
       ),
       safeSupabaseSelect(() =>
         buildScopedQuery(
-          supabase.from('whatsapp_cobranca_config').select('empresa_id, ativo, hora_envio, updated_at'),
-          context,
-          'empresa_id'
-        )
-      ),
-      safeSupabaseSelect(() =>
-        buildScopedQuery(
           supabase.from('cobrancas_whatsapp').select('id, empresa_id, status, created_at').order('created_at', { ascending: false }).limit(5),
           context,
           'empresa_id'
@@ -1082,7 +999,7 @@ export const financeService = {
         documento: `${tipo === 'liquidacao' ? 'LQ' : 'DOC'}-${String(index + 1).padStart(4, '0')}`,
         numero_boleto: `${String(index + 1).padStart(4, '0')}-${index + 2}`,
         data_vencimento: toIsoDate(dueDate),
-        valor: money(650 + index * 175.35),
+        valor: normalizeMoney(650 + index * 175.35),
         status: tipo === 'liquidacao' ? 'liquidado' : (index < 3 ? 'vencido' : 'pendente'),
         telefone: samplePhones[index % samplePhones.length] || '',
         observacoes: '',

@@ -13,7 +13,9 @@ import {
   Send,
   ShieldAlert,
 } from 'lucide-react';
+import CollectionMessagePreview from '../components/CollectionMessagePreview';
 import DataTable from '../components/DataTable';
+import PlanLimitNotice from '../components/PlanLimitNotice';
 import {
   getBillingCenter,
   prepareManualCharge,
@@ -22,6 +24,10 @@ import {
   syncBillingDrive,
   updateChargeStatus,
 } from '../services/billingAutomationService';
+import { createAuditEvent } from '../services/auditTimelineService';
+import { createNotification } from '../services/notificationService';
+import { getCollectionToneMeta } from '../services/collectionMessageService';
+import { getUsageSummary } from '../services/usageService';
 import { canUserPerformAction } from '../security/permissions';
 import { formatCurrencyBRL } from '../utils/format';
 
@@ -94,6 +100,7 @@ export default function CentralCobrancaScreen({
   const [manualResult, setManualResult] = useState(null);
   const [selectedRows, setSelectedRows] = useState(() => new Set());
   const [openMenuRowId, setOpenMenuRowId] = useState(null);
+  const [limitNotice, setLimitNotice] = useState(null);
 
   const canManageCharges = canUserPerformAction(userRole, 'manage_charges');
 
@@ -107,7 +114,6 @@ export default function CentralCobrancaScreen({
     setLoading(true);
     try {
       const response = await getBillingCenter(resolvedCompanyId);
-      console.log('CentralCobranca getBillingCenter response', response);
       const nextItems = response?.items ?? response?.data?.items ?? [];
       setItems(Array.isArray(nextItems) ? nextItems : []);
       setSelectedRows(new Set());
@@ -123,6 +129,40 @@ export default function CentralCobrancaScreen({
   useEffect(() => {
     loadCenter();
   }, [loadCenter]);
+
+  useEffect(() => {
+    let alive = true;
+
+    const loadUsage = async () => {
+      if (!resolvedCompanyId || globalMode) {
+        if (alive) setLimitNotice(null);
+        return;
+      }
+
+      try {
+        const summary = await getUsageSummary(resolvedCompanyId);
+        const metric = summary?.metrics?.charges_month;
+
+        if (!alive) return;
+        if (metric?.alert) {
+          setLimitNotice({
+            type: metric.alert.level === 'warning' ? 'warning' : 'danger',
+            title: metric.alert.title,
+            message: metric.alert.message,
+          });
+        } else {
+          setLimitNotice(null);
+        }
+      } catch {
+        if (alive) setLimitNotice(null);
+      }
+    };
+
+    loadUsage();
+    return () => {
+      alive = false;
+    };
+  }, [globalMode, resolvedCompanyId]);
 
   useEffect(() => {
     const handlePointerDown = (event) => {
@@ -157,12 +197,46 @@ export default function CentralCobrancaScreen({
         const result = await fn();
         await loadCenter();
         if (result?.mensagem_gerada) {
+          createAuditEvent(resolvedCompanyId, {
+            action: 'whatsapp_simulated',
+            entity_type: 'cobrancas_whatsapp',
+            entity_id: result?.payload?.registro_id || result?.payload?.documento || null,
+            title: 'Cobranca simulada',
+            description: `Previa de envio gerada para ${result?.payload?.cliente || 'cliente selecionado'}.`,
+            metadata: {
+              documento: result?.payload?.documento || result?.payload?.numero_boleto || '',
+            },
+            severity: 'info',
+          }).catch(() => {});
           setSimulationResult(result);
         }
         if (result?.payload && result?.message) {
+          createAuditEvent(resolvedCompanyId, {
+            action: 'whatsapp_simulated',
+            entity_type: 'cobrancas_whatsapp',
+            entity_id: result?.payload?.registro_id || result?.payload?.documento || null,
+            title: 'Previa do envio gerada',
+            description: `Payload de cobranca montado para ${result?.payload?.cliente || 'cliente selecionado'}.`,
+            metadata: {
+              documento: result?.payload?.documento || result?.payload?.numero_boleto || '',
+            },
+            severity: 'info',
+          }).catch(() => {});
           setPreviewResult(result);
         }
         if (result?.manual_message && result?.payload) {
+          createAuditEvent(resolvedCompanyId, {
+            action: 'charge_prepared',
+            entity_type: 'cobrancas_whatsapp',
+            entity_id: result?.payload?.registro_id || result?.payload?.documento || null,
+            title: 'Cobranca preparada',
+            description: `Cobranca preparada para ${result?.payload?.cliente || 'cliente selecionado'}.`,
+            metadata: {
+              documento: result?.payload?.documento || result?.payload?.numero_boleto || '',
+              telefone: result?.payload?.telefone || '',
+            },
+            severity: 'info',
+          }).catch(() => {});
           setManualResult({
             type: 'single',
             items: [{
@@ -223,6 +297,39 @@ export default function CentralCobrancaScreen({
     }
   }, [onToast]);
 
+  const handleCollectionMessageGenerated = useCallback(
+    async (tone, payload) => {
+      const toneMeta = getCollectionToneMeta(tone);
+      await createAuditEvent(resolvedCompanyId, {
+        action: 'collection_ai_generated',
+        entity_type: 'cobrancas_whatsapp',
+        entity_id: payload?.registro_id || payload?.documento || payload?.numero_boleto || null,
+        title: 'Mensagem inteligente gerada',
+        description: `IA local gerou uma mensagem com tom ${toneMeta.label.toLowerCase()}.`,
+        metadata: {
+          tone,
+          tone_label: toneMeta.label,
+          documento: payload?.documento || payload?.numero_boleto || '',
+        },
+        severity: toneMeta.severity === 'danger' ? 'danger' : toneMeta.severity === 'warning' ? 'warning' : 'info',
+      });
+
+      if (tone === 'firme' || tone === 'juridico') {
+        await createNotification(resolvedCompanyId, {
+          type: 'collection_ai_tone',
+          title: `Tom ${toneMeta.label} usado na cobranca`,
+          message: `Uma mensagem de cobranca foi gerada com tom ${toneMeta.label.toLowerCase()}.`,
+          severity: tone === 'juridico' ? 'danger' : 'warning',
+          metadata: {
+            tone,
+            documento: payload?.documento || payload?.numero_boleto || '',
+          },
+        });
+      }
+    },
+    [resolvedCompanyId]
+  );
+
   const downloadManualCsv = useCallback((entries) => {
     const header = 'Cliente;Telefone;Mensagem;LinhaDigitavel;LinkBoleto';
     const lines = (entries || []).map((item) =>
@@ -281,6 +388,20 @@ export default function CentralCobrancaScreen({
         errorItems: errorsList,
         warning: 'Envio real nao realizado. Copie as mensagens e envie manualmente pelo WhatsApp.',
       });
+      if (preparedItems.length) {
+        createAuditEvent(resolvedCompanyId, {
+          action: 'charge_prepared',
+          entity_type: 'cobrancas_whatsapp',
+          title: 'Lote de cobrancas preparado',
+          description: `${preparedItems.length} cobranca(s) preparada(s) para envio manual assistido.`,
+          metadata: {
+            prepared: preparedItems.length,
+            errors: errorsList.length,
+            documentos: preparedItems.map((item) => item.documento || item.numero_boleto || '').filter(Boolean),
+          },
+          severity: errorsList.length ? 'warning' : 'info',
+        }).catch(() => {});
+      }
       await loadCenter();
       onToast?.('sucesso', `${preparedItems.length} preparo(s) manual(is) concluido(s).`);
     } catch (error) {
@@ -584,6 +705,7 @@ export default function CentralCobrancaScreen({
 
   return (
     <div className="space-y-6">
+      {limitNotice ? <PlanLimitNotice {...limitNotice} /> : null}
       <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -648,6 +770,32 @@ export default function CentralCobrancaScreen({
               <pre className="mt-3 overflow-x-auto rounded-2xl border border-blue-100 bg-white p-4 text-xs leading-relaxed text-slate-700">
                 {simulationResult.mensagem_gerada || 'Nenhuma mensagem gerada.'}
               </pre>
+              <div className="mt-4">
+                <CollectionMessagePreview
+                  title="IA de cobranca para a simulacao"
+                  context={{
+                    nome: simulationResult.payload?.cliente,
+                    valor: simulationResult.payload?.valor,
+                    vencimento: simulationResult.payload?.vencimento,
+                    diasAtraso: simulationResult.payload?.dias_atraso,
+                    documento: simulationResult.payload?.documento,
+                    telefone: simulationResult.payload?.telefone,
+                    empresa: companyName,
+                    linha_digitavel: simulationResult.payload?.linha_digitavel,
+                    link_boleto: simulationResult.payload?.boleto_url,
+                    codigo_barras: simulationResult.payload?.codigo_barras,
+                  }}
+                  initialMessage={simulationResult.mensagem_gerada || ''}
+                  restoreMessage={simulationResult.mensagem_gerada || ''}
+                  onMessageChange={(value) =>
+                    setSimulationResult((current) => (current ? { ...current, mensagem_gerada: value } : current))
+                  }
+                  onGenerated={(result) => {
+                    handleCollectionMessageGenerated(result.tone, simulationResult.payload).catch(() => {});
+                    setSimulationResult((current) => (current ? { ...current, mensagem_gerada: result.message } : current));
+                  }}
+                />
+              </div>
             </div>
           </div>
         </section>
@@ -680,10 +828,30 @@ export default function CentralCobrancaScreen({
             </div>
 
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Mensagem</p>
-                <pre className="mt-3 whitespace-pre-wrap text-xs leading-relaxed text-slate-700">{previewResult.message || 'Nenhuma mensagem gerada.'}</pre>
-              </div>
+              <CollectionMessagePreview
+                title="IA de cobranca para a previa"
+                context={{
+                  nome: previewResult.payload?.cliente,
+                  valor: previewResult.payload?.valor,
+                  vencimento: previewResult.payload?.vencimento,
+                  diasAtraso: previewResult.payload?.dias_atraso,
+                  documento: previewResult.payload?.documento,
+                  telefone: previewResult.payload?.telefone,
+                  empresa: companyName,
+                  linha_digitavel: previewResult.payload?.linha_digitavel,
+                  link_boleto: previewResult.payload?.boleto_url,
+                  codigo_barras: previewResult.payload?.codigo_barras,
+                }}
+                initialMessage={previewResult.message || ''}
+                restoreMessage={previewResult.message || ''}
+                onMessageChange={(value) =>
+                  setPreviewResult((current) => (current ? { ...current, message: value } : current))
+                }
+                onGenerated={(result) => {
+                  handleCollectionMessageGenerated(result.tone, previewResult.payload).catch(() => {});
+                  setPreviewResult((current) => (current ? { ...current, message: result.message } : current));
+                }}
+              />
 
               <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
                 <p><span className="font-semibold text-slate-900">Numero boleto:</span> {previewResult.payload?.numero_boleto || '-'}</p>
@@ -775,9 +943,49 @@ export default function CentralCobrancaScreen({
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Mensagem pronta</p>
-                    <pre className="mt-3 whitespace-pre-wrap text-xs leading-relaxed text-slate-700">{item.message || 'Nenhuma mensagem gerada.'}</pre>
+                  <div className="mt-4">
+                    <CollectionMessagePreview
+                      title="IA de cobranca para envio manual"
+                      context={{
+                        nome: item.cliente,
+                        valor: item.valor,
+                        vencimento: item.vencimento,
+                        diasAtraso: item.dias_atraso,
+                        documento: item.documento,
+                        telefone: item.telefone,
+                        empresa: companyName,
+                        linha_digitavel: item.linha_digitavel,
+                        link_boleto: item.boleto_url,
+                        codigo_barras: item.codigo_barras,
+                      }}
+                      initialMessage={item.message || ''}
+                      restoreMessage={item.message || ''}
+                      onMessageChange={(value) =>
+                        setManualResult((current) =>
+                          current
+                            ? {
+                                ...current,
+                                items: current.items.map((currentItem, currentIndex) =>
+                                  currentIndex === index ? { ...currentItem, message: value } : currentItem
+                                ),
+                              }
+                            : current
+                        )
+                      }
+                      onGenerated={(result) => {
+                        handleCollectionMessageGenerated(result.tone, item).catch(() => {});
+                        setManualResult((current) =>
+                          current
+                            ? {
+                                ...current,
+                                items: current.items.map((currentItem, currentIndex) =>
+                                  currentIndex === index ? { ...currentItem, message: result.message } : currentItem
+                                ),
+                              }
+                            : current
+                        );
+                      }}
+                    />
                   </div>
                 </div>
               ))}
