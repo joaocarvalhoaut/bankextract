@@ -1603,9 +1603,11 @@ export default function App() {
       <div className="flex min-h-screen items-center justify-center bg-[#F7F9FC] px-4">
         <Suspense fallback={<ScreenFallback />}>
           <LoginScreen
-            onLogin={auth.signIn}
-            loading={auth.loading}
-            error={auth.error}
+            onSignIn={auth.signIn}
+            onSignUp={auth.signUp}
+            loading={auth.submitting || auth.loading}
+            error={auth.error || auth.configError}
+            onBackToLanding={() => setPublicScreen('landing')}
           />
         </Suspense>
       </div>

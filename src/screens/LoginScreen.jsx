@@ -18,18 +18,30 @@ export default function LoginScreen({ onSignIn, onSignUp, loading, error, onBack
 
     try {
       if (mode === 'signin') {
+        if (!onSignIn) {
+          throw new Error('Fluxo de login indisponivel no momento.');
+        }
         await onSignIn({
           email: email.trim(),
           password
         });
       } else {
+        if (!onSignUp) {
+          throw new Error('Fluxo de criacao de conta indisponivel no momento.');
+        }
         await onSignUp({
           email: email.trim(),
           password
         });
       }
-    } catch (_err) {
-      // O erro principal ja vem pelo estado do hook.
+    } catch (submitError) {
+      if (import.meta.env.DEV) {
+        console.error('Erro ao enviar formulario de autenticacao:', submitError);
+      }
+
+      if (!error) {
+        setLocalError(submitError?.message || 'Erro ao entrar. Tente novamente.');
+      }
     }
   };
 
@@ -119,7 +131,7 @@ export default function LoginScreen({ onSignIn, onSignUp, loading, error, onBack
             disabled={loading}
             className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            {loading ? 'Processando...' : mode === 'signin' ? 'Entrar' : 'Criar conta'}
+            {loading ? (mode === 'signin' ? 'Entrando...' : 'Criando conta...') : mode === 'signin' ? 'Entrar' : 'Criar conta'}
           </button>
         </form>
       </div>
