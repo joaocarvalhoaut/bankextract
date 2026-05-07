@@ -32,7 +32,9 @@ const runtimeContext = {
 
 const chargeMessageDrafts = new Map();
 
-const sampleNames = [
+const OCR_FUNCTION_NAME = 'process-import-ocr';
+const allowImportMock = isDevelopment && String(import.meta.env.VITE_ENABLE_IMPORT_MOCK || '').trim() === 'true';
+const blockedMockNames = new Set([
   'VALERIA CORDEIRO DE SOUZA',
   'DIOCLECIO XAVIER',
   'CONSTRUTORA PARQUE REAL',
@@ -41,39 +43,7 @@ const sampleNames = [
   'MERCADO BOM PRECO',
   'REALCE ESTOFADOS',
   'ORTHOMAX COLCHOES',
-];
-
-const samplePhones = [
-  '77981376867',
-  '77991112233',
-  '11988776655',
-  '31999887766',
-  '',
-  '',
-];
-
-const OCR_FUNCTION_NAME = 'process-import-ocr';
-
-const buildMockImportRows = (tipo, companyId) => {
-  const baseDate = new Date();
-  return Array.from({ length: 8 }).map((_, index) => {
-    const dueDate = new Date(baseDate);
-    dueDate.setDate(baseDate.getDate() + (index - 3));
-    return {
-      id: makeUuid(),
-      nome: sampleNames[index % sampleNames.length],
-      documento: `${tipo === 'liquidacao' ? 'LQ' : 'DOC'}-${String(index + 1).padStart(4, '0')}`,
-      numero_boleto: `${String(index + 1).padStart(4, '0')}-${index + 2}`,
-      data_vencimento: toIsoDate(dueDate),
-      valor: normalizeMoney(650 + index * 175.35),
-      status: tipo === 'liquidacao' ? 'liquidado' : (index < 3 ? 'vencido' : 'pendente'),
-      telefone: samplePhones[index % samplePhones.length] || '',
-      observacoes: '',
-      selected: true,
-      company_id: companyId,
-    };
-  });
-};
+]);
 
 const normalizeImportRecord = (row = {}, index = 0, tipo = 'vencidos', companyId = '') => {
   const nome = row.nome || row.cliente || row.customer_name || row.pagador || row.sacado || '';
@@ -100,6 +70,29 @@ const normalizeImportRecord = (row = {}, index = 0, tipo = 'vencidos', companyId
   };
 };
 
+const isClearlyMockImportRow = (row = {}) => {
+  const nome = String(row.nome || '').trim().toUpperCase();
+  const documento = String(row.documento || '').trim().toUpperCase();
+  const valor = Number(row.valor || 0);
+
+  return (
+    blockedMockNames.has(nome) ||
+    /^DOC-\d{4,}/.test(documento) ||
+    /^LQ-\d{4,}/.test(documento) ||
+    (!nome && /^DOC-/.test(documento)) ||
+    valor === 10109.8
+  );
+};
+
+const isValidImportRow = (row = {}) => {
+  const nome = String(row.nome || '').trim();
+  const documento = String(row.documento || '').trim();
+  const vencimento = String(row.data_vencimento || '').trim();
+  const valor = Number(row.valor || 0);
+
+  return Boolean((nome || row.sacado || row.cliente) && documento && vencimento && Number.isFinite(valor) && valor > 0);
+};
+
 const extractImportRows = (result = {}) => {
   const candidates = [
     result?.records,
@@ -117,6 +110,16 @@ const buildImportPreview = (result, file, tipo, companyId) => {
   const normalizedRows = extractImportRows(result).map((row, index) =>
     normalizeImportRecord(row, index, tipo, companyId)
   );
+
+  const hasInvalidShape = normalizedRows.some((row) => !isValidImportRow(row));
+  if (hasInvalidShape) {
+    throw new Error('A resposta do OCR veio em formato invalido.');
+  }
+
+  const hasMockedRows = normalizedRows.some((row) => isClearlyMockImportRow(row));
+  if (hasMockedRows) {
+    throw new Error('OCR nao configurado ou indisponivel. Nenhum dado foi importado.');
+  }
 
   return {
     fileName: result?.fileName || result?.file_name || file?.name || 'importacao_ocr.pdf',
@@ -1062,39 +1065,51 @@ export const financeService = {
   },
 
   async processImportFile(file, tipo = 'vencidos', companyId = runtimeContext.companyId) {
-    if (hasSupabaseConfig && supabase && file instanceof File) {
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('tipo_importacao', tipo);
-        formData.append('company_id', companyId || '');
-
-        const { data, error } = await supabase.functions.invoke(OCR_FUNCTION_NAME, {
-          body: formData,
-        });
-
-        if (error) {
-          throw error;
-        }
-
-        const result = data && typeof data === 'object' ? data : {};
-        if (result?.success === false) {
-          throw new Error(result?.message || 'Falha ao processar OCR.');
-        }
-
-        return buildImportPreview(result, file, tipo, companyId);
-      } catch (error) {
-        if (isDevelopment) {
-          console.warn('[IMPORTACAO] fallback local apos falha ao invocar OCR', error);
-        }
-      }
+    if (!file || !(file instanceof File)) {
+      throw new Error('Arquivo invalido para processamento OCR.');
     }
 
-    return {
-      fileName: file?.name || 'importacao_ocr.pdf',
-      tipo,
-      rows: buildMockImportRows(tipo, companyId),
-    };
+    if (!hasSupabaseConfig || !supabase) {
+      if (!allowImportMock) {
+        throw new Error('OCR nao configurado ou indisponivel. Nenhum dado foi importado.');
+      }
+
+      throw new Error('OCR nao configurado ou indisponivel. Nenhum dado foi importado.');
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('tipo_importacao', tipo);
+      formData.append('company_id', companyId || '');
+
+      const { data, error } = await supabase.functions.invoke(OCR_FUNCTION_NAME, {
+        body: formData,
+      });
+
+      if (error) {
+        throw new Error(error.message || 'OCR nao configurado ou indisponivel. Nenhum dado foi importado.');
+      }
+
+      if (!data || typeof data !== 'object') {
+        throw new Error('A resposta do OCR veio em formato invalido.');
+      }
+
+      const result = data;
+      if (result?.success === false) {
+        throw new Error(result?.message || 'OCR nao configurado ou indisponivel. Nenhum dado foi importado.');
+      }
+
+      const preview = buildImportPreview(result, file, tipo, companyId);
+      return preview;
+    } catch (error) {
+      if (isDevelopment) {
+        console.error('[IMPORTACAO] falha ao invocar OCR real', error);
+      }
+      throw error instanceof Error
+        ? error
+        : new Error('OCR nao configurado ou indisponivel. Nenhum dado foi importado.');
+    }
   },
 
   async importSelectedRows(rows = [], batchId, companyId = runtimeContext.companyId, options = {}) {

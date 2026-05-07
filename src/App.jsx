@@ -671,6 +671,14 @@ export default function App() {
 
       const result = await financeService.processImportFile(selectedFile, importType, currentCompanyId);
       console.log('[IMPORTACAO] resposta OCR', result);
+      const hasKnownArray =
+        Array.isArray(result?.rows) ||
+        Array.isArray(result?.data) ||
+        Array.isArray(result?.records) ||
+        Array.isArray(result?.registros);
+      if (!hasKnownArray) {
+        throw new Error('A resposta do OCR veio em formato invalido.');
+      }
       const previewRows = Array.isArray(result?.rows)
         ? result.rows
         : Array.isArray(result?.data)
@@ -708,6 +716,7 @@ export default function App() {
       }
     } catch (error) {
       console.error('[IMPORTACAO] erro OCR', error);
+      setPreview(null);
       showToast('erro', error.message || 'Nao foi possivel processar o arquivo.');
     } finally {
       setProcessing(false);

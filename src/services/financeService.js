@@ -684,30 +684,7 @@ export const financeService = {
   },
 
   async processImportFile(file, tipo = 'vencidos', companyId) {
-    const baseDate = new Date();
-    const rows = Array.from({ length: 8 }).map((_, index) => {
-      const dueDate = new Date(baseDate);
-      dueDate.setDate(baseDate.getDate() + (index - 3));
-      return {
-        id: `preview-${index + 1}`,
-        nome: sampleNames[index % sampleNames.length],
-        documento: `${tipo === 'liquidacao' ? 'LQ' : 'DOC'}-${String(index + 1).padStart(4, '0')}`,
-        numero_boleto: `${String(index + 1).padStart(4, '0')}-${index + 2}`,
-        data_vencimento: dueDate.toISOString().slice(0, 10),
-        valor: Number((650 + index * 175.35).toFixed(2)),
-        status: tipo === 'liquidacao' ? 'liquidado' : (index < 3 ? 'vencido' : 'pendente'),
-        telefone: samplePhones[index % samplePhones.length] || '',
-        observacoes: '',
-        selected: true,
-        company_id: companyId,
-      };
-    });
-
-    return localDelay({
-      fileName: file?.name || 'importacao_ocr.pdf',
-      tipo,
-      rows
-    });
+    throw new Error('OCR nao configurado ou indisponivel. Nenhum dado foi importado.');
   },
 
   async deleteImportHistory(item, tenantOptions = {}) {
