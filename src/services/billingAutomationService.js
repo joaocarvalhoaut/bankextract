@@ -206,6 +206,23 @@ export async function prepareManualCharge(companyId, registroId) {
   };
 }
 
+export async function sendRealCharge(companyId, items = []) {
+  const data = await invokeBillingAutomation(
+    {
+      action: 'send_real',
+      company_id: companyId,
+      items,
+    },
+    'Falha ao enviar a cobranca real pelo WhatsApp.'
+  );
+
+  return {
+    ...data,
+    sent: Array.isArray(data?.sent) ? data.sent.map((item) => normalizeBillingPayload(item || {})) : [],
+    failed: Array.isArray(data?.failed) ? data.failed.map((item) => normalizeBillingPayload(item || {})) : [],
+  };
+}
+
 export async function syncBillingSheet(companyId) {
   return invokeBillingAutomation(
     {

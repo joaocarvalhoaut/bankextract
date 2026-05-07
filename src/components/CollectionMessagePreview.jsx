@@ -20,6 +20,7 @@ export default function CollectionMessagePreview({
   onSaveTemplate,
   saveTemplateLabel = 'Salvar como modelo da empresa',
   savingTemplate = false,
+  extraActions = null,
 }) {
   const [tone, setTone] = useState(() => getDefaultCollectionTone(context));
   const [message, setMessage] = useState(initialMessage || '');
@@ -139,6 +140,7 @@ export default function CollectionMessagePreview({
                   {savingTemplate ? 'Salvando modelo...' : saveTemplateLabel}
                 </button>
               ) : null}
+              {extraActions}
             </div>
           </div>
         </div>

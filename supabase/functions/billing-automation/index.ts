@@ -411,11 +411,21 @@ function nameSimilarityScore(a: string | null | undefined, b: string | null | un
 function normalizePhone(raw: string | null | undefined) {
   const digits = String(raw || '').replace(/\D/g, '');
   if (!digits) return '';
-  return digits.startsWith('55') ? digits : `55${digits}`;
+  if (digits.startsWith('55')) {
+    return digits.length >= 12 && digits.length <= 13 ? digits : '';
+  }
+  if (digits.length === 10 || digits.length === 11) {
+    return `55${digits}`;
+  }
+  return '';
 }
 
 function validatePhone(phone: string) {
   return /^55\d{10,11}$/.test(phone);
+}
+
+function normalizeBrazilPhone(raw: string | null | undefined) {
+  return normalizePhone(raw);
 }
 
 function formatCurrency(value: number) {
@@ -1470,11 +1480,16 @@ async function buildChargePayloadPreview(
   return {
     message,
     payload: {
+      company_id: record.company_id,
+      registro_id: record.id,
       cliente: clienteEfetivo || record.nome || 'Cliente',
       telefone: record.telefone || '',
       documento: record.documento || numeroBoletoEfetivo || 'nao localizado',
       numero_boleto: numeroBoletoEfetivo || 'nao localizado',
       numero_nf: record.numero_nf || null,
+      valor: Number(record.valor || 0),
+      vencimento: record.data_vencimento || null,
+      status: record.status || 'pendente',
       linha_digitavel: record.linha_digitavel || 'nao localizado',
       codigo_barras: record.codigo_barras || 'nao localizado',
       boleto_url: record.boleto_url || 'nao localizado',
@@ -1532,6 +1547,204 @@ async function prepareManualChargeData(
   };
 }
 
+async function sendRealChargesData(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  userId: string | null,
+  items: Array<Record<string, unknown>>,
+) {
+  const sent: Array<Record<string, unknown>> = [];
+  const failed: Array<Record<string, unknown>> = [];
+
+  for (const item of items) {
+    const registroId = String(item?.registro_id || item?.id || '').trim();
+    const message = String(item?.message || item?.mensagem || '').trim();
+    const documento = String(item?.documento || item?.numero_boleto || item?.numero_nf || '').trim();
+    const phoneRaw = String(item?.phone || item?.telefone || '').trim();
+    const normalizedPhone = normalizeBrazilPhone(phoneRaw);
+
+    let record: Record<string, unknown> | null = null;
+    if (registroId) {
+      const { data, error } = await supabaseAdmin
+        .from('registros_financeiros')
+        .select('id, company_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, status, tentativas_cobranca')
+        .eq('id', registroId)
+        .eq('company_id', companyId)
+        .maybeSingle();
+
+      if (error) {
+        failed.push({
+          ...item,
+          registro_id: registroId || null,
+          telefone: normalizedPhone || phoneRaw || '',
+          error: error.message,
+        });
+        continue;
+      }
+
+      record = data;
+    }
+
+    const numeroBoletoEfetivo = getNumeroBoletoEfetivo((record || item) as Partial<FinancialRow> & Record<string, unknown>);
+    const clienteEfetivo = getClienteEfetivo((record || item) as Partial<FinancialRow> & Record<string, unknown>) || String(item?.cliente || item?.cliente_nome || 'Cliente');
+
+    const logBase = {
+      financeiro_id: String(record?.id || registroId || '').trim() || null,
+      company_id: companyId,
+      data_hora: new Date().toISOString(),
+      cliente_nome: clienteEfetivo || 'Cliente',
+      cliente_numero: String(record?.cliente_numero || '') || null,
+      telefone: normalizedPhone || phoneRaw || null,
+      documento: String(record?.documento || item?.documento || documento || '') || null,
+      numero_boleto: numeroBoletoEfetivo || null,
+      numero_nf: String(record?.numero_nf || item?.numero_nf || '') || null,
+      valor: Number(record?.valor || item?.valor || 0),
+      vencimento: String(record?.data_vencimento || item?.vencimento || '') || null,
+      tipo_cobranca: 'manual_real',
+      dias_atraso: 0,
+      arquivo_encontrado: temBoletoEncontrado((record || item) as Partial<FinancialRow> & Record<string, unknown>),
+      drive_file_id: String(item?.drive_file_id || '') || null,
+    };
+
+    if (!message) {
+      const errorMessage = 'Mensagem vazia para envio real.';
+      await insertWhatsappCharge(supabaseAdmin, {
+        empresa_id: companyId,
+        registro_id: logBase.financeiro_id,
+        telefone: normalizedPhone || phoneRaw || '',
+        mensagem: '',
+        status: 'erro',
+        zapi_message_id: null,
+        erro: errorMessage,
+        enviado_por: userId,
+      });
+      await insertLog(supabaseAdmin, {
+        ...logBase,
+        status_envio: 'erro',
+        erro: errorMessage,
+        payload: {
+          message: '',
+        },
+      });
+      failed.push({
+        ...item,
+        registro_id: registroId || null,
+        telefone: normalizedPhone || phoneRaw || '',
+        error: errorMessage,
+      });
+      continue;
+    }
+
+    if (!validatePhone(normalizedPhone)) {
+      const errorMessage = 'Telefone invalido para envio real.';
+      await insertWhatsappCharge(supabaseAdmin, {
+        empresa_id: companyId,
+        registro_id: logBase.financeiro_id,
+        telefone: normalizedPhone || phoneRaw || '',
+        mensagem: message,
+        status: 'erro',
+        zapi_message_id: null,
+        erro: errorMessage,
+        enviado_por: userId,
+      });
+      await insertLog(supabaseAdmin, {
+        ...logBase,
+        status_envio: 'erro',
+        erro: errorMessage,
+        payload: {
+          message,
+        },
+      });
+      failed.push({
+        ...item,
+        registro_id: registroId || null,
+        telefone: normalizedPhone || phoneRaw || '',
+        error: errorMessage,
+      });
+      continue;
+    }
+
+    try {
+      const sendResult = await sendZapiText({ phone: normalizedPhone, message });
+
+      await insertWhatsappCharge(supabaseAdmin, {
+        empresa_id: companyId,
+        registro_id: logBase.financeiro_id,
+        telefone: sendResult.normalizedPhone,
+        mensagem: message,
+        status: 'enviado',
+        zapi_message_id: sendResult.messageId || sendResult.zaapId || null,
+        erro: null,
+        enviado_por: userId,
+      });
+
+      await insertLog(supabaseAdmin, {
+        ...logBase,
+        telefone: sendResult.normalizedPhone,
+        status_envio: 'sucesso',
+        erro: null,
+        payload: {
+          message,
+          zapi_message_id: sendResult.messageId || null,
+          zapi_zaap_id: sendResult.zaapId || null,
+          zapi_id: sendResult.id || null,
+          zapi_raw: sendResult.raw,
+        },
+      });
+
+      if (record?.id) {
+        await supabaseAdmin
+          .from('registros_financeiros')
+          .update({
+            ultima_cobranca: new Date().toISOString(),
+            tentativas_cobranca: Number(record?.tentativas_cobranca || 0) + 1,
+          })
+          .eq('id', record.id)
+          .eq('company_id', companyId);
+      }
+
+      sent.push({
+        ...item,
+        registro_id: registroId || null,
+        telefone: sendResult.normalizedPhone,
+        cliente_nome: clienteEfetivo,
+        documento: logBase.documento,
+        numero_boleto: numeroBoletoEfetivo || '',
+        zapi_message_id: sendResult.messageId || null,
+        zapi_zaap_id: sendResult.zaapId || null,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await insertWhatsappCharge(supabaseAdmin, {
+        empresa_id: companyId,
+        registro_id: logBase.financeiro_id,
+        telefone: normalizedPhone || phoneRaw || '',
+        mensagem: message,
+        status: 'erro',
+        zapi_message_id: null,
+        erro: errorMessage,
+        enviado_por: userId,
+      });
+      await insertLog(supabaseAdmin, {
+        ...logBase,
+        status_envio: 'erro',
+        erro: errorMessage,
+        payload: {
+          message,
+        },
+      });
+      failed.push({
+        ...item,
+        registro_id: registroId || null,
+        telefone: normalizedPhone || phoneRaw || '',
+        error: errorMessage,
+      });
+    }
+  }
+
+  return { sent, failed };
+}
+
 async function sendZapiDocument(phone: string, caption: string, fileName: string, base64: string) {
   const instanceId = Deno.env.get('ZAPI_INSTANCE_ID') || '';
   const token = Deno.env.get('ZAPI_TOKEN') || '';
@@ -1571,11 +1784,76 @@ async function sendZapiDocument(phone: string, caption: string, fileName: string
   };
 }
 
+async function sendZapiText({ phone, message }: { phone: string; message: string }) {
+  const instanceId = Deno.env.get('ZAPI_INSTANCE_ID') || '';
+  const token = Deno.env.get('ZAPI_TOKEN') || '';
+  const clientToken = Deno.env.get('ZAPI_CLIENT_TOKEN') || '';
+
+  if (!instanceId || !token || !clientToken) {
+    throw new Error('Z-API nao configurada.');
+  }
+
+  const normalizedPhone = normalizeBrazilPhone(phone);
+  if (!validatePhone(normalizedPhone)) {
+    throw new Error('Telefone invalido para envio real.');
+  }
+
+  const response = await fetch(
+    `https://api.z-api.io/instances/${instanceId}/token/${token}/send-text`,
+    {
+      method: 'POST',
+      headers: {
+        'Client-Token': clientToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        phone: normalizedPhone,
+        message,
+      }),
+    },
+  );
+
+  const data = await response.json().catch(() => ({}));
+  console.log('[ZAPI REQUEST]', {
+    phone: normalizedPhone,
+    ok: response.ok,
+    status: response.status,
+    data,
+  });
+
+  if (!response.ok) {
+    console.error('[ZAPI ERROR]', {
+      phone: normalizedPhone,
+      status: response.status,
+      data,
+    });
+    throw new Error(`Z-API erro ${response.status}: ${JSON.stringify(data)}`);
+  }
+
+  console.log('[ZAPI RESPONSE]', data);
+
+  return {
+    normalizedPhone,
+    raw: data,
+    zaapId: String(data?.zaapId || ''),
+    messageId: String(data?.messageId || data?.id || ''),
+    id: String(data?.id || ''),
+  };
+}
+
 async function insertLog(
   supabaseAdmin: AdminClient,
   payload: Record<string, unknown>,
 ) {
   const { error } = await supabaseAdmin.from('logs_cobranca').insert(payload);
+  if (error) throw new Error(error.message);
+}
+
+async function insertWhatsappCharge(
+  supabaseAdmin: AdminClient,
+  payload: Record<string, unknown>,
+) {
+  const { error } = await supabaseAdmin.from('cobrancas_whatsapp').insert(payload);
   if (error) throw new Error(error.message);
 }
 
@@ -1719,7 +1997,7 @@ async function processChargeForRecord(
   const base64 = await downloadDriveFileBase64(token, file.id);
   const sendResult = await sendZapiDocument(phone, message, file.name || `${numeroBoletoEfetivo || record.documento || record.id}.pdf`, base64);
 
-  await supabaseAdmin.from('cobrancas_whatsapp').insert({
+  await insertWhatsappCharge(supabaseAdmin, {
     empresa_id: record.company_id,
     registro_id: record.id,
     telefone: phone,
@@ -2936,7 +3214,7 @@ Deno.serve(async (req: Request) => {
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
     }
 
-    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission' || action === 'get_boleto_sync_report' || action === 'preview_charge_payload' || action === 'prepare_manual_charge') {
+    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission' || action === 'get_boleto_sync_report' || action === 'preview_charge_payload' || action === 'prepare_manual_charge' || action === 'send_real') {
       requireCompanyId(companyId);
     }
 
@@ -3221,6 +3499,37 @@ Deno.serve(async (req: Request) => {
           ok: false,
           success: false,
           action: 'prepare_manual_charge',
+          error: String(error instanceof Error ? error.message : error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
+    }
+
+    if (action === 'send_real') {
+      try {
+        const items = Array.isArray(body?.items) ? body.items : [];
+        if (!items.length) {
+          return jsonResponse({
+            ok: false,
+            success: false,
+            action: 'send_real',
+            error: 'items e obrigatorio para envio real.',
+          }, 200);
+        }
+
+        const result = await sendRealChargesData(admin, companyId || '', auth.userId, items as Array<Record<string, unknown>>);
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'send_real',
+          sent: result.sent,
+          failed: result.failed,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'send_real',
           error: String(error instanceof Error ? error.message : error),
           details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);

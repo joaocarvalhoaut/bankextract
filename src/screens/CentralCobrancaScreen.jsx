@@ -22,6 +22,7 @@ import {
   prepareManualCharge,
   previewChargePayload,
   saveBillingConfig,
+  sendRealCharge,
   simulateChargeItem,
   syncBillingDrive,
   updateChargeStatus,
@@ -140,6 +141,8 @@ export default function CentralCobrancaScreen({
   const [openMenuRowId, setOpenMenuRowId] = useState(null);
   const [limitNotice, setLimitNotice] = useState(null);
   const [savingTemplate, setSavingTemplate] = useState(false);
+  const [sendingReal, setSendingReal] = useState(false);
+  const [sendingRealKeys, setSendingRealKeys] = useState(() => new Set());
 
   const canManageCharges = canUserPerformAction(userRole, 'manage_charges');
 
@@ -377,6 +380,110 @@ export default function CentralCobrancaScreen({
       setSavingTemplate(false);
     }
   }, [globalMode, onToast, resolvedCompanyId]);
+
+  const applyRealSendSummary = useCallback((previous, response) => {
+    const sent = Array.isArray(response?.sent) ? response.sent : [];
+    const failed = Array.isArray(response?.failed) ? response.failed : [];
+    const sentKeys = new Set(sent.map((item) => String(item?.registro_id || item?.id || item?.documento || item?.numero_boleto || '')));
+    const failedByKey = new Map(
+      failed.map((item) => [
+        String(item?.registro_id || item?.id || item?.documento || item?.numero_boleto || ''),
+        item,
+      ])
+    );
+
+    const nextItems = (previous?.items || []).map((item) => {
+      const key = String(item?.registro_id || item?.id || item?.documento || item?.numero_boleto || '');
+      if (sentKeys.has(key)) {
+        const sentItem = sent.find((current) => String(current?.registro_id || current?.id || current?.documento || current?.numero_boleto || '') === key) || {};
+        return {
+          ...item,
+          ...sentItem,
+          send_status: 'enviado',
+        };
+      }
+      if (failedByKey.has(key)) {
+        const failedItem = failedByKey.get(key) || {};
+        return {
+          ...item,
+          ...failedItem,
+          send_status: 'erro',
+          send_error: failedItem?.error || 'Falha no envio real.',
+        };
+      }
+      return item;
+    });
+
+    return {
+      ...previous,
+      items: nextItems,
+      sendSummary: {
+        sent: sent.length,
+        failed: failed.length,
+        pending: Math.max(nextItems.length - sent.length - failed.length, 0),
+      },
+    };
+  }, []);
+
+  const handleSendReal = useCallback(async (entries, batch = false) => {
+    const safeEntries = Array.isArray(entries) ? entries : [];
+    if (!resolvedCompanyId || !safeEntries.length) {
+      onToast?.('erro', 'Nenhuma cobranca preparada para envio real.');
+      return;
+    }
+
+    const confirmMessage = batch
+      ? `Voce esta prestes a enviar ${safeEntries.length} mensagem(ns) reais pelo WhatsApp. Confirmar?`
+      : 'Confirmar envio real pelo WhatsApp para este cliente?';
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    const payload = safeEntries.map((item) => ({
+      registro_id: item?.registro_id || item?.id || null,
+      company_id: resolvedCompanyId,
+      cliente_nome: getClienteEfetivo(item),
+      telefone: item?.telefone || '',
+      documento: item?.documento || getNumeroBoletoEfetivo(item) || '',
+      numero_boleto: getNumeroBoletoEfetivo(item) || '',
+      numero_nf: item?.numero_nf || '',
+      valor: item?.valor || 0,
+      vencimento: item?.vencimento || null,
+      message: item?.message || '',
+    }));
+
+    const activeKeys = new Set(payload.map((item) => String(item.registro_id || item.documento || item.numero_boleto || '')));
+    setSendingReal(true);
+    setSendingRealKeys(activeKeys);
+    try {
+      const result = await sendRealCharge(resolvedCompanyId, payload);
+      console.log('[ENVIO REAL] resultado', result);
+      setManualResult((current) => applyRealSendSummary(current, result));
+      await loadCenter();
+      await createAuditEvent(resolvedCompanyId, {
+        action: 'whatsapp_sent',
+        entity_type: 'cobrancas_whatsapp',
+        title: batch ? 'Lote real enviado' : 'Cobranca enviada',
+        description: `${Array.isArray(result?.sent) ? result.sent.length : 0} mensagem(ns) enviada(s) via Z-API.`,
+        metadata: {
+          sent: Array.isArray(result?.sent) ? result.sent.length : 0,
+          failed: Array.isArray(result?.failed) ? result.failed.length : 0,
+        },
+        severity: Array.isArray(result?.failed) && result.failed.length ? 'warning' : 'success',
+      }).catch(() => {});
+      onToast?.(
+        'sucesso',
+        `${Array.isArray(result?.sent) ? result.sent.length : 0} envio(s) real(is) concluido(s).`
+      );
+    } catch (error) {
+      console.error('[ENVIO REAL] erro', error);
+      onToast?.('erro', error.message || 'Falha ao enviar cobranca real pelo WhatsApp.');
+    } finally {
+      setSendingReal(false);
+      setSendingRealKeys(new Set());
+    }
+  }, [applyRealSendSummary, loadCenter, onToast, resolvedCompanyId]);
 
   const handleCollectionMessageGenerated = useCallback(
     async (tone, payload) => {
@@ -1044,6 +1151,14 @@ export default function CentralCobrancaScreen({
                 ) : null}
                 <button
                   type="button"
+                  disabled={sendingReal || !(manualResult.items || []).length}
+                  onClick={() => handleSendReal(manualResult.items || [], (manualResult.items || []).length > 1)}
+                  className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 disabled:opacity-50"
+                >
+                  {sendingReal ? 'Enviando lote...' : (manualResult.type === 'batch' ? 'Enviar lote real' : 'Enviar WhatsApp real')}
+                </button>
+                <button
+                  type="button"
                   onClick={() => setManualResult(null)}
                   className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
                 >
@@ -1057,6 +1172,12 @@ export default function CentralCobrancaScreen({
               <CenterCard label="Erros" value={manualResult.errors || 0} tone="red" />
               <CenterCard label="Sem telefone" value={(manualResult.errorItems || []).filter((item) => item.semTelefone).length} tone="amber" />
               <CenterCard label="Sem boleto" value={(manualResult.errorItems || []).filter((item) => item.semBoleto).length} tone="amber" />
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              <CenterCard label="Enviados reais" value={manualResult.sendSummary?.sent || 0} tone="emerald" />
+              <CenterCard label="Erros de envio" value={manualResult.sendSummary?.failed || 0} tone="red" />
+              <CenterCard label="Pendentes" value={manualResult.sendSummary?.pending ?? ((manualResult.items || []).length - (manualResult.sendSummary?.sent || 0) - (manualResult.sendSummary?.failed || 0))} tone="blue" />
             </div>
 
             <div className="mt-5 space-y-4">
@@ -1148,8 +1269,29 @@ export default function CentralCobrancaScreen({
                       }}
                       onSaveTemplate={saveCompanyTemplate}
                       savingTemplate={savingTemplate}
+                      extraActions={(
+                        <button
+                          type="button"
+                          disabled={sendingReal || sendingRealKeys.has(String(item?.registro_id || item?.id || item?.documento || item?.numero_boleto || ''))}
+                          onClick={() => handleSendReal([item], false)}
+                          className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
+                        >
+                          <Send size={13} />
+                          {sendingRealKeys.has(String(item?.registro_id || item?.id || item?.documento || item?.numero_boleto || '')) ? 'Enviando...' : 'Enviar WhatsApp real'}
+                        </button>
+                      )}
                     />
                   </div>
+                  {item.send_status === 'enviado' ? (
+                    <p className="mt-3 text-xs font-medium text-emerald-700">
+                      Enviado com sucesso via Z-API.
+                    </p>
+                  ) : null}
+                  {item.send_status === 'erro' ? (
+                    <p className="mt-3 text-xs font-medium text-red-700">
+                      Erro no envio real: {item.send_error || item.error || 'Falha nao identificada.'}
+                    </p>
+                  ) : null}
                 </div>
               ))}
             </div>
