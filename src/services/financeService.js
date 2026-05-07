@@ -63,6 +63,16 @@ const buildError = (error, fallback) => {
   return new Error(error?.message || fallback);
 };
 
+function normalizeStatus(status) {
+  const s = String(status || '').toLowerCase().trim();
+
+  if (s.includes('venc')) return 'vencido';
+  if (s.includes('pago') || s.includes('baix')) return 'pago';
+  if (s.includes('abert')) return 'aberto';
+
+  return 'pendente';
+}
+
 const cleanInsertPayload = (items = []) =>
   (items || []).map((item) => {
     const clone = { ...(item || {}) };
@@ -767,11 +777,14 @@ export const financeService = {
         })
       );
       const cleanPayload = items.map((item) => {
+        const normalizedStatus = normalizeStatus(item?.status);
+        console.log('[IMPORT] normalized status', item?.status, '=>', normalizedStatus);
         const clone = {
           ...mapRegistroToDb({
             ...item,
             company_id: tenant.companyId,
-            user_id: tenant.userId
+            user_id: tenant.userId,
+            status: normalizedStatus,
           })
         };
         delete clone.id;
