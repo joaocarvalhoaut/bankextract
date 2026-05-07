@@ -200,6 +200,31 @@ function normalizeText(value: string | null | undefined) {
     .trim();
 }
 
+function getNumeroBoletoEfetivo(registro: Partial<FinancialRow> & Record<string, unknown>) {
+  return String(registro?.documento || registro?.numero_nf || '').trim();
+}
+
+function getClienteEfetivo(registro: Partial<FinancialRow> & Record<string, unknown>) {
+  return String(registro?.cliente_nome || '').trim();
+}
+
+function logCobrancaMapping(registro: Partial<FinancialRow> & Record<string, unknown>) {
+  const numeroBoletoEfetivo = getNumeroBoletoEfetivo(registro);
+  const clienteEfetivo = getClienteEfetivo(registro);
+  console.log(
+    '[COBRANCA]',
+    'cliente=',
+    clienteEfetivo,
+    'documento=',
+    String(registro?.documento || ''),
+    'numero_nf=',
+    String(registro?.numero_nf || ''),
+    'usando=',
+    numeroBoletoEfetivo,
+  );
+  return { numeroBoletoEfetivo, clienteEfetivo };
+}
+
 function normalizeDriveName(value: string | null | undefined) {
   return String(value || '')
     .normalize('NFD')
@@ -457,12 +482,13 @@ function fillTemplate(
   diasAtraso: number,
   companyName = '',
 ) {
-  const nome = String(record.cliente_nome || record.nome || 'Cliente');
-  const documento = String(record.documento || record.numero_boleto || '-');
+  const { numeroBoletoEfetivo, clienteEfetivo } = logCobrancaMapping(record);
+  const nome = clienteEfetivo || String(record.nome || 'Cliente');
+  const documento = String(record.documento || numeroBoletoEfetivo || '-');
   const vencimento = String(record.data_vencimento || record.vencimento || '');
   const valor = Number(record.valor || 0);
   const telefone = String(record.telefone || '');
-  const numeroBoleto = String(record.numero_boleto || '');
+  const numeroBoleto = String(numeroBoletoEfetivo || '');
   const linhaDigitavel = String(record.linha_digitavel || '').trim() || 'nao localizado';
   const codigoBarras = String(record.codigo_barras || '').trim() || 'nao localizado';
   const linkBoleto = String(record.boleto_url || record.link_boleto || '').trim() || 'nao localizado';
@@ -672,8 +698,9 @@ async function searchDriveFiles(token: string, folderId: string, record: Financi
     }
   }
 
-  const boleto = String(record.numero_boleto || '').trim();
-  const normalizedName = normalizeDriveName(record.cliente_nome || record.nome || '');
+  const { numeroBoletoEfetivo, clienteEfetivo } = logCobrancaMapping(record);
+  const boleto = String(numeroBoletoEfetivo || '').trim();
+  const normalizedName = normalizeDriveName(clienteEfetivo || record.nome || '');
   const candidates = [
     boleto ? `${boleto}.pdf` : '',
     boleto && normalizedName ? `${normalizedName}_${boleto}.pdf` : '',
@@ -1154,7 +1181,7 @@ function scoreFinancialMatch(pdfData: ExtractedBoletoData, record: FinancialRow)
     reasons.push('linha_digitavel_detected');
   }
 
-  const similarity = nameSimilarityScore(pdfData.nome_cliente, record.cliente_nome || record.nome);
+  const similarity = nameSimilarityScore(pdfData.nome_cliente, getClienteEfetivo(record) || record.nome);
   if (similarity >= 0.55) {
     score += 10;
     reasons.push('fuzzy_name_match');
@@ -1200,7 +1227,7 @@ async function upsertBoletoMatchResult(
 
   const payload: Record<string, unknown> = {
     drive_file_id: pdfData.drive_file_id || record.drive_file_id || null,
-    numero_boleto: record.numero_boleto || pdfData.numero_boleto || null,
+    numero_boleto: getNumeroBoletoEfetivo(record) || pdfData.numero_boleto || null,
     linha_digitavel: pdfData.linha_digitavel || record.linha_digitavel || null,
     codigo_barras: pdfData.codigo_barras || record.codigo_barras || null,
     boleto_url: pdfData.boleto_url || record.boleto_url || null,
@@ -1351,7 +1378,7 @@ async function getBoletoSyncReportData(supabaseAdmin: AdminClient, companyId: st
   requireCompanyId(companyId);
   const { data: rows, error } = await supabaseAdmin
     .from('registros_financeiros')
-    .select('id, company_id, nome, cliente_nome, documento, numero_boleto, valor, data_vencimento, linha_digitavel, codigo_barras, boleto_url, boleto_pdf_nome, boleto_match_confidence, boleto_status, boleto_match_strategy, boleto_erro, drive_file_id')
+    .select('id, company_id, nome, cliente_nome, documento, numero_nf, numero_boleto, valor, data_vencimento, linha_digitavel, codigo_barras, boleto_url, boleto_pdf_nome, boleto_match_confidence, boleto_status, boleto_match_strategy, boleto_erro, drive_file_id')
     .eq('company_id', companyId)
     .order('data_vencimento', { ascending: true });
 
@@ -1371,9 +1398,9 @@ async function getBoletoSyncReportData(supabaseAdmin: AdminClient, companyId: st
     },
     items: records.map((row) => ({
       id: row.id,
-      cliente: row.cliente_nome || row.nome || 'Cliente',
+      cliente: getClienteEfetivo(row) || row.nome || 'Cliente',
       documento: row.documento || '-',
-      boleto: row.numero_boleto || '-',
+      boleto: getNumeroBoletoEfetivo(row) || '-',
       linha_digitavel: row.linha_digitavel || null,
       valor: Number(row.valor || 0),
       vencimento: row.data_vencimento || null,
@@ -1403,6 +1430,7 @@ async function buildChargePayloadPreview(
 
   if (error) throw new Error(error.message);
   if (!record) throw new Error('Registro financeiro nao encontrado.');
+  const { numeroBoletoEfetivo, clienteEfetivo } = logCobrancaMapping(record);
 
   const eligibility = explainRecordEligibility({
     ...record,
@@ -1420,10 +1448,11 @@ async function buildChargePayloadPreview(
   return {
     message,
     payload: {
-      cliente: record.cliente_nome || record.nome || 'Cliente',
+      cliente: clienteEfetivo || record.nome || 'Cliente',
       telefone: record.telefone || '',
-      documento: record.documento || 'nao localizado',
-      numero_boleto: record.numero_boleto || 'nao localizado',
+      documento: record.documento || numeroBoletoEfetivo || 'nao localizado',
+      numero_boleto: numeroBoletoEfetivo || 'nao localizado',
+      numero_nf: record.numero_nf || null,
       linha_digitavel: record.linha_digitavel || 'nao localizado',
       codigo_barras: record.codigo_barras || 'nao localizado',
       boleto_url: record.boleto_url || 'nao localizado',
@@ -1451,16 +1480,17 @@ async function prepareManualChargeData(
 
   if (error) throw new Error(error.message);
   if (!record) throw new Error('Registro financeiro nao encontrado.');
+  const { numeroBoletoEfetivo, clienteEfetivo } = logCobrancaMapping(record);
 
   await insertLog(supabaseAdmin, {
     financeiro_id: record.id,
     company_id: companyId,
     data_hora: new Date().toISOString(),
-    cliente_nome: record.cliente_nome || record.nome || 'Cliente',
+    cliente_nome: clienteEfetivo || record.nome || 'Cliente',
     cliente_numero: record.cliente_numero || null,
     telefone: record.telefone || null,
     documento: record.documento || null,
-    numero_boleto: record.numero_boleto || null,
+    numero_boleto: numeroBoletoEfetivo || null,
     numero_nf: record.numero_nf || null,
     valor: Number(record.valor || 0),
     vencimento: record.data_vencimento || null,
@@ -1576,7 +1606,8 @@ async function processChargeForRecord(
   }
 
   const diasAtraso = diff < 0 ? Math.abs(diff) : 0;
-  const hash = await sha256Hex(`${record.company_id}|${record.id}|${record.numero_boleto || ''}|${tipo}|${todayIso}`);
+  const { numeroBoletoEfetivo, clienteEfetivo } = logCobrancaMapping(record);
+  const hash = await sha256Hex(`${record.company_id}|${record.id}|${numeroBoletoEfetivo || ''}|${tipo}|${todayIso}`);
 
   if (!force) {
     const { data: duplicate } = await supabaseAdmin
@@ -1598,11 +1629,11 @@ async function processChargeForRecord(
     await insertLog(supabaseAdmin, {
       financeiro_id: record.id,
       company_id: record.company_id,
-      cliente_nome: record.cliente_nome || record.nome,
+      cliente_nome: clienteEfetivo || record.nome,
       cliente_numero: record.cliente_numero,
       telefone: record.telefone,
       documento: record.documento,
-      numero_boleto: record.numero_boleto,
+      numero_boleto: numeroBoletoEfetivo || null,
       numero_nf: record.numero_nf,
       valor: record.valor,
       vencimento: record.data_vencimento,
@@ -1624,11 +1655,11 @@ async function processChargeForRecord(
     await insertLog(supabaseAdmin, {
       financeiro_id: record.id,
       company_id: record.company_id,
-      cliente_nome: record.cliente_nome || record.nome,
+      cliente_nome: clienteEfetivo || record.nome,
       cliente_numero: record.cliente_numero,
       telefone: phone,
       documento: record.documento,
-      numero_boleto: record.numero_boleto,
+      numero_boleto: numeroBoletoEfetivo || null,
       numero_nf: record.numero_nf,
       valor: record.valor,
       vencimento: record.data_vencimento,
@@ -1655,7 +1686,7 @@ async function processChargeForRecord(
       fileId: file?.id || null,
       simulated: true,
       message,
-      fileName: file?.name || `${record.numero_boleto || record.documento || record.id}.pdf`,
+      fileName: file?.name || `${numeroBoletoEfetivo || record.documento || record.id}.pdf`,
     };
   }
 
@@ -1664,7 +1695,7 @@ async function processChargeForRecord(
   }
 
   const base64 = await downloadDriveFileBase64(token, file.id);
-  const sendResult = await sendZapiDocument(phone, message, file.name || `${record.numero_boleto || record.documento || record.id}.pdf`, base64);
+  const sendResult = await sendZapiDocument(phone, message, file.name || `${numeroBoletoEfetivo || record.documento || record.id}.pdf`, base64);
 
   await supabaseAdmin.from('cobrancas_whatsapp').insert({
     empresa_id: record.company_id,
@@ -1700,11 +1731,11 @@ async function processChargeForRecord(
   await insertLog(supabaseAdmin, {
     financeiro_id: record.id,
     company_id: record.company_id,
-    cliente_nome: record.cliente_nome || record.nome,
+    cliente_nome: clienteEfetivo || record.nome,
     cliente_numero: record.cliente_numero,
     telefone: phone,
     documento: record.documento,
-    numero_boleto: record.numero_boleto,
+    numero_boleto: numeroBoletoEfetivo || null,
     numero_nf: record.numero_nf,
     valor: record.valor,
     vencimento: record.data_vencimento,
@@ -1828,7 +1859,7 @@ async function getBillingCenterData(
   console.log('get_billing_center before registros_financeiros query', { company_id: companyId });
   const { data: records, error: recordsError } = await supabaseAdmin
     .from('registros_financeiros')
-    .select('id, company_id, nome, documento, numero_boleto, data_vencimento, valor, telefone, status, created_at, linha_digitavel, codigo_barras, boleto_url, boleto_pdf_nome, boleto_match_confidence, boleto_status, drive_file_id')
+    .select('id, company_id, nome, cliente_nome, documento, numero_nf, numero_boleto, data_vencimento, valor, telefone, status, created_at, linha_digitavel, codigo_barras, boleto_url, boleto_pdf_nome, boleto_match_confidence, boleto_status, drive_file_id')
     .eq('company_id', companyId)
     .order('data_vencimento', { ascending: true });
 
@@ -1877,6 +1908,7 @@ async function getBillingCenterData(
   };
 
   const rows = (records || []).map((record) => {
+    const { numeroBoletoEfetivo, clienteEfetivo } = logCobrancaMapping(record);
     const latestLog = latestLogByFinanceiro.get(record.id);
     const telefoneBruto = String(record?.telefone || latestLog?.telefone || '');
     const telefoneValido = validatePhone(normalizePhone(telefoneBruto));
@@ -1898,9 +1930,10 @@ async function getBillingCenterData(
     return {
       id: record.id,
       company_id: record.company_id,
-      cliente_nome: record.nome || 'Cliente',
-      documento: record.documento || '-',
-      numero_boleto: record.numero_boleto || '-',
+      cliente_nome: clienteEfetivo || record.nome || 'Cliente',
+      documento: record.documento || numeroBoletoEfetivo || '-',
+      numero_boleto: numeroBoletoEfetivo || '-',
+      numero_nf: record.numero_nf || null,
       vencimento: dataVencimento || null,
       valor: Number(record?.valor || 0),
       telefone: telefoneBruto,
@@ -2031,7 +2064,7 @@ async function getBillingInconsistenciesData(
 ) {
   const { data: records, error } = await supabaseAdmin
     .from('registros_financeiros')
-    .select('id, company_id, nome, numero_boleto, data_vencimento, valor, telefone, status, created_at, updated_at')
+    .select('id, company_id, nome, cliente_nome, documento, numero_nf, numero_boleto, data_vencimento, valor, telefone, status, created_at, updated_at')
     .eq('company_id', companyId)
     .order('created_at', { ascending: false });
 
@@ -2044,12 +2077,13 @@ async function getBillingInconsistenciesData(
   const composedCount = new Map<string, number>();
 
   for (const record of safeRecords) {
-    const boletoKey = normalizeText(record.numero_boleto);
+    const { numeroBoletoEfetivo, clienteEfetivo } = logCobrancaMapping(record);
+    const boletoKey = normalizeText(numeroBoletoEfetivo);
     if (boletoKey) {
       boletoCount.set(boletoKey, (boletoCount.get(boletoKey) || 0) + 1);
     }
-    const composedKey = `${normalizeText(record.nome)}|${Number(record.valor || 0)}|${String(record.data_vencimento || '')}`;
-    if (normalizeText(record.nome) && String(record.data_vencimento || '')) {
+    const composedKey = `${normalizeText(clienteEfetivo || record.nome)}|${Number(record.valor || 0)}|${String(record.data_vencimento || '')}`;
+    if (normalizeText(clienteEfetivo || record.nome) && String(record.data_vencimento || '')) {
       composedCount.set(composedKey, (composedCount.get(composedKey) || 0) + 1);
     }
   }
@@ -2057,15 +2091,16 @@ async function getBillingInconsistenciesData(
   const items: Array<Record<string, unknown>> = [];
 
   for (const record of safeRecords) {
+    const { numeroBoletoEfetivo, clienteEfetivo } = logCobrancaMapping(record);
     const telefoneDigits = String(record.telefone || '').replace(/\D/g, '');
     const normalizedStatus = normalizeChargeStatus(record.status);
-    const boletoKey = normalizeText(record.numero_boleto);
-    const composedKey = `${normalizeText(record.nome)}|${Number(record.valor || 0)}|${String(record.data_vencimento || '')}`;
+    const boletoKey = normalizeText(numeroBoletoEfetivo);
+    const composedKey = `${normalizeText(clienteEfetivo || record.nome)}|${Number(record.valor || 0)}|${String(record.data_vencimento || '')}`;
     const problems: InconsistencyKind[] = [];
 
     if (!String(record.telefone || '').trim()) problems.push('sem_telefone');
     else if (telefoneDigits.length < 10) problems.push('telefone_invalido');
-    if (!String(record.numero_boleto || '').trim()) problems.push('sem_boleto');
+    if (!String(numeroBoletoEfetivo || '').trim()) problems.push('sem_boleto');
     if (!validStatuses.has(normalizedStatus)) problems.push('status_invalido');
     if (!record.data_vencimento) problems.push('vencimento_ausente');
     if (record.valor === null || Number(record.valor) <= 0) problems.push('valor_zerado');
@@ -2080,8 +2115,8 @@ async function getBillingInconsistenciesData(
         id: `${record.id}:${kind}`,
         registro_id: record.id,
         company_id: record.company_id,
-        nome: record.nome || 'Cliente',
-        numero_boleto: record.numero_boleto || '',
+        nome: clienteEfetivo || record.nome || 'Cliente',
+        numero_boleto: numeroBoletoEfetivo || '',
         data_vencimento: record.data_vencimento || null,
         valor: Number(record.valor || 0),
         telefone: record.telefone || '',
@@ -2662,8 +2697,8 @@ async function simulateChargeBatchData(
 
     items.push({
       id: record.id,
-      nome: record.cliente_nome || record.nome || 'Cliente',
-      numero_boleto: record.numero_boleto || null,
+      nome: getClienteEfetivo(record) || record.nome || 'Cliente',
+      numero_boleto: getNumeroBoletoEfetivo(record) || null,
       status: outcome.status,
       tipo: outcome.tipo || null,
       arquivo_encontrado: Boolean(outcome.fileId),
@@ -2748,7 +2783,7 @@ async function getBillingHistoryData(
     cliente_numero: row.cliente_numero || null,
     telefone: row.telefone || null,
     documento: row.documento || null,
-    numero_boleto: row.numero_boleto || null,
+    numero_boleto: row.documento || row.numero_nf || row.numero_boleto || null,
     numero_nf: row.numero_nf || null,
     valor: Number(row.valor || 0),
     vencimento: row.vencimento || null,
@@ -3690,9 +3725,9 @@ Deno.serve(async (req: Request) => {
           const eligibility = explainRecordEligibility(record as FinancialRow, config as BillingConfigRow | null, todayIso);
           return {
             id: record.id,
-            cliente_nome: record.cliente_nome || null,
+            cliente_nome: getClienteEfetivo(record as Partial<FinancialRow> & Record<string, unknown>) || null,
             nome: record.nome || null,
-            numero_boleto: record.numero_boleto || null,
+            numero_boleto: getNumeroBoletoEfetivo(record as Partial<FinancialRow> & Record<string, unknown>) || null,
             vencimento: record.data_vencimento || null,
             data_vencimento: record.data_vencimento || null,
             status: record.status || null,

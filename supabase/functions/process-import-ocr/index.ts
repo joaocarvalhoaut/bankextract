@@ -59,7 +59,9 @@ function normalizePdfText(value: string) {
 }
 
 function normalizePhone(raw: string) {
-  return String(raw || "").replace(/\D/g, "");
+  const digits = String(raw || "").replace(/\D/g, "");
+  if (digits.length < 8 || digits.length > 13) return "";
+  return digits;
 }
 
 function parseBrazilianCurrency(raw: string) {
@@ -349,18 +351,25 @@ function parseReceivablesList(text: string): ParsedReceivablesResult {
     .map((block) => normalizeWhitespace(block))
     .filter((block) => /Duplicata\s+Mercantil/i.test(block) && /R\$\s*[\d.]+,\d{2}/i.test(block));
 
-  const recordRegex = /51\.382\.654\/0001-68\s+(.+?)\s+((?:\(?\d{2}\)?\s*)?(?:9?\d{4}[-.\s]?\d{4}|\d{8,13}))\s+Duplicata\s+Mercantil\s+([A-Z0-9/-]+)\s+(\d{2}\/\d{2}\/\d{4})\s+-?\d+\s+R\$\s*([\d.]+,\d{2})\s+(Aberto|Baixado|Pago|Vencido|Em\s+aberto)/gi;
+  const recordRegex = /51\.382\.654\/0001-68\s+(.+?)\s+(\d{8,13})\s+Duplicata\s+Mercantil\s+([A-Z0-9/-]+)\s+(\d{2}\/\d{2}\/\d{4})\s+-?\d+\s+R\$\s*([\d.]+,\d{2})\s+(Aberto|Baixado|Pago|Vencido|Em\s+aberto)/gi;
 
   const records: ImportRecord[] = [];
 
   for (const source of blocks.length ? blocks : [flattened]) {
     for (const match of source.matchAll(recordRegex)) {
       const sacado = normalizeWhitespace(match[1] || "");
-      const telefone = normalizePhone(match[2] || "");
+      const rawPhone = String(match[2] || "").trim();
+      let telefone = normalizePhone(rawPhone);
       const documento = String(match[3] || "").trim();
       const vencimento = toIsoDate(match[4] || "");
       const valor = parseBrazilianCurrency(match[5] || "");
       const estado = normalizeWhitespace(match[6] || "");
+
+      if (/[/-]/.test(rawPhone) || (telefone && normalizePhone(documento) === telefone)) {
+        telefone = "";
+      }
+
+      console.log("[OCR PARSER] sacado", sacado, "telefone", telefone, "documento", documento);
 
       const record: ImportRecord = {
         cliente_fornecedor: sacado,

@@ -49,6 +49,36 @@ const invokeBillingAutomation = async (body, fallbackMessage) => {
   return data;
 };
 
+const getNumeroBoletoEfetivo = (registro = {}) =>
+  String(registro?.documento || registro?.numero_nf || registro?.numero_boleto || '').trim();
+
+const getClienteEfetivo = (registro = {}) =>
+  String(registro?.cliente_nome || registro?.cliente || '').trim();
+
+const normalizeBillingPayload = (payload = {}) => {
+  const numeroBoletoEfetivo = getNumeroBoletoEfetivo(payload);
+  const clienteEfetivo = getClienteEfetivo(payload);
+  console.log(
+    '[COBRANCA]',
+    'cliente=', clienteEfetivo,
+    'documento=', payload?.documento || '',
+    'numero_nf=', payload?.numero_nf || '',
+    'usando=', numeroBoletoEfetivo
+  );
+
+  return {
+    ...payload,
+    cliente: clienteEfetivo || payload?.cliente || '',
+    cliente_nome: clienteEfetivo || payload?.cliente_nome || '',
+    numero_boleto: numeroBoletoEfetivo || payload?.numero_boleto || '',
+  };
+};
+
+const normalizeBillingCenterResponse = (data) => ({
+  ...data,
+  items: Array.isArray(data?.items) ? data.items.map((item) => normalizeBillingPayload(item)) : [],
+});
+
 export async function getBillingAutomationOverview(companyId) {
   if (!companyId) {
     return {
@@ -129,7 +159,7 @@ export async function getBoletoSyncReport(companyId) {
 }
 
 export async function previewChargePayload(companyId, registroId) {
-  return invokeBillingAutomation(
+  const data = await invokeBillingAutomation(
     {
       action: 'preview_charge_payload',
       company_id: companyId,
@@ -137,10 +167,14 @@ export async function previewChargePayload(companyId, registroId) {
     },
     'Falha ao montar a previa do payload de cobranca.'
   );
+  return {
+    ...data,
+    payload: normalizeBillingPayload(data?.payload || {}),
+  };
 }
 
 export async function prepareManualCharge(companyId, registroId) {
-  return invokeBillingAutomation(
+  const data = await invokeBillingAutomation(
     {
       action: 'prepare_manual_charge',
       company_id: companyId,
@@ -148,6 +182,10 @@ export async function prepareManualCharge(companyId, registroId) {
     },
     'Falha ao preparar o envio manual assistido.'
   );
+  return {
+    ...data,
+    payload: normalizeBillingPayload(data?.payload || {}),
+  };
 }
 
 export async function syncBillingSheet(companyId) {
@@ -221,13 +259,14 @@ export async function testDriveConnection(companyId) {
 }
 
 export async function getBillingCenter(companyId) {
-  return invokeBillingAutomation(
+  const data = await invokeBillingAutomation(
     {
       action: 'get_billing_center',
       company_id: companyId,
     },
     'Falha ao carregar a central de cobranca.'
   );
+  return normalizeBillingCenterResponse(data);
 }
 
 export async function getBillingHistory(companyId, filters = {}, pagination = {}) {

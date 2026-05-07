@@ -72,6 +72,27 @@ function truncateLinhaDigitavel(value) {
   return `${raw.slice(0, 5)}...${raw.slice(-5)}`;
 }
 
+function getNumeroBoletoEfetivo(registro = {}) {
+  return String(registro?.documento || registro?.numero_nf || registro?.numero_boleto || '').trim();
+}
+
+function getClienteEfetivo(registro = {}) {
+  return String(registro?.cliente_nome || registro?.cliente || '').trim();
+}
+
+function logCobrancaMapping(registro = {}) {
+  const numeroBoletoEfetivo = getNumeroBoletoEfetivo(registro);
+  const clienteEfetivo = getClienteEfetivo(registro);
+  console.log(
+    '[COBRANCA]',
+    'cliente=', clienteEfetivo,
+    'documento=', registro?.documento || '',
+    'numero_nf=', registro?.numero_nf || '',
+    'usando=', numeroBoletoEfetivo
+  );
+  return { numeroBoletoEfetivo, clienteEfetivo };
+}
+
 export default function CentralCobrancaScreen({
   companyId,
   activeCompanyId,
@@ -196,51 +217,59 @@ export default function CentralCobrancaScreen({
       try {
         const result = await fn();
         await loadCenter();
+        const payload = result?.payload
+          ? {
+              ...result.payload,
+              cliente: getClienteEfetivo(result.payload) || result.payload?.cliente || '',
+              numero_boleto: getNumeroBoletoEfetivo(result.payload) || result.payload?.numero_boleto || '',
+            }
+          : null;
+        if (payload) logCobrancaMapping(payload);
         if (result?.mensagem_gerada) {
           createAuditEvent(resolvedCompanyId, {
             action: 'whatsapp_simulated',
             entity_type: 'cobrancas_whatsapp',
-            entity_id: result?.payload?.registro_id || result?.payload?.documento || null,
+            entity_id: payload?.registro_id || payload?.documento || null,
             title: 'Cobranca simulada',
-            description: `Previa de envio gerada para ${result?.payload?.cliente || 'cliente selecionado'}.`,
+            description: `Previa de envio gerada para ${payload?.cliente || 'cliente selecionado'}.`,
             metadata: {
-              documento: result?.payload?.documento || result?.payload?.numero_boleto || '',
+              documento: payload?.documento || payload?.numero_boleto || '',
             },
             severity: 'info',
           }).catch(() => {});
-          setSimulationResult(result);
+          setSimulationResult(payload ? { ...result, payload } : result);
         }
         if (result?.payload && result?.message) {
           createAuditEvent(resolvedCompanyId, {
             action: 'whatsapp_simulated',
             entity_type: 'cobrancas_whatsapp',
-            entity_id: result?.payload?.registro_id || result?.payload?.documento || null,
+            entity_id: payload?.registro_id || payload?.documento || null,
             title: 'Previa do envio gerada',
-            description: `Payload de cobranca montado para ${result?.payload?.cliente || 'cliente selecionado'}.`,
+            description: `Payload de cobranca montado para ${payload?.cliente || 'cliente selecionado'}.`,
             metadata: {
-              documento: result?.payload?.documento || result?.payload?.numero_boleto || '',
+              documento: payload?.documento || payload?.numero_boleto || '',
             },
             severity: 'info',
           }).catch(() => {});
-          setPreviewResult(result);
+          setPreviewResult(payload ? { ...result, payload } : result);
         }
         if (result?.manual_message && result?.payload) {
           createAuditEvent(resolvedCompanyId, {
             action: 'charge_prepared',
             entity_type: 'cobrancas_whatsapp',
-            entity_id: result?.payload?.registro_id || result?.payload?.documento || null,
+            entity_id: payload?.registro_id || payload?.documento || null,
             title: 'Cobranca preparada',
-            description: `Cobranca preparada para ${result?.payload?.cliente || 'cliente selecionado'}.`,
+            description: `Cobranca preparada para ${payload?.cliente || 'cliente selecionado'}.`,
             metadata: {
-              documento: result?.payload?.documento || result?.payload?.numero_boleto || '',
-              telefone: result?.payload?.telefone || '',
+              documento: payload?.documento || payload?.numero_boleto || '',
+              telefone: payload?.telefone || '',
             },
             severity: 'info',
           }).catch(() => {});
           setManualResult({
             type: 'single',
             items: [{
-              ...result.payload,
+              ...(payload || result.payload),
               message: result.manual_message,
             }],
             prepared: 1,
@@ -300,16 +329,17 @@ export default function CentralCobrancaScreen({
   const handleCollectionMessageGenerated = useCallback(
     async (tone, payload) => {
       const toneMeta = getCollectionToneMeta(tone);
+      const numeroBoletoEfetivo = getNumeroBoletoEfetivo(payload);
       await createAuditEvent(resolvedCompanyId, {
         action: 'collection_ai_generated',
         entity_type: 'cobrancas_whatsapp',
-        entity_id: payload?.registro_id || payload?.documento || payload?.numero_boleto || null,
+        entity_id: payload?.registro_id || payload?.documento || numeroBoletoEfetivo || null,
         title: 'Mensagem inteligente gerada',
         description: `IA local gerou uma mensagem com tom ${toneMeta.label.toLowerCase()}.`,
         metadata: {
           tone,
           tone_label: toneMeta.label,
-          documento: payload?.documento || payload?.numero_boleto || '',
+          documento: payload?.documento || numeroBoletoEfetivo || '',
         },
         severity: toneMeta.severity === 'danger' ? 'danger' : toneMeta.severity === 'warning' ? 'warning' : 'info',
       });
@@ -322,7 +352,7 @@ export default function CentralCobrancaScreen({
           severity: tone === 'juridico' ? 'danger' : 'warning',
           metadata: {
             tone,
-            documento: payload?.documento || payload?.numero_boleto || '',
+            documento: payload?.documento || numeroBoletoEfetivo || '',
           },
         });
       }
@@ -334,7 +364,7 @@ export default function CentralCobrancaScreen({
     const header = 'Cliente;Telefone;Mensagem;LinhaDigitavel;LinkBoleto';
     const lines = (entries || []).map((item) =>
       [
-        item.cliente || '',
+        getClienteEfetivo(item) || '',
         item.telefone || '',
         `"${String(item.message || '').replace(/"/g, '""')}"`,
         item.linha_digitavel || '',
@@ -366,6 +396,8 @@ export default function CentralCobrancaScreen({
           const result = await prepareManualCharge(resolvedCompanyId, rowId);
           preparedItems.push({
             ...result.payload,
+            cliente: getClienteEfetivo(result.payload) || result.payload?.cliente || '',
+            numero_boleto: getNumeroBoletoEfetivo(result.payload) || result.payload?.numero_boleto || '',
             message: result.manual_message,
           });
         } catch (error) {
@@ -397,7 +429,7 @@ export default function CentralCobrancaScreen({
           metadata: {
             prepared: preparedItems.length,
             errors: errorsList.length,
-            documentos: preparedItems.map((item) => item.documento || item.numero_boleto || '').filter(Boolean),
+            documentos: preparedItems.map((item) => item.documento || getNumeroBoletoEfetivo(item) || '').filter(Boolean),
           },
           severity: errorsList.length ? 'warning' : 'info',
         }).catch(() => {});
@@ -435,11 +467,12 @@ export default function CentralCobrancaScreen({
       {
         key: 'cliente_nome',
         label: 'Cliente',
-        render: (row) => <span className="font-medium text-slate-900">{row.cliente_nome}</span>,
+        render: (row) => <span className="font-medium text-slate-900">{getClienteEfetivo(row) || row.cliente_nome}</span>,
       },
       {
         key: 'numero_boleto',
         label: 'NumeroBoleto',
+        render: (row) => getNumeroBoletoEfetivo(row) || '-',
       },
       {
         key: 'vencimento',
@@ -774,7 +807,7 @@ export default function CentralCobrancaScreen({
                 <CollectionMessagePreview
                   title="IA de cobranca para a simulacao"
                   context={{
-                    nome: simulationResult.payload?.cliente,
+                    nome: getClienteEfetivo(simulationResult.payload),
                     valor: simulationResult.payload?.valor,
                     vencimento: simulationResult.payload?.vencimento,
                     diasAtraso: simulationResult.payload?.dias_atraso,
@@ -831,7 +864,7 @@ export default function CentralCobrancaScreen({
               <CollectionMessagePreview
                 title="IA de cobranca para a previa"
                 context={{
-                  nome: previewResult.payload?.cliente,
+                  nome: getClienteEfetivo(previewResult.payload),
                   valor: previewResult.payload?.valor,
                   vencimento: previewResult.payload?.vencimento,
                   diasAtraso: previewResult.payload?.dias_atraso,
@@ -854,7 +887,7 @@ export default function CentralCobrancaScreen({
               />
 
               <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
-                <p><span className="font-semibold text-slate-900">Numero boleto:</span> {previewResult.payload?.numero_boleto || '-'}</p>
+                <p><span className="font-semibold text-slate-900">Numero boleto:</span> {getNumeroBoletoEfetivo(previewResult.payload) || '-'}</p>
                 <p className="mt-2"><span className="font-semibold text-slate-900">Linha digitavel:</span> {previewResult.payload?.linha_digitavel || '-'}</p>
                 <p className="mt-2"><span className="font-semibold text-slate-900">Codigo barras:</span> {previewResult.payload?.codigo_barras || '-'}</p>
                 <p className="mt-2"><span className="font-semibold text-slate-900">Link boleto:</span> {previewResult.payload?.boleto_url || '-'}</p>
@@ -903,12 +936,12 @@ export default function CentralCobrancaScreen({
 
             <div className="mt-5 space-y-4">
               {(manualResult.items || []).map((item, index) => (
-                <div key={`${item.drive_file_id || item.numero_boleto || index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div key={`${item.drive_file_id || getNumeroBoletoEfetivo(item) || index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="space-y-2 text-sm text-slate-700">
-                      <p><span className="font-semibold text-slate-900">Cliente:</span> {item.cliente || '-'}</p>
+                      <p><span className="font-semibold text-slate-900">Cliente:</span> {getClienteEfetivo(item) || '-'}</p>
                       <p><span className="font-semibold text-slate-900">Telefone:</span> {item.telefone || '-'}</p>
-                      <p><span className="font-semibold text-slate-900">Numero boleto:</span> {item.numero_boleto || '-'}</p>
+                      <p><span className="font-semibold text-slate-900">Numero boleto:</span> {getNumeroBoletoEfetivo(item) || '-'}</p>
                       <p><span className="font-semibold text-slate-900">Linha digitavel:</span> {item.linha_digitavel || '-'}</p>
                       <p><span className="font-semibold text-slate-900">Codigo de barras:</span> {item.codigo_barras || '-'}</p>
                       <p><span className="font-semibold text-slate-900">Link/PDF:</span> {item.boleto_url || '-'}</p>
@@ -947,7 +980,7 @@ export default function CentralCobrancaScreen({
                     <CollectionMessagePreview
                       title="IA de cobranca para envio manual"
                       context={{
-                        nome: item.cliente,
+                        nome: getClienteEfetivo(item),
                         valor: item.valor,
                         vencimento: item.vencimento,
                         diasAtraso: item.dias_atraso,
