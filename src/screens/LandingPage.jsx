@@ -171,6 +171,28 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
   const handlePlans = onOpenPlans || (() => {});
   const plans = getAllPlans();
 
+  const scrollToSection = (sectionId) => {
+    if (typeof document === 'undefined') return false;
+    const target = document.getElementById(sectionId);
+    if (!target) return false;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return true;
+  };
+
+  const handleSectionNavigation = (sectionId) => {
+    const scrolled = scrollToSection(sectionId);
+    if (scrolled) return;
+
+    if (sectionId === 'planos') {
+      handlePlans();
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      window.location.hash = sectionId;
+    }
+  };
+
   return (
     <div className="pb-28 md:pb-10">
       <div className="mx-auto flex max-w-[1540px] flex-col gap-12 px-4 py-4 md:px-6 xl:px-8">
@@ -187,10 +209,10 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
             </div>
 
             <nav className="hidden flex-wrap items-center gap-6 text-sm font-medium text-slate-600 lg:flex">
-              <a href="#recursos" className="transition hover:text-slate-950">Recursos</a>
-              <a href="#como-funciona" className="transition hover:text-slate-950">Como funciona</a>
-              <a href="#planos" className="transition hover:text-slate-950">Planos</a>
-              <a href="#clientes" className="transition hover:text-slate-950">Clientes</a>
+              <button type="button" onClick={() => handleSectionNavigation('recursos')} className="transition hover:text-slate-950">Recursos</button>
+              <button type="button" onClick={() => handleSectionNavigation('como-funciona')} className="transition hover:text-slate-950">Como funciona</button>
+              <button type="button" onClick={() => handleSectionNavigation('planos')} className="transition hover:text-slate-950">Planos</button>
+              <button type="button" onClick={() => handleSectionNavigation('clientes')} className="transition hover:text-slate-950">Clientes</button>
               <button type="button" onClick={handleStart} className="transition hover:text-slate-950">Entrar</button>
             </nav>
 
@@ -220,7 +242,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                   {isAuthenticated ? 'Acessar plataforma' : 'Comecar teste gratis'}
                   <ArrowRight size={16} />
                 </PublicButton>
-                <PublicButton onClick={handlePlans}>
+                <PublicButton onClick={() => handleSectionNavigation('planos')}>
                   Ver demonstracao
                   <ChevronRight size={16} />
                 </PublicButton>
