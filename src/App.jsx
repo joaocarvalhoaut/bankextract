@@ -439,6 +439,10 @@ export default function App() {
     setActiveTab('notifications');
   }, []);
 
+  const handleOpenEmpresaModal = useCallback((mode = 'criar') => {
+    empresa.openCompanyModal?.(mode);
+  }, [empresa]);
+
   const handleSignOut = useCallback(async () => {
     try {
       await auth.signOut();
@@ -1645,14 +1649,20 @@ export default function App() {
         </div>
       </div>
 
-      {empresa.modalMode && (
+      {empresa.modalOpen && (
         <EmpresaModal
+          isOpen={empresa.modalOpen}
           mode={empresa.modalMode}
-          empresaData={empresa.editingEmpresa}
+          setMode={empresa.setModalMode}
+          allowCreate={empresa.isSystemAdmin}
           onClose={empresa.closeModal}
-          onSave={empresa.saveEmpresa}
-          onDelete={empresa.deleteEmpresa}
+          onContinueWithoutCompany={empresa.continueWithoutCompany}
+          form={empresa.modalForm}
+          setField={empresa.setModalField}
+          error={empresa.modalError}
           saving={empresa.saving}
+          onCreate={empresa.createCompany}
+          onJoin={empresa.joinCompany}
         />
       )}
 
