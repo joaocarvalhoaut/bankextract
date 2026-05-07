@@ -1865,6 +1865,7 @@ async function getBillingCenterData(
 
   if (recordsError) throw new Error(recordsError.message);
   console.log('get_billing_center after registros_financeiros query', { total_registros: (records || []).length });
+  console.log('[COBRANCA RAW]', records?.slice?.(0, 5));
 
   console.log('get_billing_center before logs_cobranca query', { company_id: companyId });
   const { data: logsData, error: logsError } = await supabaseAdmin
@@ -1907,7 +1908,7 @@ async function getBillingCenterData(
     return 'fora_da_regua';
   };
 
-  const rows = (records || []).map((record) => {
+  const mapped = (records || []).map((record) => {
     const { numeroBoletoEfetivo, clienteEfetivo } = logCobrancaMapping(record);
     const latestLog = latestLogByFinanceiro.get(record.id);
     const telefoneBruto = String(record?.telefone || latestLog?.telefone || '');
@@ -1931,9 +1932,9 @@ async function getBillingCenterData(
       id: record.id,
       company_id: record.company_id,
       cliente_nome: clienteEfetivo || record.nome || 'Cliente',
-      documento: record.documento || numeroBoletoEfetivo || '-',
+      documento: record.documento || '',
       numero_boleto: numeroBoletoEfetivo || '-',
-      numero_nf: record.numero_nf || null,
+      numero_nf: record.numero_nf || '',
       vencimento: dataVencimento || null,
       valor: Number(record?.valor || 0),
       telefone: telefoneBruto,
@@ -1956,21 +1957,22 @@ async function getBillingCenterData(
       motivo_nao_elegivel: motivoNaoElegivel,
     };
   });
+  console.log('[COBRANCA MAPPED]', mapped?.slice?.(0, 5));
 
   const isOpen = (status: string) => OPEN_STATUSES.has(normalizeText(status));
 
   return {
     cards: {
-      vencendo_amanha: rows.filter((row) => row.etapa_regua === 'preventiva').length,
-      vencem_hoje: rows.filter((row) => row.etapa_regua === 'vencimento').length,
-      em_atraso: rows.filter((row) => row.dias_atraso > 0 && isOpen(row.status)).length,
-      sem_boleto_encontrado: rows.filter((row) => !row.boleto_encontrado && row.boleto_status !== 'encontrado').length,
-      sem_telefone_valido: rows.filter((row) => !row.telefone_valido).length,
+      vencendo_amanha: mapped.filter((row) => row.etapa_regua === 'preventiva').length,
+      vencem_hoje: mapped.filter((row) => row.etapa_regua === 'vencimento').length,
+      em_atraso: mapped.filter((row) => row.dias_atraso > 0 && isOpen(row.status)).length,
+      sem_boleto_encontrado: mapped.filter((row) => !row.boleto_encontrado && row.boleto_status !== 'encontrado').length,
+      sem_telefone_valido: mapped.filter((row) => !row.telefone_valido).length,
       simulacoes_realizadas_hoje: todayLogs.filter((row) => ['sucesso_simulado', 'simulado'].includes(String(row.status_envio || ''))).length,
       erros: todayLogs.filter((row) => String(row.status_envio || '') === 'erro').length,
-      total_em_aberto: rows.filter((row) => isOpen(row.status)).length,
+      total_em_aberto: mapped.filter((row) => isOpen(row.status)).length,
     },
-    items: rows,
+    items: mapped,
   };
 }
 

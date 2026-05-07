@@ -70,14 +70,21 @@ const normalizeBillingPayload = (payload = {}) => {
     ...payload,
     cliente: clienteEfetivo || payload?.cliente || '',
     cliente_nome: clienteEfetivo || payload?.cliente_nome || '',
+    documento: payload?.documento || '',
+    numero_nf: payload?.numero_nf || '',
     numero_boleto: numeroBoletoEfetivo || payload?.numero_boleto || '',
   };
 };
 
-const normalizeBillingCenterResponse = (data) => ({
-  ...data,
-  items: Array.isArray(data?.items) ? data.items.map((item) => normalizeBillingPayload(item)) : [],
-});
+const normalizeBillingCenterResponse = (data) => {
+  console.log('[COBRANCA RAW]', data?.items?.slice?.(0, 5));
+  const mapped = Array.isArray(data?.items) ? data.items.map((item) => normalizeBillingPayload(item)) : [];
+  console.log('[COBRANCA MAPPED]', mapped?.slice?.(0, 5));
+  return {
+    ...data,
+    items: mapped,
+  };
+};
 
 export async function getBillingAutomationOverview(companyId) {
   if (!companyId) {
