@@ -18,6 +18,12 @@ type ImportRecord = {
   raw_text?: string;
 };
 
+type ParsedReceivablesResult = {
+  candidateLines: string[];
+  blocks: string[];
+  records: ImportRecord[];
+};
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -37,15 +43,18 @@ function normalizeWhitespace(value: string) {
     .trim();
 }
 
-function extractReadableTextFromBytes(bytes: Uint8Array) {
-  const utf8 = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
-  const latin1 = new TextDecoder("latin1").decode(bytes);
+function stripAccents(value: string) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
 
+function normalizePdfText(value: string) {
   return normalizeWhitespace(
-    `${utf8}\n${latin1}`
-      .replace(/\\r/g, "\n")
-      .replace(/[^\x20-\x7EÀ-ÿ\n]/g, " ")
-      .replace(/[ ]{2,}/g, " "),
+    String(value || "")
+      .replace(/\u00a0/g, " ")
+      .replace(/[ ]{2,}/g, " ")
+      .replace(/\n[ ]+/g, "\n"),
   );
 }
 
@@ -89,13 +98,213 @@ function getStatusFromDueDate(isoDate: string): "vencido" | "pendente" | "a_venc
   return "a_vencer";
 }
 
+function extractReadableTextFromBytes(bytes: Uint8Array) {
+  const utf8 = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  const latin1 = new TextDecoder("latin1").decode(bytes);
+
+  return normalizeWhitespace(
+    `${utf8}\n${latin1}`
+      .replace(/\\r/g, "\n")
+      .replace(/[^\x20-\x7EÀ-ÿ\n]/g, " ")
+      .replace(/[ ]{2,}/g, " "),
+  );
+}
+
+function looksLikeUsefulPdfText(text: string) {
+  const normalized = stripAccents(text).toLowerCase();
+  return (
+    text.length > 1000 &&
+    (normalized.includes("lista de recebiveis") ||
+      normalized.includes("sacado") ||
+      normalized.includes("vencimento") ||
+      normalized.includes("duplicata mercantil"))
+  );
+}
+
+function decodePdfLiteralString(value: string) {
+  let result = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const current = value[index];
+    if (current !== "\\") {
+      result += current;
+      continue;
+    }
+
+    const next = value[index + 1];
+    if (!next) break;
+    if (next === "n") {
+      result += "\n";
+      index += 1;
+      continue;
+    }
+    if (next === "r") {
+      result += "\r";
+      index += 1;
+      continue;
+    }
+    if (next === "t") {
+      result += "\t";
+      index += 1;
+      continue;
+    }
+    if (next === "b") {
+      result += "\b";
+      index += 1;
+      continue;
+    }
+    if (next === "f") {
+      result += "\f";
+      index += 1;
+      continue;
+    }
+    if (next === "(" || next === ")" || next === "\\") {
+      result += next;
+      index += 1;
+      continue;
+    }
+    if (/[0-7]/.test(next)) {
+      let octal = next;
+      if (/[0-7]/.test(value[index + 2] || "")) octal += value[index + 2];
+      if (/[0-7]/.test(value[index + 3] || "")) octal += value[index + 3];
+      result += String.fromCharCode(parseInt(octal, 8));
+      index += octal.length;
+      continue;
+    }
+    result += next;
+    index += 1;
+  }
+
+  return result;
+}
+
+function decodePdfHexString(value: string) {
+  const hex = value.replace(/[^0-9a-f]/gi, "");
+  const padded = hex.length % 2 === 1 ? `${hex}0` : hex;
+  const bytes = new Uint8Array(padded.length / 2);
+
+  for (let index = 0; index < padded.length; index += 2) {
+    bytes[index / 2] = parseInt(padded.slice(index, index + 2), 16);
+  }
+
+  return new TextDecoder("latin1").decode(bytes);
+}
+
+function extractStringsFromPdfSource(source: string) {
+  const chunks: string[] = [];
+  const literalRegex = /\((?:\\.|[^\\()])+\)\s*(?:Tj|TJ|')/g;
+  const arrayRegex = /\[(.*?)\]\s*TJ/g;
+  const hexRegex = /<([0-9A-Fa-f\s]+)>\s*(?:Tj|TJ|')/g;
+
+  for (const match of source.matchAll(literalRegex)) {
+    const raw = match[0].replace(/\)\s*(?:Tj|TJ|')$/, "");
+    chunks.push(decodePdfLiteralString(raw.slice(1)));
+  }
+
+  for (const match of source.matchAll(hexRegex)) {
+    chunks.push(decodePdfHexString(match[1] || ""));
+  }
+
+  for (const match of source.matchAll(arrayRegex)) {
+    const inner = match[1] || "";
+    const stringRegex = /\((?:\\.|[^\\()])+\)|<([0-9A-Fa-f\s]+)>/g;
+    const parts: string[] = [];
+
+    for (const stringMatch of inner.matchAll(stringRegex)) {
+      const raw = stringMatch[0];
+      if (raw.startsWith("(")) {
+        parts.push(decodePdfLiteralString(raw.slice(1, -1)));
+      } else if (raw.startsWith("<")) {
+        parts.push(decodePdfHexString(raw.slice(1, -1)));
+      }
+    }
+
+    if (parts.length) {
+      chunks.push(parts.join(""));
+    }
+  }
+
+  return chunks;
+}
+
+async function decompressDeflateBytes(bytes: Uint8Array) {
+  try {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate"));
+    const buffer = await new Response(stream).arrayBuffer();
+    return new Uint8Array(buffer);
+  } catch {
+    throw new Error("Nao foi possivel descomprimir os streams do PDF.");
+  }
+}
+
+async function extractFlateDecodedSources(bytes: Uint8Array) {
+  const source = new TextDecoder("latin1").decode(bytes);
+  const streamRegex = /<<[\s\S]*?\/Filter\s*(?:\[\s*)?\/FlateDecode\b[\s\S]*?>>\s*stream\r?\n/gi;
+  const decodedSources: string[] = [];
+  let totalDecompressedBytes = 0;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = streamRegex.exec(source)) !== null) {
+    const streamStart = match.index + match[0].length;
+    const endIndex = source.indexOf("endstream", streamStart);
+    if (endIndex === -1) {
+      continue;
+    }
+
+    let streamEnd = endIndex;
+    while (streamEnd > streamStart && (bytes[streamEnd - 1] === 0x0a || bytes[streamEnd - 1] === 0x0d)) {
+      streamEnd -= 1;
+    }
+
+    const compressed = bytes.slice(streamStart, streamEnd);
+    if (!compressed.length) {
+      continue;
+    }
+
+    const decompressed = await decompressDeflateBytes(compressed);
+    totalDecompressedBytes += decompressed.byteLength;
+    decodedSources.push(new TextDecoder("latin1").decode(decompressed));
+  }
+
+  return {
+    count: decodedSources.length,
+    totalDecompressedBytes,
+    decodedSources,
+  };
+}
+
+async function extractTextFromPdfStreams(bytes: Uint8Array) {
+  const rawText = extractReadableTextFromBytes(bytes);
+  const flate = await extractFlateDecodedSources(bytes);
+  const sourceCandidates = flate.decodedSources.length ? flate.decodedSources : [rawText];
+  const chunks = sourceCandidates.flatMap((source) => extractStringsFromPdfSource(source));
+  const normalizedFallback = normalizePdfText([rawText, ...sourceCandidates].join("\n"));
+
+  const merged = normalizePdfText(
+    chunks
+      .join("\n")
+      .replace(/[^\x20-\x7EÀ-ÿ\n]/g, " ")
+      .replace(/[ ]{2,}/g, " "),
+  );
+
+  return {
+    rawText,
+    mergedText: merged,
+    fallbackText: normalizedFallback,
+    text: looksLikeUsefulPdfText(merged)
+      ? merged
+      : (looksLikeUsefulPdfText(normalizedFallback) ? normalizedFallback : ""),
+    flateStreamCount: flate.count,
+    totalDecompressedBytes: flate.totalDecompressedBytes,
+  };
+}
+
 function cleanupReceivablesText(text: string) {
   return normalizeWhitespace(
     text
       .replace(/Lista de Receb[ií]veis/gi, " ")
       .replace(/Empresa\s+Cnpj\/Cpf Empresa\s+Sacado\s+Telefone\s+Tipo\s+N[º°]?\s*T[ií]tulo\s+Vencimento\s+Dias\s+Valor\s+Estado\s+Emiss[aã]o NFE\s+Pagamento\s+Valor Pago/gi, " ")
       .replace(/Total\s+R\$\s*[\d.]+,\d{2}/gi, " ")
-      .replace(/Página\s+\d+\s+de\s+\d+/gi, " ")
+      .replace(/P[aá]gina\s+\d+\s+de\s+\d+/gi, " ")
       .replace(/Emitido em\s+\d{2}\/\d{2}\/\d{4}.*?(?=\n|$)/gi, " "),
   );
 }
@@ -126,54 +335,56 @@ function looksLikeValidRecord(record: ImportRecord) {
   );
 }
 
-function parseReceivablesList(text: string): ImportRecord[] {
-  const flattened = cleanupReceivablesText(text).replace(/\n+/g, " ");
-  const companyPrefix =
-    "(?:ORTHOMAX(?:\\s+INDUSTRIA\\s+E\\s+COMERCIO(?:\\s+DE\\s+COLCHOES)?)?(?:\\s+LTDA)?\\s+)?";
-  const companyDocument = "(?:\\d{2}\\.\\d{3}\\.\\d{3}\\/\\d{4}-\\d{2})";
-  const phonePattern =
-    "((?:\\(?\\d{2}\\)?\\s*)?(?:9?\\d{4}[-. ]?\\d{4}|\\d{8,13}))";
-  const titlePattern = "([A-Z0-9][A-Z0-9./-]{1,39})";
-  const datePattern = "(\\d{2}\\/\\d{2}\\/\\d{4})";
-  const valuePattern = "(R\\$\\s*[\\d.]+,\\d{2})";
-  const statePattern = "(Aberto|Pago|Liquidado|Vencido|Em\\s+aberto)";
+function parseReceivablesList(text: string): ParsedReceivablesResult {
+  const cleaned = cleanupReceivablesText(text);
+  const candidateLines = cleaned
+    .split("\n")
+    .map((line) => normalizeWhitespace(line))
+    .filter(Boolean)
+    .filter((line) => /51\.382\.654\/0001-68|Duplicata|R\$|Aberto|Vencimento|Sacado/i.test(line));
 
-  const recordRegex = new RegExp(
-    `${companyPrefix}${companyDocument}\\s+(.+?)\\s+${phonePattern}\\s+` +
-      `(Duplicata\\s+Mercantil)\\s+${titlePattern}\\s+${datePattern}\\s+(-?\\d+)\\s+${valuePattern}\\s+${statePattern}` +
-      `(?:\\s+${datePattern})?(?:\\s+(?:${datePattern}|-))?(?:\\s+(?:${valuePattern}|-))?`,
-    "gi",
-  );
+  const flattened = cleaned.replace(/\n+/g, " ");
+  const blocks = flattened
+    .split(/(?=51\.382\.654\/0001-68)/g)
+    .map((block) => normalizeWhitespace(block))
+    .filter((block) => /Duplicata\s+Mercantil/i.test(block) && /R\$\s*[\d.]+,\d{2}/i.test(block));
+
+  const recordRegex = /51\.382\.654\/0001-68\s+(.+?)\s+((?:\(?\d{2}\)?\s*)?(?:9?\d{4}[-.\s]?\d{4}|\d{8,13}))\s+Duplicata\s+Mercantil\s+([A-Z0-9/-]+)\s+(\d{2}\/\d{2}\/\d{4})\s+-?\d+\s+R\$\s*([\d.]+,\d{2})\s+(Aberto|Baixado|Pago|Vencido|Em\s+aberto)/gi;
 
   const records: ImportRecord[] = [];
 
-  for (const match of flattened.matchAll(recordRegex)) {
-    const sacado = normalizeWhitespace(match[1] || "");
-    const telefone = normalizePhone(match[2] || "");
-    const tipoTitulo = normalizeWhitespace(match[3] || "Duplicata Mercantil");
-    const documento = String(match[4] || "").trim();
-    const vencimento = toIsoDate(match[5] || "");
-    const valor = parseBrazilianCurrency(match[7] || "");
-    const estado = normalizeWhitespace(match[8] || "");
+  for (const source of blocks.length ? blocks : [flattened]) {
+    for (const match of source.matchAll(recordRegex)) {
+      const sacado = normalizeWhitespace(match[1] || "");
+      const telefone = normalizePhone(match[2] || "");
+      const documento = String(match[3] || "").trim();
+      const vencimento = toIsoDate(match[4] || "");
+      const valor = parseBrazilianCurrency(match[5] || "");
+      const estado = normalizeWhitespace(match[6] || "");
 
-    const record: ImportRecord = {
-      cliente_fornecedor: sacado,
-      documento,
-      vencimento,
-      valor,
-      status: getStatusFromDueDate(vencimento),
-      telefone,
-      observacoes: [estado, tipoTitulo].filter(Boolean).join(" | "),
-      tipo: "receber",
-      raw_text: normalizeWhitespace(match[0] || ""),
-    };
+      const record: ImportRecord = {
+        cliente_fornecedor: sacado,
+        documento,
+        vencimento,
+        valor,
+        status: getStatusFromDueDate(vencimento),
+        telefone,
+        observacoes: [estado, "Duplicata Mercantil"].filter(Boolean).join(" | "),
+        tipo: "receber",
+        raw_text: normalizeWhitespace(match[0] || ""),
+      };
 
-    if (looksLikeValidRecord(record)) {
-      records.push(record);
+      if (looksLikeValidRecord(record)) {
+        records.push(record);
+      }
     }
   }
 
-  return uniqueByCompositeKey(records);
+  return {
+    candidateLines,
+    blocks,
+    records: uniqueByCompositeKey(records),
+  };
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -204,10 +415,28 @@ Deno.serve(async (req: Request): Promise<Response> => {
     console.log("[process-import-ocr] company_id", companyId);
 
     const bytes = new Uint8Array(await fileEntry.arrayBuffer());
-    const extractedText = extractReadableTextFromBytes(bytes);
-    const records = parseReceivablesList(extractedText);
+    const decodedPreview = new TextDecoder("latin1").decode(bytes.slice(0, 200));
+    console.log("[process-import-ocr] buffer byteLength", bytes.byteLength);
+    console.log("[process-import-ocr] decoded preview", decodedPreview);
 
+    const extraction = await extractTextFromPdfStreams(bytes);
+    const text = extraction.text || "";
+    const normalized = normalizePdfText(extraction.mergedText || extraction.fallbackText || "");
+    const parsed = text ? parseReceivablesList(text) : { candidateLines: [], blocks: [], records: [] };
+    const { candidateLines, blocks, records } = parsed;
+
+    console.log("[process-import-ocr] streams FlateDecode encontrados", extraction.flateStreamCount || 0);
+    console.log("[process-import-ocr] tamanho descomprimido total", extraction.totalDecompressedBytes || 0);
+    console.log("[process-import-ocr] text length", text.length);
+    console.log("[process-import-ocr] text sample", text.slice(0, 3000));
+    console.log("[process-import-ocr] normalized sample", normalized.slice(0, 3000));
+    console.log("[process-import-ocr] linhas candidatas", candidateLines.length);
+    console.log("[process-import-ocr] blocos candidatos", blocks.length);
     console.log("[process-import-ocr] records extraidos", records.length);
+
+    if (!text.length) {
+      throw new Error("Nao foi possivel ler texto util do PDF. Use um PDF com texto selecionavel ou configure OCR externo.");
+    }
 
     if (!records.length) {
       return jsonResponse({

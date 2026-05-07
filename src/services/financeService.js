@@ -760,12 +760,16 @@ export const financeService = {
         })
       );
 
+      console.log('[IMPORT] payload', payload);
+
       const { data, error } = await client.from('registros_financeiros').insert(payload).select();
       if (error) throw buildError(error, 'Falha ao inserir registros.');
+      console.log('[IMPORT] resultado', data);
       return (data || []).map(mapRegistroToApp);
     }
 
     db.registros.push(...clone(items));
+    console.log('[IMPORT] resultado', items);
     return localDelay(items);
   },
 
@@ -1101,6 +1105,7 @@ export const financeService = {
     }
 
     const selectedRows = (rows || []).filter((row) => row.selected !== false);
+    console.log('[IMPORT] selecionados', selectedRows.length);
 
     if (!selectedRows.length) {
       throw new Error('Nenhuma linha selecionada para importar.');
@@ -1144,18 +1149,24 @@ export const financeService = {
     }
 
     const payload = selectedRows.map((row) => ({
-      id: row.id,
+      id: isUuid(row.id) ? row.id : undefined,
       company_id: tenant.companyId,
       user_id: tenant.userId,
+      created_by: tenant.userId,
       batchId,
-      nome: row.nome || '',
+      cliente_fornecedor: row.cliente_fornecedor || row.nome || '',
+      nome: row.nome || row.cliente_fornecedor || '',
       numeroBoleto: row.numero_boleto ?? row.documento ?? row.numeroBoleto ?? '',
+      documento: row.documento ?? row.numero_boleto ?? row.numeroBoleto ?? '',
       dataVencimento: row.data_vencimento ?? row.dataVencimento ?? '',
+      vencimento: row.data_vencimento ?? row.dataVencimento ?? '',
       valor: Number(row.valor || 0),
       representanteId: row.representante_id ?? row.representanteId ?? null,
       telefone: row.telefone || '',
       observacao: row.observacoes ?? row.observacao ?? '',
+      observacoes: row.observacoes ?? row.observacao ?? '',
       status: row.status || 'pendente',
+      tipo_importacao: tipo,
       importadoEm: row.importado_em ?? row.importadoEm ?? timestamp,
       liquidadoEm: null,
     }));

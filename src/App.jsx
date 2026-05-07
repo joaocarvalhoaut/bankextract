@@ -733,22 +733,38 @@ export default function App() {
     if (!preview) return;
 
     try {
+      const selectedRows = (preview?.rows || []).filter((row) => row.selected !== false);
+      console.log('[IMPORT] selecionados', selectedRows.length);
       const batchId = makeUuid();
-      await financeService.importSelectedRows(preview?.rows || [], batchId, currentCompanyId, {
+      const payload = selectedRows.map((row) => ({
+        company_id: currentCompanyId,
+        created_by: currentUserId,
+        cliente_fornecedor: row.cliente_fornecedor || row.nome || '',
+        documento: row.documento ?? row.numero_boleto ?? '',
+        vencimento: row.data_vencimento ?? '',
+        valor: Number(row.valor || 0),
+        status: row.status || 'pendente',
+        telefone: row.telefone || '',
+        observacoes: row.observacoes ?? row.observacao ?? '',
+        tipo_importacao: importType,
+      }));
+      console.log('[IMPORT] payload', payload);
+      const result = await financeService.importSelectedRows(preview?.rows || [], batchId, currentCompanyId, {
         fileName: preview.fileName,
         tipo: importType,
         companyName: currentCompanyName,
       });
+      console.log('[IMPORT] resultado', result);
       await auditLog.importConfirmed(currentCompanyId, {
         arquivo: preview.fileName,
-        registros: (preview?.rows || []).filter((row) => row.selected !== false).length,
+        registros: selectedRows.length,
         tipo: importType,
       }, currentUserId);
       try {
         await createNotification(currentCompanyId, {
           type: 'import_completed',
           title: 'Importacao concluida',
-          message: `${(preview?.rows || []).filter((row) => row.selected !== false).length} registro(s) foram confirmados no lote ${preview.fileName || 'sem nome'}.`,
+          message: `${selectedRows.length} registro(s) foram confirmados no lote ${preview.fileName || 'sem nome'}.`,
           severity: 'success',
           metadata: {
             import_type: importType,
@@ -764,9 +780,10 @@ export default function App() {
       setActiveTab(importType === 'liquidacao' ? 'historico' : 'visao-geral');
       showToast('sucesso', 'Lote processado com batch_id e salvo com sucesso.');
     } catch (error) {
+      console.error('[IMPORT] erro', error);
       showToast('erro', error.message || 'Nao foi possivel importar os registros selecionados.');
     }
-  }, [currentCompanyId, currentCompanyName, currentUserRole, importType, preview, refreshAllData, showToast]);
+  }, [currentCompanyId, currentCompanyName, currentUserId, currentUserRole, importType, preview, refreshAllData, showToast]);
 
   const handleUpdatePreviewField = useCallback((rowId, field, value) => {
     setPreview((prev) => {
