@@ -1,13 +1,39 @@
 import { useCallback, useMemo } from 'react';
-import { Loader2, MessageCircleMore, PhoneCall, PhoneOff, Send, ShieldCheck } from 'lucide-react';
+import { Eye, Loader2, MessageCircleMore, PhoneCall, PhoneOff, Send, ShieldCheck } from 'lucide-react';
 import DataTable from '../components/DataTable';
 import { formatCurrencyBRL } from '../utils/format';
 import { canUserPerformAction } from '../security/permissions';
 
 const statusTone = {
   pendente: 'bg-slate-100 text-slate-700 ring-slate-200',
-  enviada: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  queued: 'bg-amber-50 text-amber-700 ring-amber-200',
+  sent: 'bg-blue-50 text-blue-700 ring-blue-200',
+  delivered: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  read: 'bg-violet-50 text-violet-700 ring-violet-200',
+  failed: 'bg-red-50 text-red-700 ring-red-200',
+  simulated: 'bg-slate-100 text-slate-700 ring-slate-200',
   'sem telefone': 'bg-amber-50 text-amber-700 ring-amber-200',
+};
+
+const statusMeta = {
+  pendente: { label: 'Pendente', dot: 'bg-slate-400' },
+  queued: { label: '🟡 fila', dot: 'bg-amber-400' },
+  sent: { label: '🔵 enviada', dot: 'bg-blue-500' },
+  delivered: { label: '🟢 entregue', dot: 'bg-emerald-500' },
+  read: { label: '👁 lida', dot: 'bg-violet-500' },
+  failed: { label: '🔴 falhou', dot: 'bg-red-500' },
+  simulated: { label: 'Simulada', dot: 'bg-slate-400' },
+  'sem telefone': { label: 'Sem telefone', dot: 'bg-amber-400' },
+};
+
+const buildStatusTooltip = (row) => {
+  const parts = [];
+  if (row?.sent_at) parts.push(`Enviada: ${new Date(row.sent_at).toLocaleString('pt-BR')}`);
+  if (row?.delivered_at) parts.push(`Entregue: ${new Date(row.delivered_at).toLocaleString('pt-BR')}`);
+  if (row?.read_at) parts.push(`Lida: ${new Date(row.read_at).toLocaleString('pt-BR')}`);
+  if (row?.failed_at) parts.push(`Falhou: ${new Date(row.failed_at).toLocaleString('pt-BR')}`);
+  if (row?.failure_reason) parts.push(`Motivo: ${row.failure_reason}`);
+  return parts.join(' | ');
 };
 
 export default function CobrancasScreen({
@@ -25,7 +51,7 @@ export default function CobrancasScreen({
   const simulationMode = billingExecutionMode !== 'real';
   const pending = rows.filter((row) => row.status === 'pendente').length;
   const withoutPhone = rows.filter((row) => row.status === 'sem telefone').length;
-  const sent = rows.filter((row) => row.status === 'enviada').length;
+  const sent = rows.filter((row) => ['queued', 'sent', 'delivered', 'read'].includes(String(row.status || '').toLowerCase())).length;
 
   const handleSendSingleCharge = useCallback(
     async (row) => {
@@ -92,20 +118,15 @@ export default function CobrancasScreen({
       label: 'Status',
       render: (row) => (
         <span
+          title={buildStatusTooltip(row)}
           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
             statusTone[row.status] || 'bg-slate-100 text-slate-700 ring-slate-200'
           }`}
         >
           <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              row.status === 'enviada'
-                ? 'bg-emerald-500'
-                : row.status === 'sem telefone'
-                ? 'bg-amber-400'
-                : 'bg-slate-400'
-            }`}
+            className={`h-1.5 w-1.5 rounded-full ${(statusMeta[row.status] || statusMeta.pendente).dot}`}
           />
-          {row.status}
+          {(statusMeta[row.status] || statusMeta.pendente).label}
         </span>
       ),
     },
@@ -115,7 +136,7 @@ export default function CobrancasScreen({
       render: (row) => {
         const registroId = String(row?.financeiro_id || row?.registro_id || row?.id || '').trim();
         const sending = sendingChargeIds.includes(registroId);
-        const alreadySent = String(row?.status || '') === 'enviada';
+        const alreadySent = ['sent', 'delivered', 'read', 'enviada'].includes(String(row?.status || '').toLowerCase());
         const sendDisabled = !canManageCharges || !companyId || !registroId || sending;
 
         return (
@@ -162,7 +183,7 @@ export default function CobrancasScreen({
     { label: 'Cobrancas pendentes', value: pending, color: 'text-slate-900', bar: 'from-slate-400 to-slate-500', Icon: PhoneOff },
     { label: 'Com telefone', value: rows.length - withoutPhone, color: 'text-emerald-700', bar: 'from-emerald-400 to-emerald-600', Icon: PhoneCall },
     { label: 'Sem telefone', value: withoutPhone, color: 'text-amber-700', bar: 'from-amber-400 to-orange-400', Icon: PhoneOff },
-    { label: 'Mensagens enviadas', value: sent, color: 'text-blue-700', bar: 'from-blue-400 to-blue-600', Icon: Send },
+    { label: 'Mensagens enviadas', value: sent, color: 'text-blue-700', bar: 'from-blue-400 to-blue-600', Icon: Eye },
   ];
 
   return (

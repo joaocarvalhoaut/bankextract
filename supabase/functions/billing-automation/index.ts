@@ -434,6 +434,18 @@ function validatePhone(phone: string) {
   return /^55\d{10,11}$/.test(phone);
 }
 
+function normalizeWhatsappTrackingStatus(status: string | null | undefined) {
+  const normalized = normalizeText(status);
+  if (['read', 'lida'].includes(normalized)) return 'read';
+  if (['delivered', 'entregue'].includes(normalized)) return 'delivered';
+  if (['sent', 'enviado'].includes(normalized)) return 'sent';
+  if (['queued', 'fila'].includes(normalized)) return 'queued';
+  if (['failed', 'erro', 'falhou'].includes(normalized)) return 'failed';
+  if (['simulated', 'mock_enviado'].includes(normalized)) return 'simulated';
+  if (normalized === 'cancelado') return 'cancelado';
+  return 'queued';
+}
+
 function normalizeBrazilPhone(raw: string | null | undefined) {
   return normalizePhone(raw);
 }
@@ -1919,12 +1931,23 @@ async function sendRealChargesData(
 
     if (!message) {
       const errorMessage = 'Mensagem vazia para envio real.';
+      const failedAt = new Date().toISOString();
       await insertWhatsappCharge(supabaseAdmin, {
         empresa_id: companyId,
+        company_id: companyId,
         registro_id: logBase.financeiro_id,
         telefone: normalizedPhone || phoneRaw || '',
         mensagem: '',
-        status: 'erro',
+        provider: 'zapi',
+        provider_message_id: null,
+        status: 'failed',
+        sent_at: null,
+        delivered_at: null,
+        read_at: null,
+        failed_at: failedAt,
+        failure_reason: errorMessage,
+        simulated: false,
+        force_resend: Boolean(item?.force_resend),
         zapi_message_id: null,
         erro: errorMessage,
         enviado_por: userId,
@@ -1953,12 +1976,23 @@ async function sendRealChargesData(
 
     if (!validatePhone(normalizedPhone)) {
       const errorMessage = 'Telefone invalido para envio real.';
+      const failedAt = new Date().toISOString();
       await insertWhatsappCharge(supabaseAdmin, {
         empresa_id: companyId,
+        company_id: companyId,
         registro_id: logBase.financeiro_id,
         telefone: normalizedPhone || phoneRaw || '',
         mensagem: message,
-        status: 'erro',
+        provider: 'zapi',
+        provider_message_id: null,
+        status: 'failed',
+        sent_at: null,
+        delivered_at: null,
+        read_at: null,
+        failed_at: failedAt,
+        failure_reason: errorMessage,
+        simulated: false,
+        force_resend: Boolean(item?.force_resend),
         zapi_message_id: null,
         erro: errorMessage,
         enviado_por: userId,
@@ -1987,14 +2021,26 @@ async function sendRealChargesData(
 
     try {
       const sendResult = await sendZapiText(supabaseAdmin, companyId, { phone: normalizedPhone, message }, options);
+      const sentAt = new Date().toISOString();
+      const providerMessageId = sendResult.messageId || sendResult.zaapId || sendResult.id || null;
 
       await insertWhatsappCharge(supabaseAdmin, {
         empresa_id: companyId,
+        company_id: companyId,
         registro_id: logBase.financeiro_id,
         telefone: sendResult.normalizedPhone,
         mensagem: message,
-        status: 'enviado',
-        zapi_message_id: sendResult.messageId || sendResult.zaapId || null,
+        provider: 'zapi',
+        provider_message_id: providerMessageId,
+        status: normalizeWhatsappTrackingStatus(String(sendResult.raw?.status || sendResult.raw?.messageStatus || 'sent')),
+        sent_at: sentAt,
+        delivered_at: null,
+        read_at: null,
+        failed_at: null,
+        failure_reason: null,
+        simulated: false,
+        force_resend: Boolean(item?.force_resend),
+        zapi_message_id: providerMessageId,
         erro: null,
         enviado_por: userId,
       });
@@ -2010,7 +2056,8 @@ async function sendRealChargesData(
           envio_real: true,
           force_resend: Boolean(item?.force_resend),
           simulated: false,
-          sent_at: new Date().toISOString(),
+          sent_at: sentAt,
+          provider_message_id: providerMessageId,
           zapi_message_id: sendResult.messageId || null,
           zapi_zaap_id: sendResult.zaapId || null,
           zapi_id: sendResult.id || null,
@@ -2036,17 +2083,32 @@ async function sendRealChargesData(
         cliente_nome: clienteEfetivo,
         documento: logBase.documento,
         numero_boleto: numeroBoletoEfetivo || '',
+        status: normalizeWhatsappTrackingStatus(String(sendResult.raw?.status || sendResult.raw?.messageStatus || 'sent')),
+        provider_message_id: providerMessageId,
+        sent_at: sentAt,
         zapi_message_id: sendResult.messageId || null,
         zapi_zaap_id: sendResult.zaapId || null,
+        zapiResponse: sendResult.raw,
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const failedAt = new Date().toISOString();
       await insertWhatsappCharge(supabaseAdmin, {
         empresa_id: companyId,
+        company_id: companyId,
         registro_id: logBase.financeiro_id,
         telefone: normalizedPhone || phoneRaw || '',
         mensagem: message,
-        status: 'erro',
+        provider: 'zapi',
+        provider_message_id: null,
+        status: 'failed',
+        sent_at: null,
+        delivered_at: null,
+        read_at: null,
+        failed_at: failedAt,
+        failure_reason: errorMessage,
+        simulated: false,
+        force_resend: Boolean(item?.force_resend),
         zapi_message_id: null,
         erro: errorMessage,
         enviado_por: userId,
@@ -2161,6 +2223,7 @@ async function sendSingleChargeData(
       success: true,
       simulated: true,
       zapiResponse: null,
+      status: 'simulated',
       message: 'Simulacao executada, nenhuma mensagem real enviada.',
       payload: {
         ...preview.payload,
@@ -2186,6 +2249,9 @@ async function sendSingleChargeData(
   return {
     success: true,
     simulated: false,
+    status: String(result.sent[0]?.status || 'sent'),
+    provider_message_id: result.sent[0]?.provider_message_id || null,
+    sent_at: result.sent[0]?.sent_at || new Date().toISOString(),
     zapiResponse: result.sent[0] || null,
     message: 'Mensagem enviada via WhatsApp',
     payload: {
@@ -2356,10 +2422,10 @@ async function findRecentSuccessfulWhatsappCharge(
   const since = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   const { data, error } = await supabaseAdmin
     .from('cobrancas_whatsapp')
-    .select('id, empresa_id, registro_id, telefone, mensagem, status, zapi_message_id, created_at')
+    .select('id, empresa_id, registro_id, telefone, mensagem, status, zapi_message_id, provider_message_id, created_at')
     .eq('empresa_id', companyId)
     .eq('registro_id', registroId)
-    .eq('status', 'enviado')
+    .in('status', ['queued', 'sent', 'delivered', 'read', 'enviado'])
     .gte('created_at', since)
     .order('created_at', { ascending: false })
     .maybeSingle();
@@ -2508,14 +2574,26 @@ async function processChargeForRecord(
   const zapiConfig = await resolveCompanyZapiConfig(supabaseAdmin, record.company_id, { allowTestMode: false });
   const base64 = await downloadDriveFileBase64(token, file.id);
   const sendResult = await sendZapiDocument(zapiConfig, phone, message, file.name || `${numeroBoletoEfetivo || record.documento || record.id}.pdf`, base64);
+  const sentAt = new Date().toISOString();
+  const providerMessageId = sendResult.provider_id || null;
 
   await insertWhatsappCharge(supabaseAdmin, {
     empresa_id: record.company_id,
+    company_id: record.company_id,
     registro_id: record.id,
     telefone: phone,
     mensagem: message,
-    status: 'enviado',
-    zapi_message_id: sendResult.provider_id || null,
+    provider: 'zapi',
+    provider_message_id: providerMessageId,
+    status: 'sent',
+    sent_at: sentAt,
+    delivered_at: null,
+    read_at: null,
+    failed_at: null,
+    failure_reason: null,
+    simulated: false,
+    force_resend: false,
+    zapi_message_id: providerMessageId,
     erro: null,
   });
 
@@ -2560,8 +2638,9 @@ async function processChargeForRecord(
     payload: {
       company_id: record.company_id,
       record_id: record.id,
-      provider_message_id: sendResult.provider_id,
+      provider_message_id: providerMessageId,
       stage: tipo,
+      sent_at: sentAt,
     },
     envio_hash: hash,
   });

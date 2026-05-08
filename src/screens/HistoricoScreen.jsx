@@ -1,4 +1,4 @@
-import { Eye, FileStack, Trash2 } from 'lucide-react';
+import { Eye, FileSearch, FileStack, Trash2 } from 'lucide-react';
 import DataTable from '../components/DataTable';
 import { formatCurrencyBRL, formatDateTimeBR } from '../utils/format';
 
@@ -17,6 +17,7 @@ export default function HistoricoScreen({
   rows,
   onViewBatch,
   onDeleteItem,
+  onOpenDataLogs,
 }) {
   const columns = [
     {
@@ -113,6 +114,16 @@ export default function HistoricoScreen({
               <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-xs text-slate-700">company_id</code>.
             </p>
           </div>
+          {onOpenDataLogs ? (
+            <button
+              type="button"
+              onClick={onOpenDataLogs}
+              className="ml-auto inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+            >
+              <FileSearch size={14} />
+              Logs de Dados
+            </button>
+          ) : null}
         </div>
 
         <DataTable

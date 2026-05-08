@@ -165,12 +165,12 @@ const headerMap = {
     subtitle: 'Operacao por titulo com etapa da regua, status do boleto e simulacao individual por empresa.',
   },
   'historico-cobranca': {
-    title: 'Historico de Cobrancas',
-    subtitle: 'Auditoria detalhada das simulacoes e eventos registrados em logs_cobranca por empresa.',
+    title: 'Central de Envios',
+    subtitle: 'Historico operacional dos envios, simulacoes e eventos registrados por empresa.',
   },
   inconsistencias: {
-    title: 'Inconsistencias de Cobranca',
-    subtitle: 'Painel preventivo com problemas que podem bloquear ou prejudicar a cobranca automatica.',
+    title: 'Logs de Dados',
+    subtitle: 'Painel tecnico com inconsistencias que podem bloquear ou prejudicar a cobranca.',
   },
   'pronto-envio': {
     title: 'Pronto para Envio',
@@ -189,8 +189,8 @@ const headerMap = {
     subtitle: 'Dados da empresa, usuarios, permissoes e preferencias operacionais do BankExtract.',
   },
   'status-sistema': {
-    title: 'Status do Sistema',
-    subtitle: 'Checklist operacional, integracoes ativas e sinais de prontidao para venda.',
+    title: 'Status Tecnico',
+    subtitle: 'Leitura interna de integracoes ativas, prontidao e sinais tecnicos do ambiente.',
   },
   planos: {
     title: 'Planos comerciais',
@@ -217,7 +217,7 @@ const headerMap = {
     subtitle: 'Guias praticos, onboarding rico e perguntas frequentes para operar o BankExtract.',
   },
   'production-checklist': {
-    title: 'Checklist de producao',
+    title: 'Checklist de Implantacao',
     subtitle: 'Validacao interna para garantir que o BankExtract esta pronto para cliente piloto.',
   },
   'admin-saas': {
@@ -532,7 +532,7 @@ export default function App() {
       const dashboardFinancial = buildDashboardFinancialData(records || []);
       setDashboardMetrics({
         ...(metrics || {}),
-        kpis: dashboardFinancial.kpis,
+        kpis: [...(dashboardFinancial.kpis || []), ...(metrics?.whatsappTrackingKpis || [])],
         charts: {
           aging: dashboardFinancial.charts?.aging || [],
           importacoes: dashboardFinancial.charts?.importacoes || [],
@@ -1029,7 +1029,8 @@ export default function App() {
       const companyId = payload.company_id || currentCompanyId;
       const registroId = String(payload.registro_id || payload.financeiro_id || payload.id || '').trim();
       const simulate = options.simulate ?? (billingExecutionMode !== 'real');
-      const isAlreadySent = String(payload.status || '') === 'enviada';
+      const normalizedChargeStatus = String(payload.status || '').trim().toLowerCase();
+      const isAlreadySent = ['enviada', 'sent', 'delivered', 'read'].includes(normalizedChargeStatus);
       const currentlySending = sendingChargeIds.includes(registroId);
 
       if (!companyId) {
@@ -1062,15 +1063,24 @@ export default function App() {
           message: payload.mensagem || '',
           force_resend: forceResend,
         });
+        const nextStatus = simulate
+          ? 'simulated'
+          : String(result?.status || result?.zapiResponse?.status || 'sent').trim().toLowerCase();
 
         setChargeRows((prev) =>
           prev.map((item) =>
             item.id === registroId || item.registro_id === registroId
               ? {
                   ...item,
-                  status: 'enviada',
+                  status: nextStatus,
                   mensagem: payload.mensagem || item.mensagem,
                   _editedMessage: Boolean(payload._editedMessage),
+                  provider_message_id: result?.provider_message_id || result?.zapiResponse?.provider_message_id || result?.zapiResponse?.zapi_message_id || item.provider_message_id || null,
+                  sent_at: result?.sent_at || result?.zapiResponse?.sent_at || new Date().toISOString(),
+                  delivered_at: result?.delivered_at || item.delivered_at || null,
+                  read_at: result?.read_at || item.read_at || null,
+                  failed_at: result?.failed_at || item.failed_at || null,
+                  failure_reason: result?.failure_reason || null,
                 }
               : item
           )
@@ -1082,8 +1092,14 @@ export default function App() {
                 ...prev,
                 row: {
                   ...prev.row,
-                  status: 'enviada',
+                  status: nextStatus,
                   mensagem: payload.mensagem || prev.row.mensagem,
+                  provider_message_id: result?.provider_message_id || result?.zapiResponse?.provider_message_id || result?.zapiResponse?.zapi_message_id || prev.row.provider_message_id || null,
+                  sent_at: result?.sent_at || result?.zapiResponse?.sent_at || new Date().toISOString(),
+                  delivered_at: result?.delivered_at || prev.row.delivered_at || null,
+                  read_at: result?.read_at || prev.row.read_at || null,
+                  failed_at: result?.failed_at || prev.row.failed_at || null,
+                  failure_reason: result?.failure_reason || null,
                 },
               }
             : prev
@@ -1495,6 +1511,7 @@ export default function App() {
             rows={historyRows}
             onViewBatch={handleViewBatch}
             onDeleteItem={handleDeleteHistory}
+            onOpenDataLogs={() => setActiveTab('inconsistencias')}
           />
         );
         break;
@@ -1691,6 +1708,7 @@ export default function App() {
             user={auth.user}
             isSystemAdminUser={empresa.isSystemAdmin}
             onToast={showToast}
+            onNavigate={setActiveTab}
           />
         );
         break;

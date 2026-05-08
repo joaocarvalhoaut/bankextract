@@ -99,10 +99,20 @@ create table if not exists public.audit_logs (
 create table if not exists public.cobrancas_whatsapp (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null references public.empresas(id) on delete cascade,
+  company_id uuid references public.empresas(id) on delete cascade,
   registro_id uuid,
   telefone text not null default '',
   mensagem text not null,
+  provider text not null default 'zapi',
+  provider_message_id text,
   status text not null default 'preparado',
+  sent_at timestamptz,
+  delivered_at timestamptz,
+  read_at timestamptz,
+  failed_at timestamptz,
+  failure_reason text,
+  simulated boolean not null default false,
+  force_resend boolean not null default false,
   zapi_message_id text,
   erro text,
   enviado_por uuid references auth.users(id) on delete set null,
@@ -557,7 +567,7 @@ $$;
 
 alter table public.cobrancas_whatsapp
   add constraint cobrancas_whatsapp_status_check
-  check (status in ('preparado', 'enviado', 'mock_enviado', 'erro', 'cancelado'));
+  check (status in ('preparado', 'queued', 'sent', 'delivered', 'read', 'failed', 'simulated', 'enviado', 'mock_enviado', 'erro', 'cancelado'));
 
 do $$
 begin
@@ -1120,9 +1130,15 @@ create index if not exists idx_audit_logs_user_id on public.audit_logs(user_id);
 create index if not exists idx_audit_logs_action on public.audit_logs(action);
 create index if not exists idx_audit_logs_created_at on public.audit_logs(created_at);
 create index if not exists idx_cobrancas_whatsapp_empresa_id on public.cobrancas_whatsapp(empresa_id);
+create index if not exists idx_cobrancas_whatsapp_company_id on public.cobrancas_whatsapp(company_id);
 create index if not exists idx_cobrancas_whatsapp_registro_id on public.cobrancas_whatsapp(registro_id);
 create index if not exists idx_cobrancas_whatsapp_status on public.cobrancas_whatsapp(status);
 create index if not exists idx_cobrancas_whatsapp_created_at on public.cobrancas_whatsapp(created_at);
+create index if not exists idx_cobrancas_whatsapp_provider_message_id on public.cobrancas_whatsapp(provider_message_id);
+create index if not exists idx_cobrancas_whatsapp_sent_at on public.cobrancas_whatsapp(sent_at);
+create index if not exists idx_cobrancas_whatsapp_delivered_at on public.cobrancas_whatsapp(delivered_at);
+create index if not exists idx_cobrancas_whatsapp_read_at on public.cobrancas_whatsapp(read_at);
+create index if not exists idx_cobrancas_whatsapp_failed_at on public.cobrancas_whatsapp(failed_at);
 create index if not exists idx_logs_cobranca_company_id on public.logs_cobranca(company_id);
 create index if not exists idx_logs_cobranca_financeiro_id on public.logs_cobranca(financeiro_id);
 create index if not exists idx_logs_cobranca_tipo_cobranca on public.logs_cobranca(tipo_cobranca);

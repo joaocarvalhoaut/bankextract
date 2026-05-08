@@ -334,6 +334,30 @@ const buildChargeRows = (records) =>
       };
     });
 
+const normalizeWhatsappTrackingStatus = (status, hasPhone = true) => {
+  const normalized = String(status || '').trim().toLowerCase();
+
+  if (['read', 'lida'].includes(normalized)) return 'read';
+  if (['delivered', 'entregue'].includes(normalized)) return 'delivered';
+  if (['sent', 'enviado', 'queued', 'fila'].includes(normalized)) return normalized === 'queued' || normalized === 'fila' ? 'queued' : 'sent';
+  if (['failed', 'erro', 'falhou'].includes(normalized)) return 'failed';
+  if (['simulated', 'mock_enviado'].includes(normalized)) return 'simulated';
+
+  return hasPhone ? 'pendente' : 'sem telefone';
+};
+
+const buildWhatsappTrackingTooltip = (log = {}) => {
+  const parts = [];
+
+  if (log.sent_at) parts.push(`Enviada em: ${formatDateTimeLabel(log.sent_at)}`);
+  if (log.delivered_at) parts.push(`Entregue em: ${formatDateTimeLabel(log.delivered_at)}`);
+  if (log.read_at) parts.push(`Lida em: ${formatDateTimeLabel(log.read_at)}`);
+  if (log.failed_at) parts.push(`Falhou em: ${formatDateTimeLabel(log.failed_at)}`);
+  if (log.failure_reason) parts.push(`Motivo: ${log.failure_reason}`);
+
+  return parts.join(' | ');
+};
+
 const filterRecords = (records, filters = {}) =>
   records.filter((row) => {
     if (filters.status && filters.status !== 'todos' && row.status !== filters.status) return false;
@@ -759,7 +783,11 @@ export const financeService = {
       ),
       safeSupabaseSelect(() =>
         buildScopedQuery(
-          supabase.from('cobrancas_whatsapp').select('id, empresa_id, status, created_at').order('created_at', { ascending: false }).limit(5),
+          supabase
+            .from('cobrancas_whatsapp')
+            .select('id, empresa_id, status, created_at, sent_at, delivered_at, read_at, failed_at, simulated, failure_reason')
+            .order('created_at', { ascending: false })
+            .limit(200),
           context,
           'empresa_id'
         )
@@ -769,7 +797,53 @@ export const financeService = {
     const sheetsConfig = googleSheetsConfig?.[0] || null;
     const activeAutoConfig = (autoConfigs || []).find((item) => item.ativo) || null;
     const lastCharge = recentCharges?.[0] || null;
-    const mockWhatsappMode = (recentCharges || []).some((item) => item.status === 'mock_enviado');
+    const mockWhatsappMode = (recentCharges || []).some((item) => ['mock_enviado', 'simulated'].includes(String(item.status || '').toLowerCase()));
+    const realChargeRows = (recentCharges || []).filter((item) => !item?.simulated && !['mock_enviado', 'simulated'].includes(String(item.status || '').toLowerCase()));
+    const deliveredCount = realChargeRows.filter((item) => ['delivered', 'read'].includes(String(item.status || '').toLowerCase())).length;
+    const readCount = realChargeRows.filter((item) => String(item.status || '').toLowerCase() === 'read').length;
+    const failedCount = realChargeRows.filter((item) => ['failed', 'erro'].includes(String(item.status || '').toLowerCase())).length;
+    const trackingBaseCount = realChargeRows.length;
+    const averageReadMinutes = (() => {
+      const readDurations = realChargeRows
+        .filter((item) => item?.read_at && item?.sent_at)
+        .map((item) => {
+          const sentAt = new Date(item.sent_at).getTime();
+          const readAt = new Date(item.read_at).getTime();
+          if (Number.isNaN(sentAt) || Number.isNaN(readAt) || readAt < sentAt) return null;
+          return Math.round((readAt - sentAt) / 60000);
+        })
+        .filter((value) => Number.isFinite(value));
+
+      if (!readDurations.length) return 'Sem leitura';
+      const avg = Math.round(readDurations.reduce((sum, value) => sum + value, 0) / readDurations.length);
+      return `${avg} min`;
+    })();
+    const whatsappTrackingKpis = [
+      {
+        title: 'Taxa de entrega',
+        value: trackingBaseCount ? `${Math.round((deliveredCount / trackingBaseCount) * 100)}%` : '0%',
+        hint: `${deliveredCount} de ${trackingBaseCount} mensagem(ns) entregues`,
+        tone: 'emerald',
+      },
+      {
+        title: 'Taxa de leitura',
+        value: trackingBaseCount ? `${Math.round((readCount / trackingBaseCount) * 100)}%` : '0%',
+        hint: `${readCount} leitura(s) confirmada(s)`,
+        tone: 'blue',
+      },
+      {
+        title: 'Taxa de falha',
+        value: trackingBaseCount ? `${Math.round((failedCount / trackingBaseCount) * 100)}%` : '0%',
+        hint: `${failedCount} falha(s) no envio`,
+        tone: 'red',
+      },
+      {
+        title: 'Tempo medio ate leitura',
+        value: averageReadMinutes,
+        hint: 'Baseado em mensagens com leitura confirmada',
+        tone: 'slate',
+      },
+    ];
     const checklist = [
       {
         id: 'supabase',
@@ -821,6 +895,7 @@ export const financeService = {
       autoChargeHour: activeAutoConfig?.hora_envio || '08:00',
       whatsappMockMode: mockWhatsappMode,
       lastAutoExecution: formatDateTimeLabel(lastCharge?.created_at),
+      whatsappTrackingKpis,
       recentAuditLogs: auditLogs || [],
       checklist,
     };
@@ -906,7 +981,10 @@ export const financeService = {
       const rows = buildChargeRows(dataset.records || []);
       const latestCharges = await safeSupabaseSelect(() =>
         buildScopedQuery(
-          supabase.from('cobrancas_whatsapp').select('id, registro_id, telefone, mensagem, status, created_at').order('created_at', { ascending: false }),
+          supabase
+            .from('cobrancas_whatsapp')
+            .select('id, registro_id, telefone, mensagem, status, created_at, sent_at, delivered_at, read_at, failed_at, failure_reason, provider_message_id, simulated')
+            .order('created_at', { ascending: false }),
           context,
           'empresa_id'
         ),
@@ -926,7 +1004,16 @@ export const financeService = {
           ...row,
           telefone: log.telefone || row.telefone,
           mensagem: chargeMessageDrafts.get(draftKey) || log.mensagem || row.mensagem,
-          status: log.status === 'enviado' || log.status === 'mock_enviado' ? 'enviada' : row.status,
+          status: normalizeWhatsappTrackingStatus(log.status, Boolean(log.telefone || row.telefone)),
+          status_envio: String(log.status || ''),
+          sent_at: log.sent_at || null,
+          delivered_at: log.delivered_at || null,
+          read_at: log.read_at || null,
+          failed_at: log.failed_at || null,
+          failure_reason: log.failure_reason || null,
+          provider_message_id: log.provider_message_id || null,
+          simulated: Boolean(log.simulated),
+          tracking_tooltip: buildWhatsappTrackingTooltip(log),
         };
       });
     } catch {

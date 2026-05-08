@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Building2, CreditCard, FileClock, ShieldCheck, Users } from 'lucide-react';
+import { AlertTriangle, Building2, ClipboardList, CreditCard, FileClock, ShieldCheck, ShieldPlus, Users } from 'lucide-react';
 import {
   getAdminOverview,
   getCompaniesList,
@@ -27,7 +27,7 @@ function AdminCard({ label, value, icon: Icon, tone = 'slate' }) {
   );
 }
 
-export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToast }) {
+export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToast, onNavigate }) {
   const [loading, setLoading] = useState(false);
   const [overview, setOverview] = useState(null);
   const [companies, setCompanies] = useState([]);
@@ -171,7 +171,7 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
         <article className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
           <div className="mb-5">
             <h3 className="text-lg font-semibold text-slate-900">Leitura operacional</h3>
-            <p className="text-sm text-slate-500">Atalhos para acompanhar volume e auditoria.</p>
+            <p className="text-sm text-slate-500">Atalhos para acompanhar volume, auditoria e validacoes internas.</p>
           </div>
 
           <div className="space-y-3">
@@ -187,6 +187,32 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Automacoes executadas</p>
               <p className="mt-2 text-2xl font-bold text-blue-700">{overview?.automationsExecuted || 0}</p>
             </div>
+            <button
+              type="button"
+              onClick={() => onNavigate?.('production-checklist')}
+              className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:bg-slate-100"
+            >
+              <span className="flex items-center gap-3">
+                <ClipboardList size={16} className="text-slate-500" />
+                <span>
+                  <span className="block text-sm font-semibold text-slate-900">Checklist de Implantacao</span>
+                  <span className="block text-xs text-slate-500">Acesso interno ao checklist de producao.</span>
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate?.('status-sistema')}
+              className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:bg-slate-100"
+            >
+              <span className="flex items-center gap-3">
+                <ShieldPlus size={16} className="text-slate-500" />
+                <span>
+                  <span className="block text-sm font-semibold text-slate-900">Status Tecnico</span>
+                  <span className="block text-xs text-slate-500">Saude operacional e prontidao do ambiente.</span>
+                </span>
+              </span>
+            </button>
           </div>
         </article>
       </section>
