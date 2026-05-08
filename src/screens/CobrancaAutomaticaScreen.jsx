@@ -222,6 +222,7 @@ export default function CobrancaAutomaticaScreen({
   });
 
   const canManage = canUserPerformAction(userRole, 'manage_automations');
+  const canSendSingle = canUserPerformAction(userRole, 'manage_charges');
   const simulationMode = billingExecutionMode !== 'real';
 
   const loadOverview = useCallback(async () => {
@@ -440,13 +441,15 @@ export default function CobrancaAutomaticaScreen({
 
   const handleSendSingleCharge = useCallback(
     async (row) => {
+      console.log('[SEND BUTTON CLICKED]', row);
+
       if (!resolvedCompanyId || globalMode) {
         onToast?.('erro', 'Selecione uma empresa especifica para enviar a cobranca.');
         return;
       }
 
-      if (!canManage) {
-        onToast?.('erro', 'Seu perfil atual nao pode operar automacoes.');
+      if (!canSendSingle) {
+        onToast?.('erro', 'Seu perfil atual nao pode enviar cobrancas individuais.');
         return;
       }
 
@@ -474,7 +477,7 @@ export default function CobrancaAutomaticaScreen({
         setRowSendingId('');
       }
     },
-    [canManage, globalMode, loadOverview, onToast, resolvedCompanyId, simulationMode]
+    [canSendSingle, globalMode, loadOverview, onToast, resolvedCompanyId, simulationMode]
   );
 
   const columns = useMemo(
@@ -515,13 +518,22 @@ export default function CobrancaAutomaticaScreen({
         render: (row) => {
           const registroId = String(row?.financeiro_id || row?.registro_id || row?.id || '').trim();
           const sending = rowSendingId === registroId;
-          const disabled = !canManage || !resolvedCompanyId || globalMode || !registroId || Boolean(rowSendingId);
+          const disabled = !canSendSingle || !resolvedCompanyId || globalMode || !registroId || Boolean(rowSendingId);
 
           return (
             <button
               type="button"
               onClick={() => handleSendSingleCharge(row)}
               disabled={disabled}
+              title={
+                !canSendSingle
+                  ? 'Seu perfil nao pode enviar cobrancas individuais.'
+                  : !resolvedCompanyId || globalMode
+                    ? 'Selecione uma empresa especifica para enviar.'
+                    : !registroId
+                      ? 'Esta linha nao possui um titulo financeiro associado.'
+                      : ''
+              }
               className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {sending ? <Loader2 size={14} className="animate-spin" /> : <MessageSquareText size={14} />}
@@ -531,7 +543,7 @@ export default function CobrancaAutomaticaScreen({
         },
       },
     ],
-    [canManage, globalMode, handleSendSingleCharge, resolvedCompanyId, rowSendingId]
+    [canSendSingle, globalMode, handleSendSingleCharge, resolvedCompanyId, rowSendingId]
   );
 
   const boletoColumns = useMemo(
