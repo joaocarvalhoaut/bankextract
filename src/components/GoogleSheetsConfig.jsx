@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Activity,
   AlertCircle,
   CheckCircle2,
+  Clock3,
+  Database,
   ExternalLink,
   FolderOpen,
   Lock,
@@ -13,9 +16,13 @@ import {
 } from 'lucide-react';
 import {
   getGoogleSheetsConfig,
+  getGoogleSheetsStatus,
+  normalizeGoogleSheetsStatus,
   saveGoogleSheetsConfig,
+  syncGoogleSheetsNow,
   syncGoogleSheets,
   testGoogleSheetsConnection,
+  toFriendlyGoogleSheetsError,
 } from '../services/googleSheetsService';
 
 function extractSpreadsheetId(input) {
@@ -59,6 +66,56 @@ function formatDateTime(value) {
   }
 }
 
+function formatRelativeSyncTime(value) {
+  if (!value) {
+    return {
+      label: 'Nunca sincronizado',
+      tone: 'neutral',
+      icon: '⚪',
+      health: 'Offline',
+    };
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return {
+      label: 'Sincronizacao sem horario valido',
+      tone: 'warning',
+      icon: '🟡',
+      health: 'Atencao',
+    };
+  }
+
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
+
+  if (diffMinutes < 10) {
+    return {
+      label: `Sincronizado ha ${Math.max(diffMinutes, 1)} min`,
+      tone: 'success',
+      icon: '🟢',
+      health: 'Saudavel',
+    };
+  }
+
+  if (diffMinutes < 60) {
+    return {
+      label: `Sincronizado ha ${diffMinutes} min`,
+      tone: 'warning',
+      icon: '🟡',
+      health: 'Atencao',
+    };
+  }
+
+  const diffHours = Math.max(1, Math.floor(diffMinutes / 60));
+  return {
+    label: `Ultima sincronizacao ha ${diffHours}h`,
+    tone: 'danger',
+    icon: '🔴',
+    health: 'Offline',
+  };
+}
+
 export default function GoogleSheetsConfig({
   empresaId,
   empresaNome,
@@ -67,6 +124,8 @@ export default function GoogleSheetsConfig({
   variant = 'default',
   canManage = true,
   googleMeta = null,
+  onToast,
+  onStatusChange,
 }) {
   const [spreadsheetId, setSpreadsheetId] = useState('');
   const [sheetName, setSheetName] = useState('Pagina1');
@@ -78,6 +137,7 @@ export default function GoogleSheetsConfig({
   const [syncing, setSyncing] = useState(false);
   const [status, setStatus] = useState(null);
   const [connectionState, setConnectionState] = useState('desconectado');
+  const [statusSnapshot, setStatusSnapshot] = useState(null);
   const abortRef = useRef(false);
   const spreadsheetInputRef = useRef(null);
 
@@ -119,6 +179,31 @@ export default function GoogleSheetsConfig({
     };
   }, [loadConfig]);
 
+  const loadStatusSnapshot = useCallback(async () => {
+    if (!empresaId || globalMode) return null;
+
+    const snapshot = await getGoogleSheetsStatus(empresaId);
+    if (abortRef.current || !snapshot) return snapshot;
+
+    setStatusSnapshot(snapshot);
+    setConnectionState(snapshot.status || 'desconectado');
+    setLastSync(snapshot.last_source_sync_at || snapshot.updated_at || null);
+
+    if (snapshot.spreadsheet_id) {
+      setSpreadsheetId(snapshot.spreadsheet_id);
+    }
+
+    if (snapshot.sheet_name) {
+      setSheetName(snapshot.sheet_name);
+    }
+
+    return snapshot;
+  }, [empresaId, globalMode]);
+
+  useEffect(() => {
+    loadStatusSnapshot().catch(() => {});
+  }, [loadStatusSnapshot]);
+
   const refreshGoogleMetadata = useCallback(async () => {
     if (!empresaId) return null;
 
@@ -149,20 +234,28 @@ export default function GoogleSheetsConfig({
 
   const handleSave = async () => {
     if (!empresaId) return;
+    if (!canManage) {
+      onToast?.('erro', 'Seu perfil nao pode alterar a integracao Google.');
+      return;
+    }
     setSaving(true);
     setStatus(null);
     try {
       const cleanId = extractSpreadsheetId(spreadsheetId);
       await saveGoogleSheetsConfig(empresaId, cleanId, sheetName);
       setSpreadsheetId(cleanId);
-      setConnectionState('conectado');
+      setConnectionState(normalizeGoogleSheetsStatus({ ativo: true, spreadsheet_id: cleanId, sheet_name: sheetName }).status);
       try {
         await refreshGoogleMetadata();
       } catch {}
+      await loadStatusSnapshot().catch(() => {});
       setStatus({ type: 'success', message: 'Configuracao salva com sucesso.' });
       onSaved?.();
+      onToast?.('sucesso', 'Configuracao Google Sheets salva com sucesso.');
     } catch (err) {
-      setStatus({ type: 'error', message: err.message || 'Erro ao salvar configuracao.' });
+      const friendly = toFriendlyGoogleSheetsError(err, 'Falha ao salvar configuracao do Google Sheets.');
+      setStatus({ type: 'error', message: friendly.userMessage || friendly.message });
+      onToast?.('erro', friendly.userMessage || friendly.message);
     } finally {
       setSaving(false);
     }
@@ -170,13 +263,24 @@ export default function GoogleSheetsConfig({
 
   const handleTest = async () => {
     if (!empresaId) return;
+    if (!canManage) {
+      onToast?.('erro', 'Seu perfil nao pode testar a conexao Google.');
+      return;
+    }
     setTesting(true);
     setStatus(null);
+    setConnectionState('syncing');
     try {
       const result = await refreshGoogleMetadata();
-      setStatus({ type: 'success', message: result.message || 'Conexao testada com sucesso.' });
+      await loadStatusSnapshot().catch(() => {});
+      const successMessage = 'Conexao com Google Sheets validada com sucesso.';
+      setStatus({ type: 'success', message: result.message || successMessage });
+      onToast?.('sucesso', successMessage);
     } catch (err) {
-      setStatus({ type: 'error', message: err.message || 'Falha no teste de conexao.' });
+      const friendly = toFriendlyGoogleSheetsError(err, 'Falha ao testar conexao.');
+      setStatus({ type: 'error', message: friendly.userMessage || friendly.message });
+      onToast?.('erro', friendly.userMessage || friendly.message);
+      await loadStatusSnapshot().catch(() => {});
     } finally {
       setTesting(false);
     }
@@ -184,24 +288,38 @@ export default function GoogleSheetsConfig({
 
   const handleSync = async () => {
     if (!empresaId) return;
+    if (!canManage) {
+      onToast?.('erro', 'Seu perfil nao pode sincronizar o Google Sheets.');
+      return;
+    }
     setSyncing(true);
     setStatus(null);
+    setConnectionState('syncing');
     try {
-      const result = await syncGoogleSheets(empresaId);
+      const result = await syncGoogleSheetsNow(empresaId);
       setLastSync(new Date().toISOString());
-      setConnectionState('conectado');
+      await loadStatusSnapshot().catch(() => {});
+      const successMessage = result.message || `Sincronizacao concluida para ${empresaNome}.`;
       setStatus({
         type: 'success',
-        message: result.message || `Sincronizacao concluida para ${empresaNome}.`,
+        message: successMessage,
       });
+      onToast?.('sucesso', successMessage);
     } catch (err) {
-      setStatus({ type: 'error', message: err.message || 'Falha ao sincronizar com Google Sheets.' });
+      const friendly = toFriendlyGoogleSheetsError(err, 'Falha ao sincronizar com Google Sheets.');
+      setStatus({ type: 'error', message: friendly.userMessage || friendly.message });
+      onToast?.('erro', friendly.userMessage || friendly.message);
+      await loadStatusSnapshot().catch(() => {});
     } finally {
       setSyncing(false);
     }
   };
 
   const handleSelectSpreadsheet = () => {
+    if (!canManage) {
+      onToast?.('erro', 'Seu perfil nao pode alterar a planilha desta integracao.');
+      return;
+    }
     if (sheetsUrl) {
       window.open(sheetsUrl, '_blank', 'noopener,noreferrer');
       return;
@@ -256,34 +374,74 @@ export default function GoogleSheetsConfig({
   const hasConfig = Boolean(spreadsheetId.trim());
   const canSync = Boolean(hasConfig && canManage);
   const resolvedGoogleEmail = String(
-    googleMeta?.service_account_email ||
+    statusSnapshot?.service_account_email ||
+      googleMeta?.service_account_email ||
       googleMeta?.google_email ||
       googleMeta?.connected_email ||
       ''
   ).trim();
-  const resolvedSpreadsheetName = spreadsheetTitle || (hasConfig ? `Planilha ${extractSpreadsheetId(spreadsheetId).slice(0, 10)}...` : 'Nenhuma planilha selecionada');
-  const resolvedSheetName = sheetName || 'Nenhuma aba selecionada';
-  const effectiveLastSync = googleMeta?.last_source_sync_at || lastSync;
+  const resolvedSpreadsheetName =
+    spreadsheetTitle ||
+    statusSnapshot?.last_import_file ||
+    (hasConfig ? `Planilha ${extractSpreadsheetId(spreadsheetId).slice(0, 10)}...` : 'Nenhuma planilha selecionada');
+  const resolvedSheetName = statusSnapshot?.source_sheet_name || sheetName || 'Nenhuma aba selecionada';
+  const effectiveLastSync = statusSnapshot?.last_source_sync_at || googleMeta?.last_source_sync_at || lastSync;
+  const effectiveLastImportAt = statusSnapshot?.last_import_at || '';
+  const syncMeta = formatRelativeSyncTime(effectiveLastSync);
+  const importMeta = formatRelativeSyncTime(effectiveLastImportAt);
+  const syncHealthMeta =
+    connectionState === 'syncing'
+      ? { ...syncMeta, health: 'Atencao', tone: 'warning', icon: '🟡' }
+      : connectionState === 'error' ||
+          connectionState === 'erro' ||
+          connectionState === 'missing_spreadsheet' ||
+          connectionState === 'missing_sheet' ||
+          statusSnapshot?.last_source_sync_error
+        ? { ...syncMeta, health: 'Offline', tone: 'danger', icon: '🔴' }
+        : syncMeta;
   const resolvedStatus =
-    connectionState === 'erro'
-      ? { label: 'Erro na conexao', tone: 'border-red-200 bg-red-50 text-red-700' }
-      : hasConfig
-        ? { label: 'Conectado', tone: 'border-emerald-200 bg-emerald-50 text-emerald-700' }
-        : { label: 'Desconectado', tone: 'border-slate-200 bg-slate-100 text-slate-600' };
+    connectionState === 'syncing'
+      ? { label: 'Sincronizando', tone: 'border-blue-200 bg-blue-50 text-blue-700' }
+      : connectionState === 'error' || connectionState === 'erro'
+        ? { label: 'Erro na conexao', tone: 'border-red-200 bg-red-50 text-red-700' }
+        : connectionState === 'missing_spreadsheet'
+          ? { label: 'Planilha nao selecionada', tone: 'border-amber-200 bg-amber-50 text-amber-700' }
+          : connectionState === 'missing_sheet'
+            ? { label: 'Aba nao selecionada', tone: 'border-amber-200 bg-amber-50 text-amber-700' }
+            : hasConfig
+              ? { label: 'Conectado', tone: 'border-emerald-200 bg-emerald-50 text-emerald-700' }
+              : { label: 'Nao configurado', tone: 'border-slate-200 bg-slate-100 text-slate-600' };
   const sheetsUrl = hasConfig
     ? `https://docs.google.com/spreadsheets/d/${extractSpreadsheetId(spreadsheetId)}/edit`
     : null;
 
+  useEffect(() => {
+    const isActive = Boolean(
+      (statusSnapshot?.spreadsheet_id || spreadsheetId) &&
+      (statusSnapshot?.sheet_name || sheetName) &&
+      (statusSnapshot?.status === 'connected' || statusSnapshot?.ativo || hasConfig)
+    );
+    onStatusChange?.(isActive);
+  }, [hasConfig, onStatusChange, sheetName, spreadsheetId, statusSnapshot]);
+
   if (isHubVariant) {
+    const healthStyles = {
+      success: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+      warning: 'border-amber-200 bg-amber-50 text-amber-700',
+      danger: 'border-red-200 bg-red-50 text-red-700',
+      neutral: 'border-slate-200 bg-slate-50 text-slate-600',
+    };
+    const syncToneClass = healthStyles[syncHealthMeta.tone] || healthStyles.neutral;
+
     return (
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
-        <div className="flex items-start gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-blue-50 text-blue-700">
+      <section className="group rounded-[32px] border border-slate-200/90 bg-white p-7 shadow-[0_22px_70px_rgba(15,23,42,0.08)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_28px_90px_rgba(15,23,42,0.1)] lg:p-8">
+        <div className="flex items-start gap-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-[24px] bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100">
             <Sheet size={22} />
           </div>
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-3">
-              <h3 className="text-lg font-semibold text-slate-900">Google Drive / Google Sheets</h3>
+              <h3 className="text-xl font-semibold tracking-tight text-slate-950">Google Drive / Google Sheets</h3>
               <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${resolvedStatus.tone}`}>
                 {resolvedStatus.label}
               </span>
@@ -294,40 +452,85 @@ export default function GoogleSheetsConfig({
                 </span>
               ) : null}
             </div>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
               Conecte a planilha operacional da empresa <span className="font-semibold text-slate-900">{empresaNome || 'ativa'}</span> e acompanhe a sincronizacao com a credencial segura do ambiente.
             </p>
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <div className="rounded-[24px] border border-slate-200 bg-slate-50/90 p-5 shadow-sm">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Status</p>
             <p className="mt-2 text-sm font-semibold text-slate-900">{resolvedStatus.label}</p>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="rounded-[24px] border border-slate-200 bg-slate-50/90 p-5 shadow-sm">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Email Google conectado</p>
             <p className="mt-2 break-all text-sm font-semibold text-slate-900">{resolvedGoogleEmail || 'Credencial tecnica do ambiente'}</p>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="rounded-[24px] border border-slate-200 bg-slate-50/90 p-5 shadow-sm">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Planilha selecionada</p>
             <p className="mt-2 text-sm font-semibold text-slate-900">{resolvedSpreadsheetName}</p>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="rounded-[24px] border border-slate-200 bg-slate-50/90 p-5 shadow-sm">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Aba selecionada</p>
             <p className="mt-2 text-sm font-semibold text-slate-900">{resolvedSheetName}</p>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className={`rounded-[24px] border p-5 shadow-sm ${syncToneClass}`}>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ultima sincronizacao</p>
-            <p className="mt-2 text-sm font-semibold text-slate-900">{formatDateTime(effectiveLastSync)}</p>
+            <p className="mt-2 text-sm font-semibold">{`${syncHealthMeta.icon} ${syncHealthMeta.label}`}</p>
+            <p className="mt-1 text-xs opacity-80">{formatDateTime(effectiveLastSync)}</p>
           </div>
         </div>
 
-        <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 shadow-sm">
-          Use a credencial tecnica do Google compartilhada com esta empresa para sincronizar planilhas sem expor segredos no frontend.
+        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                <Database size={16} />
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Registros hoje</p>
+                <p className="mt-1 text-lg font-semibold text-slate-950">{statusSnapshot?.records_today ?? googleMeta?.records_today ?? 0} registros</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+                <Clock3 size={16} />
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ultima importacao</p>
+                <p className="mt-1 text-lg font-semibold text-slate-950">{`${importMeta.icon} ${importMeta.label}`}</p>
+                <p className="mt-1 text-xs text-slate-500">{statusSnapshot?.last_import_file || 'Nenhuma importacao recente'}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${syncHealthMeta.tone === 'success' ? 'bg-emerald-50 text-emerald-700' : syncHealthMeta.tone === 'warning' ? 'bg-amber-50 text-amber-700' : syncHealthMeta.tone === 'danger' ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-700'}`}>
+                <Activity size={16} />
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Saude conexao</p>
+                <p className="mt-1 text-lg font-semibold text-slate-950">{syncHealthMeta.health}</p>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className={`mt-5 rounded-2xl border px-4 py-3 text-sm shadow-sm ${
+          statusSnapshot?.last_source_sync_error
+            ? 'border-red-200 bg-red-50 text-red-700'
+            : 'border-blue-200 bg-blue-50 text-blue-800'
+        }`}>
+          {statusSnapshot?.last_source_sync_error ||
+            'Use a credencial tecnica do Google compartilhada com esta empresa para sincronizar planilhas sem expor segredos no frontend.'}
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="block">
             <Label>ID da planilha</Label>
             <input
@@ -358,15 +561,15 @@ export default function GoogleSheetsConfig({
           </label>
         </div>
 
-        {status ? <div className="mt-4"><StatusBadge type={status.type} message={status.message} /></div> : null}
+        {status ? <div className="mt-5"><StatusBadge type={status.type} message={status.message} /></div> : null}
 
         {!canManage ? (
-          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow-sm">
             Seu perfil pode apenas visualizar o status desta integracao. Solicite acesso de financeiro, admin ou system admin para editar.
           </div>
         ) : null}
 
-        <div className="mt-5 flex flex-wrap items-center gap-2">
+        <div className="mt-6 flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={handleSave}
@@ -374,7 +577,7 @@ export default function GoogleSheetsConfig({
             className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Save size={14} />
-            {saving ? 'Conectando...' : 'Conectar Google'}
+            {saving ? 'Salvando...' : hasConfig ? 'Gerenciar conexao' : 'Conectar Google'}
           </button>
 
           <button

@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  ChevronDown,
   CircleCheck,
   CircleDashed,
   CircleX,
+  HelpCircle,
   Loader2,
+  PencilLine,
   MessageCircleMore,
   QrCode,
   RefreshCw,
@@ -34,6 +37,55 @@ function StepCard({ step, title, description, example = '' }) {
   );
 }
 
+function formatRelativeTimeLabel(value, emptyLabel = 'Nunca validado') {
+  if (!value) return emptyLabel;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return emptyLabel;
+
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
+
+  if (diffMinutes < 1) return 'Agora mesmo';
+  if (diffMinutes < 60) return `ha ${diffMinutes} min`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `ha ${diffHours}h`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  return `ha ${diffDays} dia${diffDays > 1 ? 's' : ''}`;
+}
+
+function maskSensitiveValue(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return 'Nao informado';
+  if (raw.length <= 8) return '••••••••';
+  return `${raw.slice(0, 4)}••••••${raw.slice(-4)}`;
+}
+
+function CredentialSummaryItem({ label, value, sensitive = false, status }) {
+  const statusTone =
+    status === 'Salvo'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      : status === 'Pendente'
+        ? 'border-amber-200 bg-amber-50 text-amber-700'
+        : 'border-slate-200 bg-slate-100 text-slate-600';
+
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 shadow-sm">
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
+        <p className="mt-1 truncate text-sm font-semibold text-slate-900">
+          {sensitive ? maskSensitiveValue(value) : value || 'Nao informado'}
+        </p>
+      </div>
+      <span className={`shrink-0 rounded-full border px-3 py-1 text-[11px] font-semibold ${statusTone}`}>
+        {status}
+      </span>
+    </div>
+  );
+}
+
 function ZapiIntegrationCard({
   companyId,
   companyName,
@@ -41,6 +93,7 @@ function ZapiIntegrationCard({
   canManage,
   onSaved,
   onToast,
+  onStatusChange,
 }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -48,6 +101,7 @@ function ZapiIntegrationCard({
   const [qrLoading, setQrLoading] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
   const [helperOpen, setHelperOpen] = useState(false);
+  const [editingCredentials, setEditingCredentials] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
   const [integrationMessage, setIntegrationMessage] = useState('');
   const [status, setStatus] = useState('nao_configurado');
@@ -111,6 +165,7 @@ function ZapiIntegrationCard({
       setIntegrationMessage('');
       setStatus(integration?.connected ? 'salvo' : 'nao_configurado');
       setLastValidatedAt(integration?.updated_at || integration?.created_at || '');
+      setEditingCredentials(!integration);
     } catch (error) {
       onToast?.('erro', error.message || 'Falha ao carregar integracao WhatsApp.');
     } finally {
@@ -121,6 +176,10 @@ function ZapiIntegrationCard({
   useEffect(() => {
     loadIntegration();
   }, [loadIntegration]);
+
+  useEffect(() => {
+    onStatusChange?.(status === 'conectado' || status === 'salvo');
+  }, [onStatusChange, status]);
 
   const setField = (field, value) => {
     setForm((current) => ({
@@ -281,6 +340,7 @@ function ZapiIntegrationCard({
       setStatus('salvo');
       setIntegrationMessage('Integracao salva com sucesso.');
       setLastValidatedAt(new Date().toISOString());
+      setEditingCredentials(false);
       onSaved?.();
       onToast?.('sucesso', 'Integracao Z-API salva com sucesso.');
     } catch (error) {
@@ -301,168 +361,240 @@ function ZapiIntegrationCard({
   }
 
   return (
-    <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
-      <div className="flex items-start gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-700">
+    <section className="group rounded-[32px] border border-slate-200/90 bg-white p-7 shadow-[0_22px_70px_rgba(15,23,42,0.08)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_28px_90px_rgba(15,23,42,0.1)] lg:p-8">
+      <div className="flex items-start gap-4">
+        <div className="flex h-14 w-14 items-center justify-center rounded-[24px] bg-emerald-50 text-emerald-700 shadow-sm ring-1 ring-emerald-100">
           <Smartphone size={22} />
         </div>
-        <div>
-          <h3 className="text-lg font-semibold text-slate-900">WhatsApp Business (Z-API)</h3>
-          <p className="mt-1 text-sm text-slate-500">
+        <div className="flex-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <h3 className="text-xl font-semibold tracking-tight text-slate-950">WhatsApp Business (Z-API)</h3>
+            <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
+              Canal oficial
+            </span>
+          </div>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
             Conecte o WhatsApp da empresa <span className="font-semibold text-slate-900">{companyName || 'ativa'}</span> sem expor credenciais no frontend.
           </p>
         </div>
       </div>
 
-      <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-5">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-          <StepCard
-            step="1"
-            title="Acesse sua conta Z-API"
-            description="Acesse o painel da Z-API e entre na instancia que sera usada para cobrancas."
-          />
-          <StepCard
-            step="2"
-            title="Copie o ID da instancia"
-            description="O ID da instancia e um codigo grande, nao e seu e-mail."
-            example="ABC123DEF456GHI789JKL012MNO345"
-          />
-          <StepCard
-            step="3"
-            title="Copie o Token da instancia"
-            description="Copie o token/API token exibido na tela da instancia."
-          />
-          <StepCard
-            step="4"
-            title="Copie o Client Token"
-            description="O Client Token geralmente fica em Seguranca, API ou Tokens da Z-API."
-          />
-          <StepCard
-            step="5"
-            title="Gerar QR Code"
-            description="Depois de validar as credenciais, gere o QR Code e escaneie com o WhatsApp da empresa."
-          />
-          <StepCard
-            step="6"
-            title="Atualizar status e salvar"
-            description="Clique em Atualizar status. Se aparecer Conectado, clique em Salvar integracao."
-          />
-        </div>
-      </div>
-
-      <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-        As credenciais ficam vinculadas apenas a esta empresa e sao usadas somente para envio das cobrancas pelo WhatsApp.
-      </div>
-
-      <div className="mt-4">
+      <div className="mt-5 overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50/90 shadow-inner">
         <button
           type="button"
           onClick={() => setHelperOpen((current) => !current)}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-white/60"
         >
-          <ShieldCheck size={14} />
-          Como encontrar minhas credenciais?
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm ring-1 ring-slate-200">
+              <HelpCircle size={16} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Como conectar minha Z-API</p>
+              <p className="mt-1 text-xs text-slate-500">Passo a passo guiado para localizar credenciais e ativar o QR Code.</p>
+            </div>
+          </div>
+          <ChevronDown
+            size={18}
+            className={`shrink-0 text-slate-500 transition-transform duration-300 ${helperOpen ? 'rotate-180' : ''}`}
+          />
         </button>
-        {helperOpen ? (
-          <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-            <p>
-              <span className="font-semibold text-slate-900">ID da instancia:</span> tela principal da instancia.
-            </p>
-            <p className="mt-2">
-              <span className="font-semibold text-slate-900">Token:</span> tela principal/API da instancia.
-            </p>
-            <p className="mt-2">
-              <span className="font-semibold text-slate-900">Client Token:</span> menu Seguranca/API Tokens.
-            </p>
-            <p className="mt-2 font-medium text-amber-700">Nunca compartilhar essas credenciais publicamente.</p>
+
+        <div
+          className={`grid transition-all duration-300 ease-out ${
+            helperOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+          }`}
+        >
+          <div className="overflow-hidden">
+            <div className="border-t border-slate-200 px-5 py-5">
+              <div className="mx-auto max-w-2xl space-y-3">
+                {[
+                  {
+                    step: '1',
+                    title: 'Acesse sua conta Z-API',
+                    description: 'Entre no painel da instancia que sera usada pela operacao de cobrancas.',
+                  },
+                  {
+                    step: '2',
+                    title: 'Copie o ID da instancia',
+                    description: 'Use o codigo da instancia. Nao utilize e-mail neste campo.',
+                    example: 'ABC123DEF456GHI789JKL012MNO345',
+                  },
+                  {
+                    step: '3',
+                    title: 'Copie o Token da instancia',
+                    description: 'Copie o token/API token exibido na tela principal da instancia.',
+                  },
+                  {
+                    step: '4',
+                    title: 'Copie o Client Token',
+                    description: 'Localize o Client Token no menu de seguranca, API ou tokens da Z-API.',
+                  },
+                  {
+                    step: '5',
+                    title: 'Gere o QR Code e conecte o WhatsApp',
+                    description: 'Depois da validacao, gere o QR Code e escaneie com o WhatsApp da empresa.',
+                  },
+                  {
+                    step: '6',
+                    title: 'Atualize o status e salve a integracao',
+                    description: 'Quando aparecer Conectado, finalize clicando em Salvar integracao.',
+                  },
+                ].map((item) => (
+                  <div key={item.step} className="flex gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">
+                      {item.step}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+                      <p className="mt-1 text-sm leading-relaxed text-slate-600">{item.description}</p>
+                      {item.example ? (
+                        <p className="mt-2 inline-flex rounded-xl bg-slate-950 px-3 py-2 font-mono text-xs text-white">{item.example}</p>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+        As credenciais ficam vinculadas apenas a esta empresa e sao usadas somente para envio das cobrancas pelo WhatsApp.
+      </div>
+
+      <div className="mt-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Credenciais e status da integracao</p>
+            <p className="mt-1 text-sm text-slate-500">Visual executivo com status salvo, pendente ou nao informado.</p>
+          </div>
+          {canManage ? (
+            <button
+              type="button"
+              onClick={() => setEditingCredentials((current) => !current)}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50"
+            >
+              <PencilLine size={14} />
+              {editingCredentials ? 'Fechar edicao' : 'Editar credenciais'}
+            </button>
+          ) : null}
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <CredentialSummaryItem
+            label="Instance ID"
+            value={form.instance_id}
+            sensitive
+            status={form.instance_id ? 'Salvo' : 'Nao informado'}
+          />
+          <CredentialSummaryItem
+            label="Token"
+            value={form.token}
+            sensitive
+            status={form.token ? 'Salvo' : 'Nao informado'}
+          />
+          <CredentialSummaryItem
+            label="Client Token"
+            value={form.client_token}
+            sensitive
+            status={form.client_token ? 'Salvo' : 'Nao informado'}
+          />
+          <CredentialSummaryItem
+            label="Numero conectado"
+            value={form.phone_number || 'Nao conectado'}
+            status={form.phone_number ? 'Salvo' : 'Pendente'}
+          />
+        </div>
+
+        {editingCredentials ? (
+          <div className="grid grid-cols-1 gap-4 rounded-[28px] border border-slate-200 bg-slate-50/80 p-5 md:grid-cols-2">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-slate-700">Instance ID</span>
+              <input
+                type="text"
+                value={form.instance_id}
+                onChange={(event) => setField('instance_id', event.target.value)}
+                disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
+                placeholder="Ex: ABC123DEF456GHI789JKL012MNO345"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2 disabled:opacity-60"
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-slate-700">Token</span>
+              <input
+                type="password"
+                value={form.token}
+                onChange={(event) => setField('token', event.target.value)}
+                disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
+                placeholder="Ex: SEU_TOKEN_DA_INSTANCIA"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2 disabled:opacity-60"
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-slate-700">Client Token</span>
+              <input
+                type="password"
+                value={form.client_token}
+                onChange={(event) => setField('client_token', event.target.value)}
+                disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
+                placeholder="Ex: SEU_CLIENT_TOKEN"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2 disabled:opacity-60"
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-slate-700">Numero conectado</span>
+              <input
+                type="text"
+                value={form.phone_number}
+                onChange={(event) => setField('phone_number', event.target.value)}
+                disabled
+                placeholder="Preenchido apos conectar"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none disabled:opacity-60"
+              />
+            </label>
           </div>
         ) : null}
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-slate-700">Instance ID</span>
-          <input
-            type="text"
-            value={form.instance_id}
-            onChange={(event) => setField('instance_id', event.target.value)}
-            disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
-            placeholder="Ex: ABC123DEF456GHI789JKL012MNO345"
-            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2 disabled:opacity-60"
-          />
-        </label>
-
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-slate-700">Token</span>
-          <input
-            type="password"
-            value={form.token}
-            onChange={(event) => setField('token', event.target.value)}
-            disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
-            placeholder="Ex: SEU_TOKEN_DA_INSTANCIA"
-            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2 disabled:opacity-60"
-          />
-        </label>
-
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-slate-700">Client Token</span>
-          <input
-            type="password"
-            value={form.client_token}
-            onChange={(event) => setField('client_token', event.target.value)}
-            disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
-            placeholder="Ex: SEU_CLIENT_TOKEN"
-            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2 disabled:opacity-60"
-          />
-        </label>
-
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-slate-700">Numero conectado</span>
-          <input
-            type="text"
-            value={form.phone_number}
-            onChange={(event) => setField('phone_number', event.target.value)}
-            disabled
-            placeholder="Preenchido apos conectar"
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none disabled:opacity-60"
-          />
-        </label>
-      </div>
-
-      <div className={`mt-4 flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm ${statusMap[status]?.tone || statusMap.nao_configurado.tone}`}>
+      <div className={`mt-5 flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm shadow-sm ${statusMap[status]?.tone || statusMap.nao_configurado.tone}`}>
         {getStatusIcon(status)}
         <span>
           Status da integracao: <span className="font-semibold">{statusMap[status]?.label || statusMap.nao_configurado.label}</span>
         </span>
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 shadow-sm">
           <span className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Numero conectado</span>
           <span className="mt-2 block font-semibold text-slate-900">{form.phone_number || 'Aguardando conexao'}</span>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 shadow-sm">
           <span className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ultima validacao</span>
           <span className="mt-2 block font-semibold text-slate-900">
-            {lastValidatedAt ? new Date(lastValidatedAt).toLocaleString('pt-BR') : 'Ainda nao validada'}
+            {formatRelativeTimeLabel(lastValidatedAt)}
           </span>
         </div>
       </div>
 
       {integrationMessage ? (
-        <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm">
           {integrationMessage}
         </div>
       ) : null}
 
       {!canManage ? (
-        <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow-sm">
           Seu perfil pode visualizar o status desta integracao, mas somente financeiro, admin ou system admin podem editar credenciais e gerar QR Code.
         </div>
       ) : null}
 
       {qrCodeDataUrl ? (
-        <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+        <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
             <QrCode size={16} />
             QR Code da instancia
@@ -476,7 +608,7 @@ function ZapiIntegrationCard({
         </div>
       ) : null}
 
-      <div className="mt-5 flex flex-wrap gap-3">
+      <div className="mt-6 flex flex-wrap gap-3">
         <button
           type="button"
           onClick={handleValidate}
@@ -515,7 +647,7 @@ function ZapiIntegrationCard({
         </button>
       </div>
 
-      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 shadow-sm">
         Fluxo recomendado: 1. Preencha credenciais 2. Validar conexao 3. Gerar QR Code 4. Escanear com WhatsApp 5. Atualizar status 6. Salvar integracao.
       </div>
     </section>
@@ -533,6 +665,8 @@ export default function IntegracoesScreen({
 }) {
   const normalizedRole = normalizeUserRole(userRole);
   const canManageIntegrations = isSystemAdmin || normalizedRole === 'admin' || normalizedRole === 'financeiro';
+  const [zapiActive, setZapiActive] = useState(false);
+  const [googleActive, setGoogleActive] = useState(false);
   const [googleMeta, setGoogleMeta] = useState({
     service_account_email: '',
     source_spreadsheet_id: '',
@@ -557,6 +691,10 @@ export default function IntegracoesScreen({
 
     try {
       const data = await getDriveBoletosConfig(companyId);
+      const hasGoogleActive = Boolean(
+        (data?.source_spreadsheet_id || data?.spreadsheet_id) &&
+        (data?.source_sheet_name || data?.sheet_name)
+      );
       setGoogleMeta({
         service_account_email: data?.service_account_email || '',
         source_spreadsheet_id: data?.source_spreadsheet_id || data?.spreadsheet_id || '',
@@ -565,7 +703,9 @@ export default function IntegracoesScreen({
         last_source_sync_status: data?.last_source_sync_status || '',
         last_source_sync_error: data?.last_source_sync_error || '',
       });
+      setGoogleActive(hasGoogleActive);
     } catch (error) {
+      setGoogleActive(false);
       onToast?.('erro', error.message || 'Falha ao carregar o status do Google Drive / Google Sheets.');
     }
   }, [companyId, globalMode, onToast]);
@@ -573,6 +713,8 @@ export default function IntegracoesScreen({
   useEffect(() => {
     loadGoogleMeta();
   }, [loadGoogleMeta]);
+
+  const activeIntegrations = Number(zapiActive) + Number(googleActive);
 
   return (
     <div className="space-y-6">
@@ -584,15 +726,18 @@ export default function IntegracoesScreen({
               Integracoes
             </div>
             <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 lg:text-4xl">
-              Centralize WhatsApp e Google em um hub de integracoes simples, comercial e multiempresa.
+              Integracoes
             </h2>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 lg:text-base">
-              Configure os canais essenciais da operacao em um unico lugar: WhatsApp Business para cobrancas e
-              Google Drive / Google Sheets para planilhas e sincronizacao operacional.
+              Conecte WhatsApp e Google Sheets para automatizar cobrancas e sincronizacoes.
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-soft">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Ativacao</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{activeIntegrations}/2 integracoes ativas</p>
+            </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Escopo</p>
               <p className="mt-2 text-sm font-semibold text-slate-900">
@@ -619,6 +764,7 @@ export default function IntegracoesScreen({
           companyName={companyName}
           globalMode={globalMode}
           canManage={canManageIntegrations}
+          onStatusChange={setZapiActive}
           onSaved={onGoogleSheetsSaved}
           onToast={onToast}
         />
@@ -634,6 +780,8 @@ export default function IntegracoesScreen({
           variant="hub"
           canManage={canManageIntegrations}
           googleMeta={googleMeta}
+          onToast={onToast}
+          onStatusChange={setGoogleActive}
         />
       </section>
     </div>
