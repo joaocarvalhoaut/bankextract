@@ -1502,6 +1502,7 @@ export default function App() {
           <CobrancasScreen
             companyId={globalMode ? null : currentCompanyId}
             billingExecutionMode={billingExecutionMode}
+            onBillingExecutionModeChange={setBillingExecutionMode}
             rows={chargeRows}
             onGenerateMessage={handleGenerateChargeMessage}
             userRole={empresa.userRole}

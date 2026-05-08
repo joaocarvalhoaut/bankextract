@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Loader2, MessageCircleMore, PhoneCall, PhoneOff, Send } from 'lucide-react';
+import { Loader2, MessageCircleMore, PhoneCall, PhoneOff, Send, ShieldCheck } from 'lucide-react';
 import DataTable from '../components/DataTable';
 import { formatCurrencyBRL } from '../utils/format';
 import { canUserPerformAction } from '../security/permissions';
@@ -14,6 +14,7 @@ const statusTone = {
 export default function CobrancasScreen({
   companyId,
   billingExecutionMode = 'simulate',
+  onBillingExecutionModeChange,
   rows,
   onGenerateMessage,
   userRole = 'operador',
@@ -187,15 +188,60 @@ export default function CobrancasScreen({
       </section>
 
       <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
-        <div className="mb-5 flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-700">
-            <PhoneOff size={22} />
+        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-700">
+              <PhoneOff size={22} />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">Fila de cobrancas WhatsApp</h3>
+              <p className="text-sm text-slate-500">
+                Pendencias operacionais prontas para mensagem manual ou automatica.
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">Fila de cobrancas WhatsApp</h3>
-            <p className="text-sm text-slate-500">
-              Pendencias operacionais prontas para mensagem manual ou automatica.
-            </p>
+
+          <div className="flex flex-col items-start gap-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 shadow-soft">
+              <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <ShieldCheck size={12} />
+                Modo de envio
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => onBillingExecutionModeChange?.('simulate')}
+                  className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                    simulationMode
+                      ? 'bg-amber-500 text-white shadow-soft'
+                      : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  Simulacao
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onBillingExecutionModeChange?.('real')}
+                  className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                    simulationMode
+                      ? 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                      : 'bg-emerald-600 text-white shadow-soft'
+                  }`}
+                >
+                  Envio real
+                </button>
+              </div>
+            </div>
+
+            {simulationMode ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                Simulacao ativa — nenhuma mensagem real sera enviada.
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                Envio real ativo — os envios individuais chamarao a Edge Function com simulate: false.
+              </div>
+            )}
           </div>
         </div>
 
