@@ -44,6 +44,8 @@ export default function AutomacoesScreen({
   globalMode,
   userRole = 'operador',
   rules,
+  billingExecutionMode = 'simulate',
+  onBillingExecutionModeChange,
   onToast,
 }) {
   const ativo = Boolean(rules?.active);
@@ -114,6 +116,8 @@ export default function AutomacoesScreen({
         companyName={companyName}
         globalMode={globalMode}
         userRole={userRole}
+        billingExecutionMode={billingExecutionMode}
+        onBillingExecutionModeChange={onBillingExecutionModeChange}
         onToast={onToast}
       />
     </div>

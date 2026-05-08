@@ -156,6 +156,8 @@ export default function CobrancaAutomaticaScreen({
   companyName,
   globalMode,
   userRole = 'operador',
+  billingExecutionMode = 'simulate',
+  onBillingExecutionModeChange,
   onToast,
 }) {
   const resolvedCompanyId =
@@ -218,6 +220,7 @@ export default function CobrancaAutomaticaScreen({
   });
 
   const canManage = canUserPerformAction(userRole, 'manage_automations');
+  const simulationMode = billingExecutionMode !== 'real';
 
   const loadOverview = useCallback(async () => {
     if (!resolvedCompanyId || globalMode) {
@@ -513,34 +516,37 @@ export default function CobrancaAutomaticaScreen({
       setExecutingAction(action);
       try {
         const result = await fn(resolvedCompanyId);
+        const isSimulationExecution = action === 'simulate' || (action === 'run' && simulationMode);
         if (action === 'simulate' || action === 'run') {
           await incrementUsage(resolvedCompanyId, 'automations_month', 1);
           await createAuditEvent(resolvedCompanyId, {
-            action: action === 'simulate' ? 'automation_simulated' : 'automation_executed',
+            action: isSimulationExecution ? 'automation_simulated' : 'automation_executed',
             entity_type: 'automacoes_cobranca',
-            title: action === 'simulate' ? 'Simulacao de automacao executada' : 'Automacao executada',
+            title: isSimulationExecution ? 'Simulacao de automacao executada' : 'Automacao executada',
             description:
-              action === 'simulate'
+              isSimulationExecution
                 ? 'A simulacao da regua automatica foi executada com sucesso.'
                 : 'A regua automatica foi executada com sucesso.',
             metadata: {
               action,
+              simulate: isSimulationExecution,
               hora_execucao: billingConfig.hora_execucao || '',
               ativo: Boolean(billingConfig.ativo),
             },
-            severity: 'success',
+            severity: isSimulationExecution ? 'info' : 'success',
           });
           try {
             await createNotification(resolvedCompanyId, {
-              type: 'automation_executed',
-              title: 'Automacao executada',
+              type: isSimulationExecution ? 'automation_simulated' : 'automation_executed',
+              title: isSimulationExecution ? 'Simulacao executada' : 'Automacao executada',
               message:
-                action === 'simulate'
+                isSimulationExecution
                   ? 'Uma simulacao da automacao de cobranca foi executada com sucesso.'
                   : 'A automacao de cobranca foi executada com sucesso.',
-              severity: 'success',
+              severity: isSimulationExecution ? 'info' : 'success',
               metadata: {
                 action,
+                simulate: isSimulationExecution,
               },
             });
           } catch {
@@ -554,14 +560,23 @@ export default function CobrancaAutomaticaScreen({
         if (action === 'boleto-intelligent' || action === 'drive') {
           await loadBoletoSyncReport();
         }
-        onToast?.('sucesso', result?.message || successMessage);
+        if (action === 'run') {
+          onToast?.(
+            isSimulationExecution ? 'aviso' : 'sucesso',
+            isSimulationExecution
+              ? 'Simulacao executada, nenhuma mensagem real enviada.'
+              : 'Mensagem enviada via WhatsApp'
+          );
+        } else {
+          onToast?.('sucesso', result?.message || successMessage);
+        }
       } catch (error) {
         onToast?.('erro', error.message || 'Falha ao executar a acao.');
       } finally {
         setExecutingAction('');
       }
     },
-    [canManage, globalMode, loadBoletoSyncReport, loadDriveConfig, loadOverview, onToast, resolvedCompanyId]
+    [billingConfig.ativo, billingConfig.hora_execucao, canManage, globalMode, loadBoletoSyncReport, loadDriveConfig, loadOverview, onToast, resolvedCompanyId, simulationMode]
   );
 
   const handleRunBoletoIntelligent = useCallback(async () => {
@@ -801,24 +816,67 @@ export default function CobrancaAutomaticaScreen({
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col items-start gap-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 shadow-soft">
+            <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              <ShieldCheck size={12} />
+              Modo de envio
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onBillingExecutionModeChange?.('simulate')}
+                className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                  simulationMode
+                    ? 'bg-amber-500 text-white shadow-soft'
+                    : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                Simulacao
+              </button>
+              <button
+                type="button"
+                onClick={() => onBillingExecutionModeChange?.('real')}
+                className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                  simulationMode
+                    ? 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    : 'bg-emerald-600 text-white shadow-soft'
+                }`}
+              >
+                Envio real
+              </button>
+            </div>
+          </div>
+
+          {simulationMode ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Simulacao ativa — nenhuma mensagem real sera enviada.
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              Envio real ativo — a execucao chamara a Edge Function com simulate: false.
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => runAction('simulate', (id) => runBillingAutomationNow(id, { simulate: true }), 'Simulacao executada com sucesso.')}
+            onClick={() =>
+              runAction(
+                'run',
+                (id) => runBillingAutomationNow(id, { simulate: simulationMode }),
+                simulationMode ? 'Simulacao executada, nenhuma mensagem real enviada.' : 'Mensagem enviada via WhatsApp'
+              )
+            }
             disabled={Boolean(executingAction)}
-            className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-emerald-700 disabled:opacity-50"
-          >
-            {executingAction === 'simulate' ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
-            Executar simulacao
-          </button>
-          <button
-            type="button"
-            onClick={() => runAction('run', runBillingAutomationNow, 'Regua executada com sucesso.')}
-            disabled={Boolean(executingAction)}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-soft transition hover:bg-slate-50 disabled:opacity-50"
+            className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold shadow-soft transition disabled:opacity-50 ${
+              simulationMode
+                ? 'bg-amber-500 text-white hover:bg-amber-600'
+                : 'bg-emerald-600 text-white hover:bg-emerald-700'
+            }`}
           >
             {executingAction === 'run' ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
-            Executar agora
+            {simulationMode ? 'Executar simulacao' : 'Enviar agora'}
           </button>
           <button
             type="button"
@@ -838,6 +896,7 @@ export default function CobrancaAutomaticaScreen({
             {executingAction === 'sheet' ? <Loader2 size={15} className="animate-spin" /> : <Sheet size={15} />}
             Sincronizar planilha
           </button>
+          </div>
         </div>
       </div>
 

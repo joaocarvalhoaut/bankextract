@@ -129,7 +129,7 @@ export async function runBillingAutomationNow(companyId, options = {}) {
       action: 'run',
       company_id: companyId,
       manual: true,
-      simulate: options.simulate === true,
+      simulate: options.simulate === true ? true : false,
     },
     'Falha ao executar a regua de cobranca.'
   );

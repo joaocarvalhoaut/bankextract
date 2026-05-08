@@ -309,6 +309,13 @@ export default function App() {
   const [onboardingData, setOnboardingData] = useState(null);
   const [plansCatalog, setPlansCatalog] = useState([]);
   const [billingOverview, setBillingOverview] = useState(null);
+  const [billingExecutionMode, setBillingExecutionMode] = useState(() => {
+    try {
+      return window.localStorage.getItem('bankextract.billing.executionMode') === 'real' ? 'real' : 'simulate';
+    } catch {
+      return 'simulate';
+    }
+  });
   const [markingOnboardingStepId, setMarkingOnboardingStepId] = useState('');
   const [skippedOnboardingStepIds, setSkippedOnboardingStepIds] = useState([]);
   const [waitingFirstCompanySetup, setWaitingFirstCompanySetup] = useState(false);
@@ -613,6 +620,14 @@ export default function App() {
       companyFilter: globalMode ? '' : currentCompanyId,
     });
   }, [currentCompanyId, globalMode]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('bankextract.billing.executionMode', billingExecutionMode);
+    } catch {
+      // ignore storage failures
+    }
+  }, [billingExecutionMode]);
 
   const filteredFinancialRows = useMemo(() => {
     return financialRecords.filter((row) => {
@@ -1553,6 +1568,8 @@ export default function App() {
             globalMode={globalMode}
             userRole={empresa.userRole}
             rules={automationRules}
+            billingExecutionMode={billingExecutionMode}
+            onBillingExecutionModeChange={setBillingExecutionMode}
             onToggleRule={handleToggleAutomationRule}
             onSaveRules={handleSaveAutomationRules}
             onToast={showToast}
@@ -1715,6 +1732,7 @@ export default function App() {
           companies={empresa.companies}
           activeCompany={empresa.activeCompany}
           stats={sidebarStats}
+          billingExecutionMode={billingExecutionMode}
           isSystemAdmin={empresa.isSystemAdmin}
           onOpenCompanyModal={handleOpenEmpresaModal}
           onOpenPlans={() => setActiveTab('planos')}

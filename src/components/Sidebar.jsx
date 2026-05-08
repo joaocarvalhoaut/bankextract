@@ -86,6 +86,7 @@ export default function Sidebar({
   companies,
   activeCompany,
   stats,
+  billingExecutionMode = 'simulate',
   isSystemAdmin = false,
   onOpenCompanyModal,
   onOpenPlans,
@@ -147,9 +148,13 @@ export default function Sidebar({
               </div>
             </div>
 
-            <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/90 px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] text-slate-600">
-              <Shield size={11} className="text-emerald-600" />
-              Simulacao ativa
+            <div className={`mt-3 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] ${
+              billingExecutionMode === 'real'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : 'border-amber-200 bg-amber-50 text-amber-700'
+            }`}>
+              <Shield size={11} className={billingExecutionMode === 'real' ? 'text-emerald-600' : 'text-amber-600'} />
+              {billingExecutionMode === 'real' ? 'Envio real ativo' : 'Simulacao ativa'}
             </div>
 
             <div className="glass mt-4 rounded-2xl p-3">
