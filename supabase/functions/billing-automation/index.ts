@@ -634,6 +634,30 @@ function bytesToBase64(bytes: Uint8Array) {
   return btoa(binary);
 }
 
+function extractQrImageCandidate(data: Record<string, unknown> | null | undefined): string {
+  const candidates = [
+    data?.base64,
+    data?.image,
+    data?.qrCode,
+    data?.value,
+    data?.url,
+    data?.data,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+
+    if (candidate && typeof candidate === 'object') {
+      const nested = extractQrImageCandidate(candidate as Record<string, unknown>);
+      if (nested) return nested;
+    }
+  }
+
+  return '';
+}
+
 async function getZapiQrCodeData(
   config: { instanceId: string; token: string; clientToken: string },
 ) {
@@ -647,29 +671,39 @@ async function getZapiQrCodeData(
   });
 
   const contentType = response.headers.get('content-type') || '';
-  console.log('[ZAPI COMPANY REQUEST]', {
-    url,
-    ok: response.ok,
-    status: response.status,
-    mode: 'qr-code',
-    content_type: contentType,
+  console.log('[ZAPI QR REQUEST]', {
+    instanceId: config.instanceId,
+    hasToken: Boolean(config.token),
+    hasClientToken: Boolean(config.clientToken),
   });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    console.log('[ZAPI COMPANY RESPONSE]', errorData);
-    throw new Error(`Z-API qr-code erro ${response.status}: ${JSON.stringify(errorData)}`);
+    console.log('[ZAPI QR RESPONSE]', {
+      status: response.status,
+      ok: response.ok,
+      data: errorData,
+    });
+    throw new Error('Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
   }
 
   if (contentType.includes('application/json')) {
     const data = await response.json().catch(() => ({}));
-    console.log('[ZAPI COMPANY RESPONSE]', data);
-    const image = String(data?.value || data?.image || data?.base64 || data?.qrCode || '').trim();
+    console.log('[ZAPI QR RESPONSE]', {
+      status: response.status,
+      ok: response.ok,
+      data,
+    });
+    const image = extractQrImageCandidate(data);
     if (!image) {
-      throw new Error('A Z-API nao retornou um QR Code valido.');
+      throw new Error('Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
     }
 
     if (image.startsWith('data:image/')) {
+      return { imageDataUrl: image, raw: data };
+    }
+
+    if (/^https?:\/\//i.test(image)) {
       return { imageDataUrl: image, raw: data };
     }
 
@@ -681,9 +715,10 @@ async function getZapiQrCodeData(
 
   const bytes = new Uint8Array(await response.arrayBuffer());
   const imageDataUrl = `data:${contentType || 'image/png'};base64,${bytesToBase64(bytes)}`;
-  console.log('[ZAPI COMPANY RESPONSE]', {
-    mode: 'qr-code',
-    bytes: bytes.length,
+  console.log('[ZAPI QR RESPONSE]', {
+    status: response.status,
+    ok: response.ok,
+    data: { bytes: bytes.length, contentType },
   });
 
   return {

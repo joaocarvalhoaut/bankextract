@@ -88,7 +88,9 @@ export async function getCompanyIntegrationQrCode(companyId, payload) {
 
   if (error) throw buildError(error, 'Falha ao carregar o QR Code da integracao.');
   if (!(data?.ok === true || data?.success === true)) {
-    throw new Error(data?.error || 'Falha ao carregar o QR Code da integracao.');
+    throw new Error(
+      data?.error || 'Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.'
+    );
   }
 
   return data;

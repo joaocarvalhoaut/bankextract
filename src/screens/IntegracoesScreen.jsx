@@ -208,12 +208,16 @@ function ZapiIntegrationCard({
     setQrLoading(true);
     try {
       const result = await getCompanyIntegrationQrCode(companyId, form);
-      setQrCodeDataUrl(String(result?.image_data_url || ''));
+      const qrImage = String(result?.image_data_url || result?.image_url || '');
+      if (!qrImage) {
+        throw new Error('Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
+      }
+      setQrCodeDataUrl(qrImage);
       setStatus('aguardando_qr');
       onToast?.('sucesso', result?.message || 'QR Code carregado com sucesso.');
     } catch (error) {
       setStatus('erro');
-      onToast?.('erro', error.message || 'Falha ao gerar o QR Code da Z-API.');
+      onToast?.('erro', error.message || 'Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
     } finally {
       setQrLoading(false);
     }
@@ -314,7 +318,7 @@ function ZapiIntegrationCard({
             step="2"
             title="Copie o ID da instancia"
             description="O ID da instancia e um codigo grande, nao e seu e-mail."
-            example="3F0B7D969CD752FF47EA16D373312251"
+            example="ABC123DEF456GHI789JKL012MNO345"
           />
           <StepCard
             step="3"
@@ -376,7 +380,7 @@ function ZapiIntegrationCard({
             value={form.instance_id}
             onChange={(event) => setField('instance_id', event.target.value)}
             disabled={loading || saving || validating || qrLoading || statusLoading}
-            placeholder="Ex: 3F0B7D969CD752FF47EA16D373312251"
+            placeholder="Ex: ABC123DEF456GHI789JKL012MNO345"
             className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2 disabled:opacity-60"
           />
         </label>
@@ -388,7 +392,7 @@ function ZapiIntegrationCard({
             value={form.token}
             onChange={(event) => setField('token', event.target.value)}
             disabled={loading || saving || validating || qrLoading || statusLoading}
-            placeholder="Ex: E9321740530BEBC06594D50A"
+            placeholder="Ex: SEU_TOKEN_DA_INSTANCIA"
             className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2 disabled:opacity-60"
           />
         </label>
@@ -400,7 +404,7 @@ function ZapiIntegrationCard({
             value={form.client_token}
             onChange={(event) => setField('client_token', event.target.value)}
             disabled={loading || saving || validating || qrLoading || statusLoading}
-            placeholder="Ex: F3f7b8597f7a641e485cbe5fa4193b975S"
+            placeholder="Ex: SEU_CLIENT_TOKEN"
             className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2 disabled:opacity-60"
           />
         </label>
