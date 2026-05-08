@@ -197,16 +197,16 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
   return (
     <div className="pb-28 md:pb-10">
       <div className="mx-auto flex max-w-[1540px] flex-col gap-12 px-4 py-4 md:px-6 xl:px-8">
-        <header className="sticky top-0 z-40 -mx-4 border-b border-slate-200/80 bg-white/82 px-4 py-2.5 shadow-[0_12px_28px_rgba(15,23,42,0.06)] backdrop-blur-xl transition-all md:-mx-6 md:px-6 xl:-mx-8 xl:px-8">
+        <header className="sticky top-0 z-40 -mx-4 border-b border-slate-200/80 bg-[#071120]/82 px-4 py-2.5 shadow-[0_12px_28px_rgba(0,0,0,0.26)] backdrop-blur-xl transition-all md:-mx-6 md:px-6 xl:-mx-8 xl:px-8">
           <div className="mx-auto flex max-w-[1540px] flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <BrandLockup variant="sidebar" />
 
-            <nav className="hidden flex-wrap items-center gap-6 text-sm font-medium text-slate-600 lg:flex">
-              <button type="button" onClick={() => handleSectionNavigation('recursos')} className="transition hover:text-slate-950">Recursos</button>
-              <button type="button" onClick={() => handleSectionNavigation('como-funciona')} className="transition hover:text-slate-950">Como funciona</button>
-              <button type="button" onClick={() => handleSectionNavigation('planos')} className="transition hover:text-slate-950">Planos</button>
-              <button type="button" onClick={() => handleSectionNavigation('clientes')} className="transition hover:text-slate-950">Clientes</button>
-              <button type="button" onClick={handleStart} className="transition hover:text-slate-950">Entrar</button>
+            <nav className="hidden flex-wrap items-center gap-6 text-sm font-medium text-slate-300 lg:flex">
+              <button type="button" onClick={() => handleSectionNavigation('recursos')} className="transition hover:text-slate-50">Recursos</button>
+              <button type="button" onClick={() => handleSectionNavigation('como-funciona')} className="transition hover:text-slate-50">Como funciona</button>
+              <button type="button" onClick={() => handleSectionNavigation('planos')} className="transition hover:text-slate-50">Planos</button>
+              <button type="button" onClick={() => handleSectionNavigation('clientes')} className="transition hover:text-slate-50">Clientes</button>
+              <button type="button" onClick={handleStart} className="transition hover:text-slate-50">Entrar</button>
             </nav>
 
             <PublicButton primary onClick={handleStart}>
@@ -222,10 +222,10 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
               <SectionBadge>Plataforma de cobranca inteligente</SectionBadge>
 
               <div className="space-y-5">
-                <h1 className="max-w-4xl text-5xl font-bold leading-[0.92] tracking-[-0.04em] text-slate-950 md:text-6xl xl:text-7xl">
+                <h1 className="max-w-4xl text-5xl font-bold leading-[0.92] tracking-[-0.04em] text-[#F8FAFC] md:text-6xl xl:text-7xl">
                   Automatize cobrancas, organize boletos e acompanhe recebimentos em um so lugar.
                 </h1>
-                <p className="max-w-2xl text-base leading-8 text-slate-600 md:text-lg">
+                <p className="max-w-2xl text-base leading-8 text-[#CBD5E1] md:text-lg">
                   Importe arquivos, concilie recebiveis, prepare cobrancas por WhatsApp e opere com visao financeira centralizada.
                 </p>
               </div>
