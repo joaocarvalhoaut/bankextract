@@ -1,7 +1,9 @@
-import { MessageCircleMore, PhoneCall, PhoneOff, Send } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import { Loader2, MessageCircleMore, PhoneCall, PhoneOff, Send } from 'lucide-react';
 import DataTable from '../components/DataTable';
 import { formatCurrencyBRL } from '../utils/format';
 import { canUserPerformAction } from '../security/permissions';
+import { sendSingleCharge } from '../services/billingAutomationService';
 
 const statusTone = {
   pendente: 'bg-slate-100 text-slate-700 ring-slate-200',
@@ -10,17 +12,73 @@ const statusTone = {
 };
 
 export default function CobrancasScreen({
+  companyId,
+  billingExecutionMode = 'simulate',
   rows,
   onGenerateMessage,
-  onSend,
   userRole = 'operador',
+  onToast,
 }) {
   const canManageCharges = canUserPerformAction(userRole, 'manage_charges');
+  const simulationMode = billingExecutionMode !== 'real';
+  const [sendingId, setSendingId] = useState('');
   const pending = rows.filter((row) => row.status === 'pendente').length;
   const withoutPhone = rows.filter((row) => row.status === 'sem telefone').length;
   const sent = rows.filter((row) => row.status === 'enviada').length;
 
-  const columns = [
+  const handleSendSingleCharge = useCallback(
+    async (row) => {
+      console.log('[SEND BUTTON CLICKED - COBRANCAS]', row);
+
+      if (!companyId) {
+        onToast?.('erro', 'Selecione uma empresa especifica para enviar a cobranca.');
+        return;
+      }
+
+      if (!canManageCharges) {
+        onToast?.('erro', 'Seu perfil atual nao pode enviar cobrancas.');
+        return;
+      }
+
+      const registroId = String(row?.financeiro_id || row?.registro_id || row?.id || '').trim();
+      if (!registroId) {
+        onToast?.('erro', 'Esta cobranca nao possui um titulo financeiro associado.');
+        return;
+      }
+
+      const payload = {
+        action: 'send_single_charge',
+        companyId,
+        company_id: companyId,
+        registro_id: registroId,
+        charge_id: registroId,
+        simulate: simulationMode,
+      };
+
+      console.log('[SEND SINGLE CHARGE REQUEST - COBRANCAS]', payload);
+      setSendingId(registroId);
+
+      try {
+        const data = await sendSingleCharge(companyId, registroId, { simulate: simulationMode });
+        console.log('[SEND SINGLE CHARGE RESPONSE - COBRANCAS]', data, null);
+        onToast?.(
+          simulationMode ? 'aviso' : 'sucesso',
+          data?.message ||
+            (simulationMode
+              ? 'Simulacao executada, nenhuma mensagem real enviada'
+              : 'Mensagem enviada via WhatsApp')
+        );
+      } catch (error) {
+        console.log('[SEND SINGLE CHARGE RESPONSE - COBRANCAS]', null, error);
+        onToast?.('erro', error.message || 'Falha ao enviar cobranca via WhatsApp.');
+      } finally {
+        setSendingId('');
+      }
+    },
+    [canManageCharges, companyId, onToast, simulationMode]
+  );
+
+  const columns = useMemo(() => [
     {
       key: 'cliente',
       label: 'Cliente',
@@ -62,30 +120,46 @@ export default function CobrancasScreen({
     {
       key: 'actions',
       label: 'Acoes',
-      render: (row) => (
-        <div className="flex gap-2">
-          <button
-            type="button"
-            disabled={!canManageCharges}
-            onClick={() => onGenerateMessage(row)}
-            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <MessageCircleMore size={12} />
-            Gerar mensagem
-          </button>
-          <button
-            type="button"
-            disabled={!canManageCharges}
-            onClick={() => onSend(row)}
-            className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-300"
-          >
-            <Send size={12} />
-            Enviar
-          </button>
-        </div>
-      ),
+      render: (row) => {
+        const registroId = String(row?.financeiro_id || row?.registro_id || row?.id || '').trim();
+        const sending = sendingId === registroId;
+        const sendDisabled = !canManageCharges || !companyId || !registroId || Boolean(sendingId);
+
+        return (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={!canManageCharges}
+              onClick={() => onGenerateMessage(row)}
+              title={!canManageCharges ? 'Seu perfil nao pode gerar mensagens.' : ''}
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <MessageCircleMore size={12} />
+              Gerar mensagem
+            </button>
+            <button
+              type="button"
+              disabled={sendDisabled}
+              onClick={() => handleSendSingleCharge(row)}
+              title={
+                !canManageCharges
+                  ? 'Seu perfil nao pode enviar cobrancas.'
+                  : !companyId
+                    ? 'Selecione uma empresa especifica para enviar.'
+                    : !registroId
+                      ? 'Esta cobranca nao possui um titulo financeiro associado.'
+                      : ''
+              }
+              className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {sending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+              Enviar
+            </button>
+          </div>
+        );
+      },
     },
-  ];
+  ], [canManageCharges, companyId, handleSendSingleCharge, onGenerateMessage, sendingId]);
 
   const stats = [
     { label: 'Cobrancas pendentes', value: pending, color: 'text-slate-900', bar: 'from-slate-400 to-slate-500', Icon: PhoneOff },

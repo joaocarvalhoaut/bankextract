@@ -1500,10 +1500,12 @@ export default function App() {
       case 'cobrancas':
         currentContent = (
           <CobrancasScreen
+            companyId={globalMode ? null : currentCompanyId}
+            billingExecutionMode={billingExecutionMode}
             rows={chargeRows}
             onGenerateMessage={handleGenerateChargeMessage}
-            onSend={handleSendCharge}
             userRole={empresa.userRole}
+            onToast={showToast}
           />
         );
         break;
