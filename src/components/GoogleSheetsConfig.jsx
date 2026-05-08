@@ -91,7 +91,7 @@ function formatRelativeSyncTime(value) {
 
   if (diffMinutes < 10) {
     return {
-      label: `Sincronizado ha ${Math.max(diffMinutes, 1)} min`,
+      label: `ha ${Math.max(diffMinutes, 1)} min`,
       tone: 'success',
       icon: '🟢',
       health: 'Saudavel',
@@ -100,14 +100,31 @@ function formatRelativeSyncTime(value) {
 
   if (diffMinutes < 60) {
     return {
-      label: `Sincronizado ha ${diffMinutes} min`,
+      label: `ha ${diffMinutes} min`,
       tone: 'warning',
       icon: '🟡',
       health: 'Atencao',
     };
   }
 
-  const diffHours = Math.max(1, Math.floor(diffMinutes / 60));
+  const diffHoursRounded = Math.max(1, Math.floor(diffMinutes / 60));
+  if (diffHoursRounded < 24) {
+    return {
+      label: `ha ${diffHoursRounded} h`,
+      tone: 'warning',
+      icon: '🟡',
+      health: 'Atencao',
+    };
+  }
+
+  const diffDays = Math.max(1, Math.floor(diffHoursRounded / 24));
+  return {
+    label: `ha ${diffDays} dia${diffDays > 1 ? 's' : ''}`,
+    tone: 'warning',
+    icon: '🟡',
+    health: 'Atencao',
+  };
+
   return {
     label: `Ultima sincronizacao ha ${diffHours}h`,
     tone: 'warning',
@@ -490,7 +507,12 @@ export default function GoogleSheetsConfig({
               </div>
               <div className="rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Email Google conectado</p>
-                <p className="mt-2 break-all text-sm font-semibold text-slate-900">{resolvedGoogleEmail || 'Credencial tecnica do ambiente'}</p>
+                <p
+                  title={resolvedGoogleEmail || 'Credencial tecnica do ambiente'}
+                  className="mt-2 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold text-slate-900"
+                >
+                  {resolvedGoogleEmail || 'Credencial tecnica do ambiente'}
+                </p>
               </div>
               <div className="rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Planilha selecionada</p>

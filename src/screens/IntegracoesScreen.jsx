@@ -50,7 +50,7 @@ function formatRelativeTimeLabel(value, emptyLabel = 'Nunca validado') {
   if (diffMinutes < 60) return `ha ${diffMinutes} min`;
 
   const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `ha ${diffHours}h`;
+  if (diffHours < 24) return `ha ${diffHours} h`;
 
   const diffDays = Math.floor(diffHours / 24);
   return `ha ${diffDays} dia${diffDays > 1 ? 's' : ''}`;
