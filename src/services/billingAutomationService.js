@@ -168,6 +168,7 @@ export async function runBillingAutomationNow(companyId, options = {}) {
 export async function sendSingleCharge(companyId, registroId, options = {}) {
   const simulate = options.simulate === true ? true : false;
   const customMessage = String(options.custom_message || options.message || '').trim();
+  const forceResend = options.force_resend === true;
 
   if (!companyId) {
     throw new Error('Selecione uma empresa especifica para enviar a cobranca.');
@@ -184,6 +185,7 @@ export async function sendSingleCharge(companyId, registroId, options = {}) {
     registro_id: registroId,
     charge_id: registroId,
     simulate,
+    force_resend: forceResend,
     ...(customMessage ? { custom_message: customMessage, message: customMessage } : {}),
   };
 
@@ -204,11 +206,17 @@ export async function sendSingleCharge(companyId, registroId, options = {}) {
   const isFailure = data?.ok === false || data?.success === false;
 
   if (isFailure) {
-    throw formatEdgeError(data, 'Falha ao enviar a cobranca individual.');
+    const errorResult = formatEdgeError(data, 'Falha ao enviar a cobranca individual.');
+    errorResult.duplicate = data?.duplicate === true;
+    errorResult.raw = data;
+    throw errorResult;
   }
 
   if (!isSuccess) {
-    throw formatEdgeError(data, 'Falha ao enviar a cobranca individual.');
+    const errorResult = formatEdgeError(data, 'Falha ao enviar a cobranca individual.');
+    errorResult.duplicate = data?.duplicate === true;
+    errorResult.raw = data;
+    throw errorResult;
   }
 
   return data;

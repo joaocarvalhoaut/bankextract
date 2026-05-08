@@ -23,7 +23,7 @@ export default function MessagePreviewModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm"
-      onClick={(event) => (event.target === event.currentTarget ? onClose() : null)}
+      onClick={(event) => (sending ? null : event.target === event.currentTarget ? onClose() : null)}
     >
       <div className="w-full max-w-5xl overflow-hidden rounded-[32px] border border-white/70 bg-white shadow-[0_40px_120px_rgba(15,23,42,0.2)]">
         <div className="hero-mesh border-b border-slate-200 px-6 py-5">
@@ -42,7 +42,8 @@ export default function MessagePreviewModal({
 
             <button
               type="button"
-              onClick={onClose}
+              onClick={sending ? undefined : onClose}
+              disabled={sending}
               className="rounded-2xl border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-50"
             >
               <X size={16} />

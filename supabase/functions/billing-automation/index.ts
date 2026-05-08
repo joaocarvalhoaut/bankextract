@@ -1937,6 +1937,9 @@ async function sendRealChargesData(
           message: '',
           canal: 'whatsapp_real',
           envio_real: true,
+          force_resend: Boolean(item?.force_resend),
+          simulated: false,
+          sent_at: new Date().toISOString(),
         },
       });
       failed.push({
@@ -1968,6 +1971,9 @@ async function sendRealChargesData(
           message,
           canal: 'whatsapp_real',
           envio_real: true,
+          force_resend: Boolean(item?.force_resend),
+          simulated: false,
+          sent_at: new Date().toISOString(),
         },
       });
       failed.push({
@@ -2002,6 +2008,9 @@ async function sendRealChargesData(
           message,
           canal: 'whatsapp_real',
           envio_real: true,
+          force_resend: Boolean(item?.force_resend),
+          simulated: false,
+          sent_at: new Date().toISOString(),
           zapi_message_id: sendResult.messageId || null,
           zapi_zaap_id: sendResult.zaapId || null,
           zapi_id: sendResult.id || null,
@@ -2050,6 +2059,9 @@ async function sendRealChargesData(
           message,
           canal: 'whatsapp_real',
           envio_real: true,
+          force_resend: Boolean(item?.force_resend),
+          simulated: false,
+          sent_at: new Date().toISOString(),
         },
       });
       failed.push({
@@ -2071,15 +2083,33 @@ async function sendSingleChargeData(
   registroId: string,
   simulate: boolean,
   customMessage: string,
+  forceResend: boolean,
   options: { allowTestMode?: boolean } = {},
 ) {
   const preview = await buildChargePayloadPreview(supabaseAdmin, companyId, registroId);
   const finalMessage = String(customMessage || preview.message || '').trim();
+  const recentCharge = await findRecentSuccessfulWhatsappCharge(supabaseAdmin, companyId, registroId);
+
+  if (recentCharge && !forceResend) {
+    return {
+      success: false,
+      duplicate: true,
+      simulated: simulate,
+      zapiResponse: null,
+      message: 'Esta cobrança já foi enviada recentemente. Confirme o reenvio para mandar novamente.',
+      payload: {
+        ...preview.payload,
+        message: finalMessage,
+      },
+    };
+  }
+
   const item = {
     ...preview.payload,
     id: registroId,
     registro_id: registroId,
     charge_id: registroId,
+    force_resend: forceResend,
     phone: String(preview.payload?.telefone || ''),
     telefone: String(preview.payload?.telefone || ''),
     message: finalMessage,
@@ -2122,6 +2152,8 @@ async function sendSingleChargeData(
         message: finalMessage,
         canal: 'whatsapp_simulado',
         simulated: true,
+        force_resend: forceResend,
+        sent_at: new Date().toISOString(),
       },
     });
 
@@ -2133,6 +2165,7 @@ async function sendSingleChargeData(
       payload: {
         ...preview.payload,
         message: finalMessage,
+        force_resend: forceResend,
       },
     };
   }
@@ -2158,6 +2191,7 @@ async function sendSingleChargeData(
     payload: {
       ...preview.payload,
       message: finalMessage,
+      force_resend: forceResend,
     },
   };
 }
@@ -2312,6 +2346,26 @@ async function insertWhatsappCharge(
 ) {
   const { error } = await supabaseAdmin.from('cobrancas_whatsapp').insert(payload);
   if (error) throw new Error(error.message);
+}
+
+async function findRecentSuccessfulWhatsappCharge(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  registroId: string,
+) {
+  const since = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const { data, error } = await supabaseAdmin
+    .from('cobrancas_whatsapp')
+    .select('id, empresa_id, registro_id, telefone, mensagem, status, zapi_message_id, created_at')
+    .eq('empresa_id', companyId)
+    .eq('registro_id', registroId)
+    .eq('status', 'enviado')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data || null;
 }
 
 async function processChargeForRecord(
@@ -4119,6 +4173,7 @@ Deno.serve(async (req: Request) => {
         const registroId = String(body?.registro_id || body?.charge_id || '').trim();
         const simulate = body?.simulate === true;
         const customMessage = String(body?.custom_message || body?.message || '').trim();
+        const forceResend = body?.force_resend === true;
 
         if (!registroId) {
           return jsonResponse({
@@ -4136,8 +4191,22 @@ Deno.serve(async (req: Request) => {
           registroId,
           simulate,
           customMessage,
+          forceResend,
           { allowTestMode: auth.bypass === true },
         );
+
+        if (result.duplicate) {
+          return jsonResponse({
+            ok: false,
+            success: false,
+            action: 'send_single_charge',
+            duplicate: true,
+            simulated: result.simulated,
+            zapiResponse: null,
+            message: result.message,
+            payload: result.payload,
+          }, 200);
+        }
 
         return jsonResponse({
           ok: true,

@@ -304,6 +304,7 @@ export default function App() {
   const [chargeRows, setChargeRows] = useState([]);
   const [chargePreviewModal, setChargePreviewModal] = useState(null);
   const [chargePreviewSending, setChargePreviewSending] = useState(false);
+  const [sendingChargeIds, setSendingChargeIds] = useState([]);
   const [automationRules, setAutomationRules] = useState(emptyAutomation);
   const [settingsOverview, setSettingsOverview] = useState(null);
   const [systemStatus, setSystemStatus] = useState(null);
@@ -1008,116 +1009,146 @@ export default function App() {
   );
 
   const handleSendCharge = useCallback(
-    async (row) => {
+    async (row, options = {}) => {
+      if (!canUserPerformAction(currentUserRole, 'manage_charges')) {
+        throw new Error('Seu perfil atual nao pode enviar cobrancas.');
+      }
+
+      const latestRow =
+        chargeRows.find((item) => item.id === row.id) ||
+        chargeRows.find((item) => item.registro_id === (row.registro_id || row.id)) ||
+        row;
+
+      const payload = {
+        ...latestRow,
+        ...row,
+        mensagem: options.customMessage ?? row.mensagem ?? latestRow.mensagem ?? '',
+        _editedMessage: Boolean(row._editedMessage || latestRow._editedMessage || options.customMessage),
+      };
+
+      const companyId = payload.company_id || currentCompanyId;
+      const registroId = String(payload.registro_id || payload.financeiro_id || payload.id || '').trim();
+      const simulate = options.simulate ?? (billingExecutionMode !== 'real');
+      const isAlreadySent = String(payload.status || '') === 'enviada';
+      const currentlySending = sendingChargeIds.includes(registroId);
+
+      if (!companyId) {
+        throw new Error('Selecione uma empresa especifica para enviar a cobranca.');
+      }
+
+      if (!registroId) {
+        throw new Error('Esta cobranca nao possui um titulo financeiro associado.');
+      }
+
+      if (currentlySending) {
+        throw new Error('Esta cobranca ja esta em envio. Aguarde a conclusao antes de tentar novamente.');
+      }
+
+      let forceResend = options.forceResend === true;
+      if (isAlreadySent && !forceResend) {
+        const confirmed = window.confirm('Esta cobrança já foi enviada. Deseja reenviar?');
+        if (!confirmed) {
+          return { cancelled: true };
+        }
+        forceResend = true;
+      }
+
+      setSendingChargeIds((current) => (current.includes(registroId) ? current : [...current, registroId]));
+
       try {
-        if (!canUserPerformAction(currentUserRole, 'manage_charges')) {
-          throw new Error('Seu perfil atual nao pode enviar cobrancas.');
-        }
+        const result = await sendSingleCharge(companyId, registroId, {
+          simulate,
+          custom_message: payload.mensagem || '',
+          message: payload.mensagem || '',
+          force_resend: forceResend,
+        });
 
-        const latestRow =
-          chargeRows.find((item) => item.id === row.id) ||
-          chargeRows.find((item) => item.registro_id === (row.registro_id || row.id)) ||
-          row;
+        setChargeRows((prev) =>
+          prev.map((item) =>
+            item.id === registroId || item.registro_id === registroId
+              ? {
+                  ...item,
+                  status: 'enviada',
+                  mensagem: payload.mensagem || item.mensagem,
+                  _editedMessage: Boolean(payload._editedMessage),
+                }
+              : item
+          )
+        );
 
-        const payload = {
-          ...latestRow,
-          ...row,
-          mensagem: row.mensagem || latestRow.mensagem,
-          _editedMessage: Boolean(row._editedMessage || latestRow._editedMessage),
-        };
+        setChargePreviewModal((prev) =>
+          prev?.row && (prev.row.id === registroId || prev.row.registro_id === registroId)
+            ? {
+                ...prev,
+                row: {
+                  ...prev.row,
+                  status: 'enviada',
+                  mensagem: payload.mensagem || prev.row.mensagem,
+                },
+              }
+            : prev
+        );
 
-        const result = await financeService.sendWhatsAppCharge(payload, 'manual');
-        if (result?.mocked) {
-          await createAuditEvent(payload.company_id || currentCompanyId, {
-            action: 'whatsapp_simulated',
-            entity_type: 'cobrancas_whatsapp',
-            entity_id: result?.chargeId || payload.registro_id || payload.id,
-            title: 'Cobranca simulada',
-            description: `Cobranca simulada para ${payload.cliente || 'cliente selecionado'}.`,
+        await incrementUsage(companyId, 'charges_month', 1);
+        try {
+          await createNotification(companyId, {
+            type: simulate ? 'charge_sent' : 'charge_sent',
+            title: simulate ? 'Cobranca registrada' : 'Cobranca enviada',
+            message: simulate
+              ? `A cobranca do documento ${payload.documento || payload.numero_boleto || 'sem identificacao'} foi registrada em modo simulacao.`
+              : `A cobranca do documento ${payload.documento || payload.numero_boleto || 'sem identificacao'} foi enviada com sucesso.`,
+            severity: simulate ? 'info' : 'success',
             metadata: {
-              mocked: true,
-              status: result?.status,
-              mode: 'manual',
-              documento: payload.documento || payload.numero_boleto || '',
+              registro_id: registroId,
+              mocked: simulate,
+              force_resend: forceResend,
             },
-            severity: 'info',
           });
-        } else {
-          await auditLog.whatsappSent(
-            payload.company_id || currentCompanyId,
-            result?.chargeId || payload.registro_id || payload.id,
-            { mocked: false, status: result?.status, mode: 'manual' },
-            currentUserId
-          );
+        } catch {
+          // Nao interrompe o fluxo principal de cobranca.
         }
-        const nextCharges = await financeService.getCharges(currentCompanyId);
-        setChargeRows(nextCharges);
-        await refreshAllData();
-        if (result?.mocked) {
-          await incrementUsage(payload.company_id || currentCompanyId, 'charges_month', 1);
-          try {
-            await createNotification(payload.company_id || currentCompanyId, {
-              type: 'charge_sent',
-              title: 'Cobranca registrada',
-              message: `A cobranca do documento ${payload.documento || payload.numero_boleto || 'sem identificacao'} foi registrada em modo simulacao.`,
-              severity: 'info',
-              metadata: {
-                registro_id: payload.registro_id || payload.id || null,
-                mocked: true,
-              },
-            });
-          } catch {
-            // Nao interrompe o fluxo principal de cobranca.
-          }
-          showToast('aviso', 'Cobranca registrada em modo teste (mock_enviado). Configure os secrets Z-API para envio real.');
-        } else if (result?.status === 'sem telefone') {
-          showToast('aviso', 'Registro sem telefone - cobranca nao enviada.');
-        } else {
-          await incrementUsage(payload.company_id || currentCompanyId, 'charges_month', 1);
-          try {
-            await createNotification(payload.company_id || currentCompanyId, {
-              type: 'charge_sent',
-              title: 'Cobranca enviada',
-              message: `A cobranca do documento ${payload.documento || payload.numero_boleto || 'sem identificacao'} foi enviada com sucesso.`,
-              severity: 'success',
-              metadata: {
-                registro_id: payload.registro_id || payload.id || null,
-                mocked: false,
-              },
-            });
-          } catch {
-            // Nao interrompe o fluxo principal de cobranca.
-          }
-          showToast('sucesso', 'Cobranca enviada com sucesso via WhatsApp.');
-        }
+
+        showToast(
+          simulate ? 'aviso' : 'sucesso',
+          result?.message ||
+            (simulate
+              ? 'Simulacao executada, nenhuma mensagem real enviada.'
+              : 'Mensagem enviada via WhatsApp')
+        );
+
+        return result;
       } catch (error) {
         await auditLog.whatsappFailed(
-          row.company_id || currentCompanyId,
-          row.registro_id || row.id || null,
+          companyId,
+          registroId,
           {
             error: error.message || 'Falha ao enviar a cobranca via WhatsApp.',
             mode: 'manual',
-            documento: row.documento || row.numero_boleto || '',
+            documento: payload.documento || payload.numero_boleto || '',
+            force_resend: forceResend,
           },
           currentUserId
         );
         try {
-          await createNotification(row.company_id || currentCompanyId, {
+          await createNotification(companyId, {
             type: 'charge_failed',
             title: 'Falha no envio da cobranca',
             message: error.message || 'Falha ao enviar a cobranca via WhatsApp.',
             severity: 'danger',
             metadata: {
-              registro_id: row.registro_id || row.id || null,
+              registro_id: registroId,
+              force_resend: forceResend,
             },
           });
         } catch {
           // Nao sobrescreve o erro principal de cobranca.
         }
-        showToast('erro', error.message || 'Falha ao enviar cobranca via WhatsApp.');
+        throw error;
+      } finally {
+        setSendingChargeIds((current) => current.filter((item) => item !== registroId));
       }
     },
-    [chargeRows, currentCompanyId, currentUserId, currentUserRole, refreshAllData, showToast]
+    [billingExecutionMode, chargeRows, currentCompanyId, currentUserId, currentUserRole, sendingChargeIds, showToast]
   );
 
   const handleChargePreviewMessageChange = useCallback((value) => {
@@ -1171,20 +1202,12 @@ export default function App() {
     );
 
     try {
-      const data = await sendSingleCharge(payload.company_id, registroId, {
+      const data = await handleSendCharge(nextRow, {
         simulate,
-        custom_message: nextRow.mensagem || '',
-        message: nextRow.mensagem || '',
+        customMessage: nextRow.mensagem || '',
       });
+      if (data?.cancelled) return;
       console.log('[SEND MODAL WHATSAPP RESPONSE]', data, null);
-      await refreshAllData();
-      showToast(
-        simulate ? 'aviso' : 'sucesso',
-        data?.message ||
-          (simulate
-            ? 'Simulacao executada, nenhuma mensagem real enviada.'
-            : 'Mensagem enviada via WhatsApp')
-      );
       setChargePreviewModal(null);
     } catch (error) {
       console.log('[SEND MODAL WHATSAPP RESPONSE]', null, error);
@@ -1192,7 +1215,7 @@ export default function App() {
     } finally {
       setChargePreviewSending(false);
     }
-  }, [billingExecutionMode, chargePreviewModal, currentCompanyId, refreshAllData, showToast]);
+  }, [billingExecutionMode, chargePreviewModal, currentCompanyId, handleSendCharge, showToast]);
 
   const handleChargePreviewCollectionGenerated = useCallback(
     async (result) => {
@@ -1537,6 +1560,8 @@ export default function App() {
             onBillingExecutionModeChange={setBillingExecutionMode}
             rows={chargeRows}
             onGenerateMessage={handleGenerateChargeMessage}
+            onSend={handleSendCharge}
+            sendingChargeIds={sendingChargeIds}
             userRole={empresa.userRole}
             onToast={showToast}
           />

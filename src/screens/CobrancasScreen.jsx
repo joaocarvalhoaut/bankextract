@@ -1,9 +1,8 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Loader2, MessageCircleMore, PhoneCall, PhoneOff, Send, ShieldCheck } from 'lucide-react';
 import DataTable from '../components/DataTable';
 import { formatCurrencyBRL } from '../utils/format';
 import { canUserPerformAction } from '../security/permissions';
-import { sendSingleCharge } from '../services/billingAutomationService';
 
 const statusTone = {
   pendente: 'bg-slate-100 text-slate-700 ring-slate-200',
@@ -17,12 +16,13 @@ export default function CobrancasScreen({
   onBillingExecutionModeChange,
   rows,
   onGenerateMessage,
+  onSend,
+  sendingChargeIds = [],
   userRole = 'operador',
   onToast,
 }) {
   const canManageCharges = canUserPerformAction(userRole, 'manage_charges');
   const simulationMode = billingExecutionMode !== 'real';
-  const [sendingId, setSendingId] = useState('');
   const pending = rows.filter((row) => row.status === 'pendente').length;
   const withoutPhone = rows.filter((row) => row.status === 'sem telefone').length;
   const sent = rows.filter((row) => row.status === 'enviada').length;
@@ -57,26 +57,17 @@ export default function CobrancasScreen({
       };
 
       console.log('[SEND SINGLE CHARGE REQUEST - COBRANCAS]', payload);
-      setSendingId(registroId);
 
       try {
-        const data = await sendSingleCharge(companyId, registroId, { simulate: simulationMode });
+        const data = await onSend?.(row, { simulate: simulationMode });
+        if (data?.cancelled) return;
         console.log('[SEND SINGLE CHARGE RESPONSE - COBRANCAS]', data, null);
-        onToast?.(
-          simulationMode ? 'aviso' : 'sucesso',
-          data?.message ||
-            (simulationMode
-              ? 'Simulacao executada, nenhuma mensagem real enviada'
-              : 'Mensagem enviada via WhatsApp')
-        );
       } catch (error) {
         console.log('[SEND SINGLE CHARGE RESPONSE - COBRANCAS]', null, error);
         onToast?.('erro', error.message || 'Falha ao enviar cobranca via WhatsApp.');
-      } finally {
-        setSendingId('');
       }
     },
-    [canManageCharges, companyId, onToast, simulationMode]
+    [canManageCharges, companyId, onSend, onToast, simulationMode]
   );
 
   const columns = useMemo(() => [
@@ -123,8 +114,9 @@ export default function CobrancasScreen({
       label: 'Acoes',
       render: (row) => {
         const registroId = String(row?.financeiro_id || row?.registro_id || row?.id || '').trim();
-        const sending = sendingId === registroId;
-        const sendDisabled = !canManageCharges || !companyId || !registroId || Boolean(sendingId);
+        const sending = sendingChargeIds.includes(registroId);
+        const alreadySent = String(row?.status || '') === 'enviada';
+        const sendDisabled = !canManageCharges || !companyId || !registroId || sending;
 
         return (
           <div className="flex gap-2">
@@ -147,20 +139,24 @@ export default function CobrancasScreen({
                   ? 'Seu perfil nao pode enviar cobrancas.'
                   : !companyId
                     ? 'Selecione uma empresa especifica para enviar.'
+                    : sending
+                      ? 'Esta cobranca ja esta sendo enviada.'
                     : !registroId
                       ? 'Esta cobranca nao possui um titulo financeiro associado.'
-                      : ''
+                      : alreadySent
+                        ? 'Esta cobranca ja foi enviada. Clique para confirmar o reenvio.'
+                        : ''
               }
               className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {sending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-              Enviar
+              {sending ? 'Enviando...' : alreadySent ? 'Enviada' : 'Enviar'}
             </button>
           </div>
         );
       },
     },
-  ], [canManageCharges, companyId, handleSendSingleCharge, onGenerateMessage, sendingId]);
+  ], [canManageCharges, companyId, handleSendSingleCharge, onGenerateMessage, sendingChargeIds]);
 
   const stats = [
     { label: 'Cobrancas pendentes', value: pending, color: 'text-slate-900', bar: 'from-slate-400 to-slate-500', Icon: PhoneOff },
