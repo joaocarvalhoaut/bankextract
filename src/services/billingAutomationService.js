@@ -124,15 +124,45 @@ export async function getBillingAutomationOverview(companyId) {
 }
 
 export async function runBillingAutomationNow(companyId, options = {}) {
-  return invokeBillingAutomation(
-    {
-      action: 'run',
-      company_id: companyId,
-      manual: true,
-      simulate: options.simulate === true ? true : false,
-    },
-    'Falha ao executar a regua de cobranca.'
-  );
+  const simulate = options.simulate === true ? true : false;
+
+  if (!companyId) {
+    throw new Error('Selecione uma empresa especifica para enviar as cobrancas.');
+  }
+
+  const body = {
+    action: 'run_now',
+    companyId,
+    company_id: companyId,
+    manual: true,
+    simulate,
+  };
+
+  console.log('[BILLING RUN NOW REQUEST]', { companyId, simulate });
+
+  if (!supabase) {
+    throw new Error('Supabase nao configurado.');
+  }
+
+  const { data, error } = await supabase.functions.invoke('billing-automation', { body });
+  console.log('[BILLING RUN NOW RESPONSE]', data, error);
+
+  if (error) {
+    throw buildError(error, 'Falha ao executar a regua de cobranca.');
+  }
+
+  const isSuccess = data?.ok === true || data?.success === true;
+  const isFailure = data?.ok === false || data?.success === false;
+
+  if (isFailure) {
+    throw formatEdgeError(data, 'Falha ao executar a regua de cobranca.');
+  }
+
+  if (!isSuccess) {
+    throw formatEdgeError(data, 'Falha ao executar a regua de cobranca.');
+  }
+
+  return data;
 }
 
 export async function reprocessBillingFailures(companyId) {

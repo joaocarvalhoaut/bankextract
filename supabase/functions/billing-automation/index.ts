@@ -3563,7 +3563,9 @@ Deno.serve(async (req: Request) => {
 
     const body = await req.json().catch(() => ({}));
     action = String(body?.action || 'overview');
-    companyId = body?.company_id ? String(body.company_id) : null;
+    companyId = body?.company_id
+      ? String(body.company_id)
+      : (body?.companyId ? String(body.companyId) : null);
     manual = body?.manual === true;
     simulate = body?.simulate === true;
     console.log('billing-automation request', { action, company_id: companyId });
@@ -3588,6 +3590,7 @@ Deno.serve(async (req: Request) => {
       'sync_sheet',
       'sync_boleto_drive_intelligent',
       'run',
+      'run_now',
       'reprocess_failures',
       'simulate_charge_item',
     ].includes(action);
@@ -4397,10 +4400,11 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ ok: true, message: 'Preview de mídia validado. O envio real acontece no backend da régua.' });
     }
 
-    if (action === 'run' || action === 'reprocess_failures') {
+    if (action === 'run' || action === 'run_now' || action === 'reprocess_failures') {
       const companies = await resolveTargetCompanies(admin, companyId, auth.bypass);
       const nowTime = currentTimeInSaoPaulo();
-      const isManualRun = action === 'run' && manual === true && !cronSecret;
+      const normalizedRunAction = action === 'run_now' ? 'run' : action;
+      const isManualRun = normalizedRunAction === 'run' && manual === true && !cronSecret;
       let sent = 0;
       let sentSimulated = 0;
       let ignored = 0;
@@ -4413,7 +4417,7 @@ Deno.serve(async (req: Request) => {
 
       for (const targetCompanyId of companies) {
         const companyName = await getCompanyName(admin, targetCompanyId);
-        if (action === 'run') {
+        if (normalizedRunAction === 'run') {
           await syncSheetForCompany(admin, targetCompanyId, googleToken).catch(() => null);
           await syncDriveForCompany(admin, targetCompanyId, googleToken).catch(() => null);
         }
@@ -4424,7 +4428,7 @@ Deno.serve(async (req: Request) => {
           .eq('empresa_id', targetCompanyId)
           .maybeSingle();
 
-        if (!config?.ativo && action === 'run') {
+        if (!config?.ativo && normalizedRunAction === 'run') {
           companyResults.push({ company_id: targetCompanyId, sent: 0, ignored: 0, errors: 0 });
           debugByCompany.push({
             company_id: targetCompanyId,
@@ -4510,7 +4514,7 @@ Deno.serve(async (req: Request) => {
         }
 
         const scheduledTime = config?.hora_execucao || DEFAULT_EXECUTION_TIME;
-        if (action === 'run' && !isManualRun && nowTime.slice(0, 2) !== scheduledTime.slice(0, 2)) {
+        if (normalizedRunAction === 'run' && !isManualRun && nowTime.slice(0, 2) !== scheduledTime.slice(0, 2)) {
           companyResults.push({ company_id: targetCompanyId, sent: 0, ignored: 0, errors: 0 });
           debugByCompany.push({
             company_id: targetCompanyId,
@@ -4586,7 +4590,7 @@ Deno.serve(async (req: Request) => {
             googleToken,
             folderId,
             todayIso,
-            action === 'reprocess_failures',
+            normalizedRunAction === 'reprocess_failures',
             simulate,
             companyName,
           );
@@ -4612,7 +4616,7 @@ Deno.serve(async (req: Request) => {
         await admin.from('audit_logs').insert({
           company_id: targetCompanyId,
           user_id: auth.userId,
-          action: action === 'run' ? 'billing_automation_run' : 'billing_automation_reprocess',
+          action: normalizedRunAction === 'run' ? 'billing_automation_run' : 'billing_automation_reprocess',
           entity: 'logs_cobranca',
           metadata: { sent: companySent, sent_simulated: companySentSimulated, ignored: companyIgnored, errors: companyErrors, company_id: targetCompanyId, simulate },
         }).then(() => {}).catch(() => {});
@@ -4622,7 +4626,7 @@ Deno.serve(async (req: Request) => {
 
       return jsonResponse({
         ok: true,
-        message: action === 'run' ? 'Régua executada com sucesso.' : 'Falhas reprocessadas com sucesso.',
+        message: normalizedRunAction === 'run' ? 'Régua executada com sucesso.' : 'Falhas reprocessadas com sucesso.',
         result: { sent, sent_simulated: sentSimulated, boletos_encontrados: boletosEncontrados, mensagens_geradas: mensagensGeradas, arquivos_anexados: arquivosAnexados, ignored, errors, companies: companyResults },
         debug: companyId
           ? (debugByCompany.find((item) => item.company_id === companyId) || null)
