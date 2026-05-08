@@ -69,10 +69,10 @@ function formatDateTime(value) {
 function formatRelativeSyncTime(value) {
   if (!value) {
     return {
-      label: 'Nunca sincronizado',
+      label: 'Nunca',
       tone: 'neutral',
       icon: '⚪',
-      health: 'Offline',
+      health: 'Aguardando sincronizacao',
     };
   }
 
@@ -80,9 +80,9 @@ function formatRelativeSyncTime(value) {
   if (Number.isNaN(date.getTime())) {
     return {
       label: 'Sincronizacao sem horario valido',
-      tone: 'warning',
+      tone: 'success',
       icon: '🟡',
-      health: 'Atencao',
+      health: 'Saudavel',
     };
   }
 
@@ -110,9 +110,9 @@ function formatRelativeSyncTime(value) {
   const diffHours = Math.max(1, Math.floor(diffMinutes / 60));
   return {
     label: `Ultima sincronizacao ha ${diffHours}h`,
-    tone: 'danger',
+    tone: 'warning',
     icon: '🔴',
-    health: 'Offline',
+    health: 'Atencao',
   };
 }
 
@@ -389,6 +389,8 @@ export default function GoogleSheetsConfig({
   const effectiveLastImportAt = statusSnapshot?.last_import_at || '';
   const syncMeta = formatRelativeSyncTime(effectiveLastSync);
   const importMeta = formatRelativeSyncTime(effectiveLastImportAt);
+  const hasRealSyncError = Boolean(statusSnapshot?.last_source_sync_error);
+  const isConfigured = Boolean(hasConfig && resolvedSheetName && resolvedSheetName !== 'Nenhuma aba selecionada');
   const syncHealthMeta =
     connectionState === 'syncing'
       ? { ...syncMeta, health: 'Atencao', tone: 'warning', icon: '🟡' }
@@ -399,6 +401,17 @@ export default function GoogleSheetsConfig({
           statusSnapshot?.last_source_sync_error
         ? { ...syncMeta, health: 'Offline', tone: 'danger', icon: '🔴' }
         : syncMeta;
+  const effectiveSyncHealthMeta =
+    connectionState === 'syncing'
+      ? { ...syncMeta, health: 'Aguardando sincronizacao', tone: 'neutral', icon: '⚪' }
+      : connectionState === 'error' || connectionState === 'erro' || hasRealSyncError
+        ? { ...syncMeta, health: 'Erro', tone: 'danger', icon: '🔴' }
+        : !isConfigured ||
+            connectionState === 'missing_spreadsheet' ||
+            connectionState === 'missing_sheet' ||
+            !effectiveLastSync
+          ? { ...syncMeta, health: 'Aguardando sincronizacao', tone: 'neutral', icon: '⚪' }
+          : syncMeta;
   const resolvedStatus =
     connectionState === 'syncing'
       ? { label: 'Sincronizando', tone: 'border-blue-200 bg-blue-50 text-blue-700' }
@@ -431,7 +444,7 @@ export default function GoogleSheetsConfig({
       danger: 'border-red-200 bg-red-50 text-red-700',
       neutral: 'border-slate-200 bg-slate-50 text-slate-600',
     };
-    const syncToneClass = healthStyles[syncHealthMeta.tone] || healthStyles.neutral;
+    const syncToneClass = healthStyles[effectiveSyncHealthMeta.tone] || healthStyles.neutral;
 
     return (
       <section className="group rounded-[32px] border border-slate-200/90 bg-white p-7 shadow-[0_22px_70px_rgba(15,23,42,0.08)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_28px_90px_rgba(15,23,42,0.1)] lg:p-8">
@@ -441,7 +454,7 @@ export default function GoogleSheetsConfig({
           </div>
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-3">
-              <h3 className="text-xl font-semibold tracking-tight text-slate-950">Google Drive / Google Sheets</h3>
+              <h3 className="text-xl font-semibold tracking-tight text-slate-950">Google Sheets</h3>
               <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${resolvedStatus.tone}`}>
                 {resolvedStatus.label}
               </span>
@@ -453,69 +466,96 @@ export default function GoogleSheetsConfig({
               ) : null}
             </div>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-              Conecte a planilha operacional da empresa <span className="font-semibold text-slate-900">{empresaNome || 'ativa'}</span> e acompanhe a sincronizacao com a credencial segura do ambiente.
+              Conecte a planilha operacional da empresa <span className="font-semibold text-slate-900">{empresaNome || 'ativa'}</span> e acompanhe a sincronizacao automatica dos dados com seguranca.
             </p>
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
-          <div className="rounded-[24px] border border-slate-200 bg-slate-50/90 p-5 shadow-sm">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Status</p>
-            <p className="mt-2 text-sm font-semibold text-slate-900">{resolvedStatus.label}</p>
-          </div>
-          <div className="rounded-[24px] border border-slate-200 bg-slate-50/90 p-5 shadow-sm">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Email Google conectado</p>
-            <p className="mt-2 break-all text-sm font-semibold text-slate-900">{resolvedGoogleEmail || 'Credencial tecnica do ambiente'}</p>
-          </div>
-          <div className="rounded-[24px] border border-slate-200 bg-slate-50/90 p-5 shadow-sm">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Planilha selecionada</p>
-            <p className="mt-2 text-sm font-semibold text-slate-900">{resolvedSpreadsheetName}</p>
-          </div>
-          <div className="rounded-[24px] border border-slate-200 bg-slate-50/90 p-5 shadow-sm">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Aba selecionada</p>
-            <p className="mt-2 text-sm font-semibold text-slate-900">{resolvedSheetName}</p>
-          </div>
-          <div className={`rounded-[24px] border p-5 shadow-sm ${syncToneClass}`}>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ultima sincronizacao</p>
-            <p className="mt-2 text-sm font-semibold">{`${syncHealthMeta.icon} ${syncHealthMeta.label}`}</p>
-            <p className="mt-1 text-xs opacity-80">{formatDateTime(effectiveLastSync)}</p>
-          </div>
-        </div>
-
-        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-                <Database size={16} />
-              </div>
+        <div className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-2">
+          <div className="rounded-[28px] border border-slate-200 bg-slate-50/70 p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Registros hoje</p>
-                <p className="mt-1 text-lg font-semibold text-slate-950">{statusSnapshot?.records_today ?? googleMeta?.records_today ?? 0} registros</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Conexao</p>
+                <p className="mt-1 text-sm text-slate-500">Visao da configuracao ativa da planilha.</p>
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm ring-1 ring-slate-200">
+                <Wifi size={16} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Status</p>
+                <p className="mt-2 text-sm font-semibold text-slate-900">{resolvedStatus.label}</p>
+              </div>
+              <div className="rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Email Google conectado</p>
+                <p className="mt-2 break-all text-sm font-semibold text-slate-900">{resolvedGoogleEmail || 'Credencial tecnica do ambiente'}</p>
+              </div>
+              <div className="rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Planilha selecionada</p>
+                <p className="mt-2 text-sm font-semibold text-slate-900">{resolvedSpreadsheetName}</p>
+              </div>
+              <div className="rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Aba selecionada</p>
+                <p className="mt-2 text-sm font-semibold text-slate-900">{resolvedSheetName}</p>
               </div>
             </div>
           </div>
 
-          <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
-                <Clock3 size={16} />
-              </div>
+          <div className="rounded-[28px] border border-slate-200 bg-slate-50/70 p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ultima importacao</p>
-                <p className="mt-1 text-lg font-semibold text-slate-950">{`${importMeta.icon} ${importMeta.label}`}</p>
-                <p className="mt-1 text-xs text-slate-500">{statusSnapshot?.last_import_file || 'Nenhuma importacao recente'}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Operacao</p>
+                <p className="mt-1 text-sm text-slate-500">Indicadores operacionais e saude da sincronizacao.</p>
               </div>
-            </div>
-          </div>
-
-          <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${syncHealthMeta.tone === 'success' ? 'bg-emerald-50 text-emerald-700' : syncHealthMeta.tone === 'warning' ? 'bg-amber-50 text-amber-700' : syncHealthMeta.tone === 'danger' ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-700'}`}>
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm ring-1 ring-slate-200">
                 <Activity size={16} />
               </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Saude conexao</p>
-                <p className="mt-1 text-lg font-semibold text-slate-950">{syncHealthMeta.health}</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className={`rounded-2xl px-4 py-4 shadow-sm ring-1 ring-inset ${syncToneClass}`}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ultima sincronizacao</p>
+                <p className="mt-2 text-sm font-semibold">{`${effectiveSyncHealthMeta.icon} ${syncMeta.label}`}</p>
+                <p className="mt-1 text-xs opacity-80">{formatDateTime(effectiveLastSync)}</p>
+              </div>
+
+              <div className="rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                    <Database size={16} />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Registros hoje</p>
+                    <p className="mt-1 text-lg font-semibold text-slate-950">{statusSnapshot?.records_today ?? googleMeta?.records_today ?? 0} registros</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+                    <Clock3 size={16} />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ultima importacao</p>
+                    <p className="mt-1 text-lg font-semibold text-slate-950">{`${importMeta.icon} ${importMeta.label}`}</p>
+                    <p className="mt-1 text-xs text-slate-500">{statusSnapshot?.last_import_file || 'Nenhuma importacao recente'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
+                <div className="flex items-center gap-3">
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${effectiveSyncHealthMeta.tone === 'success' ? 'bg-emerald-50 text-emerald-700' : effectiveSyncHealthMeta.tone === 'warning' ? 'bg-amber-50 text-amber-700' : effectiveSyncHealthMeta.tone === 'danger' ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-700'}`}>
+                    <Activity size={16} />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Saude conexao</p>
+                    <p className="mt-1 text-lg font-semibold text-slate-950">{effectiveSyncHealthMeta.health}</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

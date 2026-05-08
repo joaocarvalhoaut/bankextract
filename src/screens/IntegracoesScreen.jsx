@@ -706,7 +706,7 @@ export default function IntegracoesScreen({
       setGoogleActive(hasGoogleActive);
     } catch (error) {
       setGoogleActive(false);
-      onToast?.('erro', error.message || 'Falha ao carregar o status do Google Drive / Google Sheets.');
+      onToast?.('erro', error.message || 'Falha ao carregar o status do Google Sheets.');
     }
   }, [companyId, globalMode, onToast]);
 
