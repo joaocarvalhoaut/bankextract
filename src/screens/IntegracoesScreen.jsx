@@ -734,25 +734,25 @@ export default function IntegracoesScreen({
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-soft">
+            <div className="surface-light rounded-2xl border-blue-200 bg-blue-50 p-4 shadow-soft">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-700">Ativacao</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900">{activeIntegrations}/2 integracoes ativas</p>
+              <p className="text-on-light mt-2 text-sm font-semibold">{activeIntegrations}/2 integracoes ativas</p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Escopo</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900">
+            <div className="surface-light rounded-2xl p-4 shadow-soft">
+              <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Escopo</p>
+              <p className="text-on-light mt-2 text-sm font-semibold">
                 {globalMode ? 'Modo global bloqueia configuracoes por empresa' : companyName || 'Sem empresa ativa'}
               </p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Perfil atual</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900">
+            <div className="surface-light rounded-2xl p-4 shadow-soft">
+              <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Perfil atual</p>
+              <p className="text-on-light mt-2 text-sm font-semibold">
                 {canManageIntegrations ? 'Pode gerenciar integracoes' : 'Somente visualiza status'}
               </p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Credenciais</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900">Seguras no backend</p>
+            <div className="surface-light rounded-2xl p-4 shadow-soft">
+              <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Credenciais</p>
+              <p className="text-on-light mt-2 text-sm font-semibold">Seguras no backend</p>
             </div>
           </div>
         </div>

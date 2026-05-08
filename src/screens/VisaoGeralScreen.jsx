@@ -583,29 +583,29 @@ export default function VisaoGeralScreen({
               <WalletCards size={13} />
               Carteira financeira
             </div>
-            <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 lg:text-4xl">
+            <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-slate-50 lg:text-4xl">
               Visao consolidada da carteira para operar, exportar e limpar com seguranca.
             </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 lg:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-300 lg:text-base">
               Esta tela concentra registros reais, filtros comerciais e acoes operacionais com company_id, batch_id e
               permissoes por role.
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+            <div className="surface-light rounded-2xl p-4 shadow-soft">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Escopo atual</p>
-              <p className="mt-2 text-sm font-semibold text-slate-50">
+              <p className="text-on-light mt-2 text-sm font-semibold">
                 {globalMode ? 'Todas as empresas' : activeCompanyName || 'Nenhuma empresa ativa'}
               </p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+            <div className="surface-light rounded-2xl p-4 shadow-soft">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Registros visiveis</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-50">{rows.length}</p>
+              <p className="text-on-light mt-2 text-2xl font-semibold">{rows.length}</p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+            <div className="surface-light rounded-2xl p-4 shadow-soft">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Acoes destrutivas</p>
-              <p className="mt-2 text-sm font-semibold text-slate-50">
+              <p className="text-on-light mt-2 text-sm font-semibold">
                 {globalMode ? 'Bloqueadas no modo global' : canClearView ? 'Controladas por role' : 'Restritas'}
               </p>
             </div>

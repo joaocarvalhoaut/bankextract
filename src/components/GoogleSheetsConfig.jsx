@@ -416,7 +416,7 @@ export default function GoogleSheetsConfig({
           connectionState === 'missing_spreadsheet' ||
           connectionState === 'missing_sheet' ||
           statusSnapshot?.last_source_sync_error
-        ? { ...syncMeta, health: 'Offline', tone: 'danger', icon: '🔴' }
+        ? { ...syncMeta, health: 'Erro', tone: 'danger', icon: '🔴' }
         : syncMeta;
   const effectiveSyncHealthMeta =
     connectionState === 'syncing'
@@ -489,11 +489,11 @@ export default function GoogleSheetsConfig({
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-2">
-          <div className="rounded-[28px] border border-slate-200 bg-slate-50/70 p-5 shadow-sm">
+          <div className="surface-light rounded-[28px] bg-slate-50/70 p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Conexao</p>
-                <p className="mt-1 text-sm text-slate-500">Visao da configuracao ativa da planilha.</p>
+                <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Conexao</p>
+                <p className="text-on-light-muted mt-1 text-sm">Visao da configuracao ativa da planilha.</p>
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm ring-1 ring-slate-200">
                 <Wifi size={16} />
@@ -501,35 +501,35 @@ export default function GoogleSheetsConfig({
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Status</p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">{resolvedStatus.label}</p>
+              <div className="surface-light rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
+                <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Status</p>
+                <p className="text-on-light mt-2 text-sm font-semibold">{resolvedStatus.label}</p>
               </div>
-              <div className="rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Email Google conectado</p>
+              <div className="surface-light rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
+                <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Email Google conectado</p>
                 <p
                   title={resolvedGoogleEmail || 'Credencial tecnica do ambiente'}
-                  className="mt-2 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold text-slate-900"
+                  className="text-on-light mt-2 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold"
                 >
                   {resolvedGoogleEmail || 'Credencial tecnica do ambiente'}
                 </p>
               </div>
-              <div className="rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Planilha selecionada</p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">{resolvedSpreadsheetName}</p>
+              <div className="surface-light rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
+                <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Planilha selecionada</p>
+                <p className="text-on-light mt-2 text-sm font-semibold">{resolvedSpreadsheetName}</p>
               </div>
-              <div className="rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Aba selecionada</p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">{resolvedSheetName}</p>
+              <div className="surface-light rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
+                <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Aba selecionada</p>
+                <p className="text-on-light mt-2 text-sm font-semibold">{resolvedSheetName}</p>
               </div>
             </div>
           </div>
 
-          <div className="rounded-[28px] border border-slate-200 bg-slate-50/70 p-5 shadow-sm">
+          <div className="surface-light rounded-[28px] bg-slate-50/70 p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Operacao</p>
-                <p className="mt-1 text-sm text-slate-500">Indicadores operacionais e saude da sincronizacao.</p>
+                <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Operacao</p>
+                <p className="text-on-light-muted mt-1 text-sm">Indicadores operacionais e saude da sincronizacao.</p>
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-slate-700 shadow-sm ring-1 ring-slate-200">
                 <Activity size={16} />
@@ -538,44 +538,44 @@ export default function GoogleSheetsConfig({
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className={`rounded-2xl px-4 py-4 shadow-sm ring-1 ring-inset ${syncToneClass}`}>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ultima sincronizacao</p>
+                <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Ultima sincronizacao</p>
                 <p className="mt-2 text-sm font-semibold">{`${effectiveSyncHealthMeta.icon} ${syncMeta.label}`}</p>
                 <p className="mt-1 text-xs opacity-80">{formatDateTime(effectiveLastSync)}</p>
               </div>
 
-              <div className="rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
+              <div className="surface-light rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
                     <Database size={16} />
                   </div>
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Registros hoje</p>
-                    <p className="mt-1 text-lg font-semibold text-slate-950">{statusSnapshot?.records_today ?? googleMeta?.records_today ?? 0} registros</p>
+                    <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Registros hoje</p>
+                    <p className="text-on-light mt-1 text-lg font-semibold">{statusSnapshot?.records_today ?? googleMeta?.records_today ?? 0} registros</p>
                   </div>
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
+              <div className="surface-light rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
                     <Clock3 size={16} />
                   </div>
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ultima importacao</p>
-                    <p className="mt-1 text-lg font-semibold text-slate-950">{`${importMeta.icon} ${importMeta.label}`}</p>
-                    <p className="mt-1 text-xs text-slate-500">{statusSnapshot?.last_import_file || 'Nenhuma importacao recente'}</p>
+                    <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Ultima importacao</p>
+                    <p className="text-on-light mt-1 text-lg font-semibold">{`${importMeta.icon} ${importMeta.label}`}</p>
+                    <p className="text-on-light-muted mt-1 text-xs">{statusSnapshot?.last_import_file || 'Nenhuma importacao recente'}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
+              <div className="surface-light rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-200/70">
                 <div className="flex items-center gap-3">
                   <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${effectiveSyncHealthMeta.tone === 'success' ? 'bg-emerald-50 text-emerald-700' : effectiveSyncHealthMeta.tone === 'warning' ? 'bg-amber-50 text-amber-700' : effectiveSyncHealthMeta.tone === 'danger' ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-700'}`}>
                     <Activity size={16} />
                   </div>
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Saude conexao</p>
-                    <p className="mt-1 text-lg font-semibold text-slate-950">{effectiveSyncHealthMeta.health}</p>
+                    <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Saude conexao</p>
+                    <p className="text-on-light mt-1 text-lg font-semibold">{effectiveSyncHealthMeta.health}</p>
                   </div>
                 </div>
               </div>
@@ -602,9 +602,9 @@ export default function GoogleSheetsConfig({
               onChange={(e) => setSpreadsheetId(e.target.value)}
               placeholder="Cole o ID ou a URL completa da planilha"
               disabled={anyLoading || !canManage}
-              className="input-premium w-full disabled:cursor-not-allowed disabled:opacity-60"
+              className="input-light w-full rounded-xl px-3 py-2.5 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60"
             />
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="text-on-light-muted mt-2 text-xs">
               Cole a URL da planilha ou apenas o ID do Google Sheets.
             </p>
           </label>
@@ -617,9 +617,9 @@ export default function GoogleSheetsConfig({
               onChange={(e) => setSheetName(e.target.value)}
               placeholder="Pagina1"
               disabled={anyLoading || !canManage}
-              className="input-premium w-full disabled:cursor-not-allowed disabled:opacity-60"
+              className="input-light w-full rounded-xl px-3 py-2.5 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60"
             />
-            <p className="mt-2 text-xs text-slate-500">Informe o nome exato da aba que recebera a sincronizacao.</p>
+            <p className="text-on-light-muted mt-2 text-xs">Informe o nome exato da aba que recebera a sincronizacao.</p>
           </label>
         </div>
 

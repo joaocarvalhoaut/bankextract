@@ -143,6 +143,20 @@ body {
   box-shadow: var(--be-shadow-lg);
 }
 
+.surface-dark {
+  background: #132742;
+  border: 1px solid rgba(20, 216, 255, 0.12);
+  box-shadow: var(--be-shadow-md);
+  color: #f8fafc;
+}
+
+.surface-light {
+  background: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  color: #071120;
+}
+
 .text-brand {
   color: #14d8ff;
 }
@@ -321,119 +335,168 @@ button:active:not(:disabled) {
   color: #94a3b8;
 }
 
+.text-on-dark {
+  color: #f8fafc;
+}
+
+.text-on-dark-muted {
+  color: #cbd5e1;
+}
+
+.text-on-light {
+  color: #071120;
+}
+
+.text-on-light-muted {
+  color: #475569;
+}
+
+.input-light {
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  color: #071120;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.input-light::placeholder {
+  color: #64748b;
+}
+
+.input-light:focus {
+  border-color: rgba(0, 93, 255, 0.5);
+  box-shadow: 0 0 0 4px rgba(0, 93, 255, 0.12);
+}
+
 ::placeholder {
   color: #7c93ad;
 }
 
-.bg-white,
-.bg-white\/80,
-.bg-white\/82,
-.bg-white\/85,
-.bg-white\/90,
-.bg-white\/92 {
+.surface-card,
+.surface-elevated,
+.surface-dark,
+.glass,
+.glass-dark {
+  color: #f8fafc;
+}
+
+.surface-card .bg-white,
+.surface-card .bg-white\/80,
+.surface-card .bg-white\/82,
+.surface-card .bg-white\/85,
+.surface-card .bg-white\/90,
+.surface-card .bg-white\/92,
+.surface-elevated .bg-white,
+.surface-elevated .bg-white\/80,
+.surface-elevated .bg-white\/82,
+.surface-elevated .bg-white\/85,
+.surface-elevated .bg-white\/90,
+.surface-elevated .bg-white\/92,
+.surface-dark .bg-white,
+.surface-dark .bg-white\/80,
+.surface-dark .bg-white\/82,
+.surface-dark .bg-white\/85,
+.surface-dark .bg-white\/90,
+.surface-dark .bg-white\/92 {
   background-color: #132742 !important;
 }
 
-.bg-slate-50,
-.bg-slate-50\/70,
-.bg-slate-50\/80,
-.bg-slate-50\/90,
-.bg-slate-100 {
+.surface-card .bg-slate-50,
+.surface-card .bg-slate-50\/70,
+.surface-card .bg-slate-50\/80,
+.surface-card .bg-slate-50\/90,
+.surface-card .bg-slate-100,
+.surface-elevated .bg-slate-50,
+.surface-elevated .bg-slate-50\/70,
+.surface-elevated .bg-slate-50\/80,
+.surface-elevated .bg-slate-50\/90,
+.surface-elevated .bg-slate-100,
+.surface-dark .bg-slate-50,
+.surface-dark .bg-slate-50\/70,
+.surface-dark .bg-slate-50\/80,
+.surface-dark .bg-slate-50\/90,
+.surface-dark .bg-slate-100 {
   background-color: #10213b !important;
 }
 
-.border-slate-100,
-.border-slate-200,
-.border-slate-200\/80,
-.border-slate-200\/90,
-.border-slate-300 {
+.surface-card .border-slate-100,
+.surface-card .border-slate-200,
+.surface-card .border-slate-200\/80,
+.surface-card .border-slate-200\/90,
+.surface-card .border-slate-300,
+.surface-elevated .border-slate-100,
+.surface-elevated .border-slate-200,
+.surface-elevated .border-slate-200\/80,
+.surface-elevated .border-slate-200\/90,
+.surface-elevated .border-slate-300,
+.surface-dark .border-slate-100,
+.surface-dark .border-slate-200,
+.surface-dark .border-slate-200\/80,
+.surface-dark .border-slate-200\/90,
+.surface-dark .border-slate-300 {
   border-color: rgba(20, 216, 255, 0.1) !important;
 }
 
-.text-slate-950,
-.text-slate-900,
-.text-slate-800,
-.text-black,
-.text-zinc-900,
-.text-neutral-900 {
+.surface-card .text-slate-950,
+.surface-card .text-slate-900,
+.surface-card .text-slate-800,
+.surface-card .text-black,
+.surface-card .text-zinc-900,
+.surface-card .text-neutral-900,
+.surface-elevated .text-slate-950,
+.surface-elevated .text-slate-900,
+.surface-elevated .text-slate-800,
+.surface-elevated .text-black,
+.surface-elevated .text-zinc-900,
+.surface-elevated .text-neutral-900,
+.surface-dark .text-slate-950,
+.surface-dark .text-slate-900,
+.surface-dark .text-slate-800,
+.surface-dark .text-black,
+.surface-dark .text-zinc-900,
+.surface-dark .text-neutral-900 {
   color: #f8fafc !important;
 }
 
-.text-slate-700,
-.text-slate-600,
-.text-zinc-700,
-.text-neutral-700 {
+.surface-card .text-slate-700,
+.surface-card .text-slate-600,
+.surface-card .text-zinc-700,
+.surface-card .text-neutral-700,
+.surface-elevated .text-slate-700,
+.surface-elevated .text-slate-600,
+.surface-elevated .text-zinc-700,
+.surface-elevated .text-neutral-700,
+.surface-dark .text-slate-700,
+.surface-dark .text-slate-600,
+.surface-dark .text-zinc-700,
+.surface-dark .text-neutral-700 {
   color: #e2e8f0 !important;
 }
 
-.text-slate-500,
-.text-slate-400,
-.text-zinc-500,
-.text-neutral-500 {
+.surface-card .text-slate-500,
+.surface-card .text-slate-400,
+.surface-card .text-zinc-500,
+.surface-card .text-neutral-500,
+.surface-elevated .text-slate-500,
+.surface-elevated .text-slate-400,
+.surface-elevated .text-zinc-500,
+.surface-elevated .text-neutral-500,
+.surface-dark .text-slate-500,
+.surface-dark .text-slate-400,
+.surface-dark .text-zinc-500,
+.surface-dark .text-neutral-500 {
   color: #94a3b8 !important;
 }
 
-.bg-emerald-50,
-.bg-emerald-50\/70,
-.bg-emerald-50\/80,
-.bg-emerald-50\/90,
-.bg-emerald-100,
-.bg-green-50,
-.bg-green-100,
-.bg-lime-50,
-.bg-teal-50 {
-  background-color: rgba(0, 93, 255, 0.16) !important;
-}
-
-.border-emerald-100,
-.border-emerald-200,
-.border-emerald-300,
-.border-green-200,
-.border-lime-200,
-.border-teal-200,
-.ring-emerald-100,
-.ring-emerald-200 {
-  border-color: rgba(20, 216, 255, 0.25) !important;
-  --tw-ring-color: rgba(20, 216, 255, 0.25) !important;
-}
-
-.text-emerald-700,
-.text-emerald-800,
-.text-emerald-900,
-.text-green-700,
-.text-lime-700,
-.text-teal-700 {
-  color: #7dd3fc !important;
-}
-
-.bg-emerald-500,
-.bg-emerald-600,
-.bg-green-600,
-.bg-green-700 {
-  background-color: #005dff !important;
-}
-
-.hover\:bg-emerald-50:hover,
-.hover\:bg-emerald-100:hover,
-.hover\:bg-green-700:hover,
-.hover\:bg-emerald-600:hover,
-.hover\:bg-emerald-700:hover,
-.hover\:bg-white:hover,
-.hover\:bg-slate-50:hover,
-.hover\:bg-slate-100:hover {
+.surface-card .hover\:bg-white:hover,
+.surface-card .hover\:bg-slate-50:hover,
+.surface-card .hover\:bg-slate-100:hover,
+.surface-elevated .hover\:bg-white:hover,
+.surface-elevated .hover\:bg-slate-50:hover,
+.surface-elevated .hover\:bg-slate-100:hover,
+.surface-dark .hover\:bg-white:hover,
+.surface-dark .hover\:bg-slate-50:hover,
+.surface-dark .hover\:bg-slate-100:hover {
   background-color: #16304f !important;
-}
-
-.from-emerald-400,
-.from-emerald-500,
-.from-emerald-600 {
-  --tw-gradient-from: #005dff var(--tw-gradient-from-position) !important;
-  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
-}
-
-.to-emerald-500,
-.to-emerald-600 {
-  --tw-gradient-to: #14d8ff var(--tw-gradient-to-position) !important;
 }
 
 .shadow-soft,
