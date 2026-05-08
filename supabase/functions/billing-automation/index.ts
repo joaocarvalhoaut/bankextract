@@ -529,7 +529,7 @@ async function validateZapiConnection(config: {
   const response = await fetch(url, {
     method: 'GET',
     headers: {
-      'Client-Token': config.clientToken,
+      'Client-token': String(config.clientToken || '').trim(),
       'Content-Type': 'application/json',
     },
   });
@@ -661,20 +661,23 @@ function extractQrImageCandidate(data: Record<string, unknown> | null | undefine
 async function getZapiQrCodeData(
   config: { instanceId: string; token: string; clientToken: string },
 ) {
-  const url = `https://api.z-api.io/instances/${config.instanceId}/token/${config.token}/qr-code/image`;
+  const instanceId = String(config.instanceId || '').trim();
+  const token = String(config.token || '').trim();
+  const clientToken = String(config.clientToken || '').trim();
+  const url = `https://api.z-api.io/instances/${instanceId}/token/${token}/qr-code/image`;
   const response = await fetch(url, {
     method: 'GET',
     headers: {
-      'Client-Token': config.clientToken,
+      'Client-token': clientToken,
       'Content-Type': 'application/json',
     },
   });
 
   const contentType = response.headers.get('content-type') || '';
   console.log('[ZAPI QR REQUEST]', {
-    instanceId: config.instanceId,
-    hasToken: Boolean(config.token),
-    hasClientToken: Boolean(config.clientToken),
+    instanceId,
+    hasToken: Boolean(token),
+    hasClientToken: Boolean(clientToken),
   });
 
   if (!response.ok) {
@@ -694,6 +697,13 @@ async function getZapiQrCodeData(
       ok: response.ok,
       data,
     });
+    if (data?.connected === true) {
+      return {
+        connected: true,
+        imageDataUrl: null,
+        raw: data,
+      };
+    }
     const image = extractQrImageCandidate(data);
     if (!image) {
       throw new Error('Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
@@ -723,6 +733,7 @@ async function getZapiQrCodeData(
 
   return {
     imageDataUrl,
+    connected: false,
     raw: { bytes: bytes.length },
   };
 }
@@ -3909,10 +3920,12 @@ Deno.serve(async (req: Request) => {
           ok: true,
           success: true,
           action: 'get_qr_code',
-          connected: false,
-          image_data_url: qrCode.imageDataUrl,
+          connected: qrCode.connected === true,
+          status: qrCode.connected === true ? 'connected' : 'awaiting_qr',
+          message: qrCode.connected === true ? 'WhatsApp ja conectado' : 'QR Code carregado com sucesso.',
+          qrCode: qrCode.connected === true ? null : qrCode.imageDataUrl,
+          image_data_url: qrCode.connected === true ? null : qrCode.imageDataUrl,
           data: qrCode.raw,
-          message: 'QR Code carregado com sucesso.',
         }, 200);
       } catch (error) {
         return jsonResponse({

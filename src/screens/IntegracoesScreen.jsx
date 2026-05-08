@@ -208,7 +208,19 @@ function ZapiIntegrationCard({
     setQrLoading(true);
     try {
       const result = await getCompanyIntegrationQrCode(companyId, form);
-      const qrImage = String(result?.image_data_url || result?.image_url || '');
+      const connected = Boolean(result?.connected);
+      if (connected) {
+        setQrCodeDataUrl('');
+        setForm((current) => ({
+          ...current,
+          connected: true,
+          phone_number: result?.phone_number || current.phone_number,
+        }));
+        setStatus('conectado');
+        onToast?.('sucesso', result?.message || 'WhatsApp ja conectado');
+        return;
+      }
+      const qrImage = String(result?.qrCode || result?.image_data_url || result?.image_url || '');
       if (!qrImage) {
         throw new Error('Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
       }
