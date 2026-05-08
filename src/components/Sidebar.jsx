@@ -10,7 +10,6 @@ import {
   History,
   Link2,
   ListChecks,
-  PanelLeftOpen,
   Settings2,
   Shield,
   Sparkles,
@@ -22,7 +21,7 @@ import {
 import { getPlanMeta, getUpgradeRecommendation, normalizePlanId } from '../constants/plans';
 import SubscriptionBadge from './SubscriptionBadge';
 import { getUsageLimits } from '../services/subscriptionService';
-import { formatCurrencyBRL } from '../utils/format';
+import BrandLockup from './branding/BrandLockup';
 
 const items = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3, group: 'operacao' },
@@ -120,53 +119,47 @@ export default function Sidebar({
   return (
     <aside className="w-full border-r border-slate-200 bg-white lg:min-h-screen lg:w-[286px] lg:px-3 lg:py-5">
       <div className="space-y-4 lg:sticky lg:top-0">
-        <div className="hero-mesh overflow-hidden rounded-[26px] border border-slate-200 shadow-lifted">
+        {/* ── Brand header ── */}
+        <div
+          className="overflow-hidden rounded-[26px] shadow-lifted"
+          style={{ background: 'linear-gradient(160deg, #071120 0%, #0D1B2E 60%, #071120 100%)', border: '1px solid rgba(0,93,255,0.25)' }}
+        >
           <div className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-900/35">
-                <PanelLeftOpen size={18} className="text-white" />
-              </div>
-              <div>
-                <p className="text-sm font-bold tracking-tight text-slate-950">BankExtract Pro</p>
-                <p className="text-[11px] leading-tight text-slate-500">Gestao Financeira & Cobranca</p>
-              </div>
-              <div className="ml-auto flex h-5 items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 text-[10px] font-bold tracking-[0.18em] text-emerald-700">
-                B2B
-              </div>
-            </div>
+            <BrandLockup variant="sidebar" />
 
             <div className={`mt-3 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] ${
               billingExecutionMode === 'real'
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                : 'border-amber-200 bg-amber-50 text-amber-700'
+                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
             }`}>
-              <Shield size={11} className={billingExecutionMode === 'real' ? 'text-emerald-600' : 'text-amber-600'} />
+              <Shield size={11} className={billingExecutionMode === 'real' ? 'text-emerald-400' : 'text-amber-400'} />
               {billingExecutionMode === 'real' ? 'Envio real ativo' : 'Simulacao ativa'}
             </div>
 
-            <div className="glass mt-4 rounded-2xl p-3">
-              <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <div className="mt-4 rounded-2xl p-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                 <Building2 size={10} />
                 Empresa ativa
               </label>
               <select
                 value={activeCompanyId}
                 onChange={(e) => setActiveCompanyId(e.target.value)}
-                className="input-premium w-full rounded-xl border border-white/10 bg-white px-3 py-2.5 text-xs font-semibold text-slate-900 outline-none ring-emerald-500 focus:ring-2"
+                className="w-full rounded-xl px-3 py-2.5 text-xs font-semibold text-white outline-none"
+                style={{ background: 'rgba(0,93,255,0.15)', border: '1px solid rgba(0,93,255,0.3)', colorScheme: 'dark' }}
               >
                 {!activeCompanyId ? <option value="">Selecione uma empresa</option> : null}
                 {companies.map((company) => (
-                  <option key={company.id} value={company.id}>
+                  <option key={company.id} value={company.id} style={{ background: '#0D1B2E', color: '#fff' }}>
                     {company.nome}
                   </option>
                 ))}
               </select>
 
-              <div className="mt-2 text-[11px] text-slate-500">
+              <div className="mt-2 text-[11px] text-slate-400">
                 {activeCompany?.isGlobal ? (
-                  <span className="rounded-lg bg-blue-50 px-2 py-1 font-semibold text-blue-700">Modo global ativo</span>
+                  <span className="rounded-lg px-2 py-1 font-semibold text-blue-300" style={{ background: 'rgba(0,93,255,0.2)' }}>Modo global ativo</span>
                 ) : (
-                  <span className="font-mono text-slate-600">{activeCompany?.cnpj || activeCompany?.inviteCode || 'Sem dados'}</span>
+                  <span className="font-mono text-slate-400">{activeCompany?.cnpj || activeCompany?.inviteCode || 'Sem dados'}</span>
                 )}
               </div>
 
@@ -174,7 +167,8 @@ export default function Sidebar({
                 <button
                   type="button"
                   onClick={() => onOpenCompanyModal?.('criar')}
-                  className="mt-2.5 w-full rounded-xl bg-emerald-500 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-600"
+                  className="mt-2.5 w-full rounded-xl px-3 py-2 text-xs font-bold text-white shadow-sm"
+                  style={{ background: 'linear-gradient(135deg, #005DFF 0%, #14D8FF 100%)' }}
                 >
                   + Nova empresa
                 </button>
@@ -182,30 +176,34 @@ export default function Sidebar({
             </div>
 
             {usageSummary ? (
-              <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+              <div className="mt-3 rounded-2xl p-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                 <div className="mb-2 flex items-center justify-between">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Uso mensal</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Uso mensal</p>
                   {planMeta ? (
                     <SubscriptionBadge planId={planId} size="xs" />
                   ) : null}
                 </div>
                 <div className="mb-1.5 flex items-center justify-between text-[11px]">
-                  <span className="text-slate-600">{usedRealSends} de {monthlyLimit > 0 ? monthlyLimit : '∞'} envios</span>
-                  <span className={limitReached ? 'font-bold text-red-600' : highUsage ? 'font-bold text-amber-600' : 'text-slate-500'}>
+                  <span className="text-slate-400">{usedRealSends} de {monthlyLimit > 0 ? monthlyLimit : '∞'} envios</span>
+                  <span className={limitReached ? 'font-bold text-red-400' : highUsage ? 'font-bold text-amber-400' : 'text-slate-400'}>
                     {limitReached ? 'Limite atingido' : `${Math.round(usagePercent)}%`}
                   </span>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+                <div className="h-1.5 overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,0.1)' }}>
                   <div
-                    className={`h-full rounded-full transition-all duration-700 ${limitReached ? 'bg-red-500' : highUsage ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                    style={{ width: `${Math.min(usagePercent, 100)}%` }}
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: `${Math.min(usagePercent, 100)}%`,
+                      background: limitReached ? '#EF4444' : highUsage ? '#F59E0B' : 'linear-gradient(90deg, #005DFF, #14D8FF)',
+                    }}
                   />
                 </div>
                 {upgrade?.message ? (
                   <button
                     type="button"
                     onClick={onOpenPlans}
-                    className="mt-2 w-full rounded-lg bg-gradient-to-r from-emerald-500 to-blue-500 px-2 py-1.5 text-[10px] font-bold text-white"
+                    className="mt-2 w-full rounded-lg px-2 py-1.5 text-[10px] font-bold text-white"
+                    style={{ background: 'linear-gradient(135deg, #005DFF 0%, #14D8FF 100%)' }}
                   >
                     <Sparkles size={9} className="mr-1 inline" />
                     {upgrade.message}

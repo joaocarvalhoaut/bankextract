@@ -14,11 +14,13 @@ import { getPlans, getUsageLimits, updateCompanyPlan } from './services/subscrip
 import { incrementUsage } from './services/usageService';
 import { financeService, sanitizeSpreadsheetCell } from './services/financeService.ts';
 import { sendSingleCharge } from './services/billingAutomationService';
+import SplashScreen from './components/branding/SplashScreen';
 import LoginScreen from './screens/LoginScreen';
 import { GLOBAL_COMPANY_ID } from './services/companyService';
 import { auditLog } from './services/auditService';
 import { createAuditEvent } from './services/auditTimelineService';
 import { canUserPerformAction } from './security/permissions';
+import BRAND from './theme/brand';
 
 const DashboardScreen = lazy(() => import('./screens/DashboardScreen'));
 const ImportacaoScreen = lazy(() => import('./screens/ImportacaoScreen'));
@@ -134,7 +136,7 @@ const emptyAutomation = {
 const headerMap = {
   landing: {
     title: 'Landing Page comercial',
-    subtitle: 'Posicionamento SaaS premium para apresentar o BankExtract antes do login e preparar a venda.',
+    subtitle: 'Posicionamento SaaS premium para apresentar o NC Finance antes do login e preparar a venda.',
   },
   dashboard: {
     title: 'Dashboard executivo',
@@ -186,7 +188,7 @@ const headerMap = {
   },
   configuracoes: {
     title: 'Configuracoes',
-    subtitle: 'Dados da empresa, usuarios, permissoes e preferencias operacionais do BankExtract.',
+    subtitle: 'Dados da empresa, usuarios, permissoes e preferencias operacionais do NC Finance.',
   },
   'status-sistema': {
     title: 'Status Tecnico',
@@ -214,11 +216,11 @@ const headerMap = {
   },
   help: {
     title: 'Central de ajuda',
-    subtitle: 'Guias praticos, onboarding rico e perguntas frequentes para operar o BankExtract.',
+    subtitle: 'Guias praticos, onboarding rico e perguntas frequentes para operar o NC Finance.',
   },
   'production-checklist': {
     title: 'Checklist de Implantacao',
-    subtitle: 'Validacao interna para garantir que o BankExtract esta pronto para cliente piloto.',
+    subtitle: 'Validacao interna para garantir que o NC Finance esta pronto para cliente piloto.',
   },
   'admin-saas': {
     title: 'Admin SaaS',
@@ -630,6 +632,38 @@ export default function App() {
       // ignore storage failures
     }
   }, [billingExecutionMode]);
+
+  const sectionHeader = headerMap[activeTab] || headerMap.dashboard;
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const publicTitles = {
+      landing: BRAND.name,
+      login: BRAND.name,
+      planos: `${BRAND.name} • Planos`,
+      'public-landing-auth': BRAND.name,
+    };
+
+    document.title = auth.user
+      ? `${BRAND.name} • ${sectionHeader.title}`
+      : publicTitles[publicScreen] || BRAND.name;
+  }, [auth.user, publicScreen, sectionHeader.title]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const publicTitles = {
+      landing: BRAND.name,
+      login: BRAND.name,
+      planos: `${BRAND.name} • Planos`,
+      'public-landing-auth': BRAND.name,
+    };
+
+    document.title = auth.user
+      ? `${BRAND.name} • ${sectionHeader.title}`
+      : publicTitles[publicScreen] || BRAND.name;
+  }, [auth.user, publicScreen, sectionHeader.title]);
 
   const filteredFinancialRows = useMemo(() => {
     return financialRecords.filter((row) => {
@@ -1390,8 +1424,6 @@ export default function App() {
     [currentCompanyId, currentUserId, refreshAllData, showToast]
   );
 
-  const sectionHeader = headerMap[activeTab] || headerMap.dashboard;
-
   let currentContent = null;
 
   const shouldBlockCompanyViews =
@@ -1406,7 +1438,7 @@ export default function App() {
       <div className="rounded-[32px] border border-slate-200 bg-white p-10 text-center shadow-soft">
         <h2 className="text-2xl font-semibold text-slate-900">Configure sua primeira empresa</h2>
         <p className="mt-3 text-sm text-slate-500">
-          Sua conta ainda nao possui uma empresa ativa. Crie uma empresa ou entre por codigo de convite para continuar usando o BankExtract sem quebrar a operacao.
+          Sua conta ainda nao possui uma empresa ativa. Crie uma empresa ou entre por codigo de convite para continuar usando o NC Finance sem quebrar a operacao.
         </p>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <button
@@ -1721,13 +1753,7 @@ export default function App() {
   }
 
   if (auth.authEnabled && auth.loading && !auth.user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5 text-sm text-slate-600 shadow-soft">
-          Carregando sessao...
-        </div>
-      </div>
-    );
+    return <SplashScreen />;
   }
 
   if (auth.authEnabled && !auth.user) {
@@ -1752,7 +1778,7 @@ export default function App() {
           <div className="mx-auto max-w-6xl space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-[28px] border border-slate-200 bg-white px-5 py-4 shadow-soft">
               <div>
-                <h1 className="text-2xl font-semibold text-slate-900">Planos do BankExtract</h1>
+                <h1 className="text-2xl font-semibold text-slate-900">Planos do NC Finance</h1>
                 <p className="text-sm text-slate-500">Compare os pacotes comerciais antes do login.</p>
               </div>
               <div className="flex gap-3">

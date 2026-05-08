@@ -330,7 +330,7 @@ const buildChargeRows = (records) =>
         origem: 'manual',
         mensagem:
           draft ||
-          `Olá, ${record.nome}. Identificamos o título ${record.numero_boleto} em aberto no BankExtract. Poderia nos confirmar a programação de pagamento?`,
+          `Olá, ${record.nome}. Identificamos o título ${record.numero_boleto} em aberto no NC Finance. Poderia nos confirmar a programação de pagamento?`,
       };
     });
 

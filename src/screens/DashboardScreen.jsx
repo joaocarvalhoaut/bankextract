@@ -144,7 +144,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
               Operacao financeira organizada para escalar cobrancas com seguranca.
             </h2>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 lg:text-base">
-              O BankExtract consolida carteira, lotes importados, automacoes e sinais operacionais em uma leitura
+              O NC Finance consolida carteira, lotes importados, automacoes e sinais operacionais em uma leitura
               executiva pronta para venda e para a rotina do financeiro.
             </p>
           </div>

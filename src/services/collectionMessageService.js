@@ -162,7 +162,7 @@ export function generateCollectionMessage(input = {}, tone = 'neutro') {
     valor: formatCurrency(input.valor),
     vencimento: formatDate(input.vencimento),
     diasAtraso: Number(input.diasAtraso || input.dias_atraso || 0),
-    empresa: input.empresa || 'BankExtract',
+    empresa: input.empresa || 'NC Finance',
     linhaDigitavel: input.linha_digitavel || 'nao localizado',
     codigoBarras: input.codigo_barras || 'nao localizado',
     linkBoleto: input.link_boleto || input.boleto_url || 'nao localizado',
@@ -222,4 +222,3 @@ export function getDefaultCollectionTone(input = {}) {
   if (delayBand === 'preventivo') return 'amigavel';
   return 'neutro';
 }
-

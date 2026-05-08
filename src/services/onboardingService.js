@@ -6,7 +6,7 @@ const defaultSteps = [
   {
     id: 'company_created',
     title: 'Criar ou selecionar empresa',
-    description: 'Defina a empresa que vai operar a carteira financeira dentro do BankExtract.',
+    description: 'Defina a empresa que vai operar a carteira financeira dentro do NC Finance.',
     actionTab: 'configuracoes',
   },
   {

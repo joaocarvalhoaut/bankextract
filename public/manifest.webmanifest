@@ -1,0 +1,16 @@
+{
+  "name": "NC Finance",
+  "short_name": "NC Finance",
+  "description": "Plataforma inteligente de gestao financeira, cobranca e automacao empresarial.",
+  "theme_color": "#071120",
+  "background_color": "#071120",
+  "display": "standalone",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "64x64",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

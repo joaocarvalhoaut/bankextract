@@ -6,7 +6,7 @@ import { HELP_ARTICLES } from '../constants/helpArticles';
 const FAQ_ITEMS = [
   {
     question: 'O sistema envia cobranca automatica real agora?',
-    answer: 'Nao. O BankExtract continua priorizando simulacao e preparo manual assistido nesta fase.',
+    answer: 'Nao. O NC Finance continua priorizando simulacao e preparo manual assistido nesta fase.',
   },
   {
     question: 'Preciso configurar WhatsApp ou Z-API para testar?',
@@ -42,7 +42,7 @@ export default function HelpCenterScreen({
               <LifeBuoy size={14} />
               Central de ajuda
             </div>
-            <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">Guias praticos para operar o BankExtract com seguranca</h1>
+            <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">Guias praticos para operar o NC Finance com seguranca</h1>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
               Aprenda o fluxo de importacao, cobranca, simulacao, dashboard, limites, notificacoes e auditoria sem depender de integracoes pagas.
             </p>

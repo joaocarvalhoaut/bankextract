@@ -6,14 +6,14 @@
   --be-bg: #f8fafc;
   --be-card: #ffffff;
   --be-card-muted: #f8fafc;
-  --be-border: #e2e8f0;
-  --be-text: #0f172a;
-  --be-muted: #475569;
-  --be-brand: #10B981;
-  --be-brand-dark: #059669;
-  --be-blue: #2563EB;
-  --be-gold: #d4a017;
-  --be-red: #dc2626;
+  --be-border: rgba(15, 23, 42, 0.08);
+  --be-text: #071120;
+  --be-muted: #64748b;
+  --be-brand: #005dff;
+  --be-brand-dark: #071120;
+  --be-blue: #14d8ff;
+  --be-gold: #f59e0b;
+  --be-red: #ef4444;
   --be-shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
   --be-shadow-md: 0 10px 30px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.05);
   --be-shadow-lg: 0 20px 60px -22px rgba(15, 23, 42, 0.22), 0 10px 24px -16px rgba(15, 23, 42, 0.1);
@@ -48,8 +48,8 @@ body {
 }
 
 ::selection {
-  background: rgba(16, 185, 129, 0.18);
-  color: #059669;
+  background: rgba(0, 93, 255, 0.18);
+  color: #071120;
 }
 
 ::-webkit-scrollbar {
@@ -71,7 +71,7 @@ body {
 }
 
 *:focus-visible {
-  outline: 2px solid rgba(16, 185, 129, 0.80);
+  outline: 2px solid rgba(0, 93, 255, 0.80);
   outline-offset: 2px;
 }
 
@@ -103,7 +103,7 @@ body {
 }
 
 .text-gradient {
-  background: linear-gradient(135deg, #10B981 0%, #34d399 45%, #2563eb 100%);
+  background: linear-gradient(135deg, #005DFF 0%, #14D8FF 55%, #071120 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -121,8 +121,8 @@ body {
 }
 
 .input-premium:focus {
-  border-color: rgba(16, 185, 129, 0.55);
-  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.14);
+  border-color: rgba(0, 93, 255, 0.55);
+  box-shadow: 0 0 0 4px rgba(0, 93, 255, 0.14);
 }
 
 .card-hover {
@@ -145,7 +145,7 @@ body {
   position: absolute;
   inset: 0 0 auto 0;
   height: 3px;
-  background: linear-gradient(90deg, #10B981 0%, #34d399 46%, #2563eb 100%);
+  background: linear-gradient(90deg, #005DFF 0%, #14D8FF 46%, #071120 100%);
 }
 
 .nav-item-active {
@@ -166,10 +166,10 @@ body {
 
 .hero-mesh {
   background:
-    radial-gradient(circle at 14% 22%, rgba(16, 185, 129, 0.12), transparent 28%),
-    radial-gradient(circle at 86% 78%, rgba(37, 99, 235, 0.12), transparent 30%),
-    radial-gradient(circle at 42% 88%, rgba(212, 160, 23, 0.08), transparent 26%),
-    linear-gradient(135deg, #ffffff 0%, #f8fafc 54%, #eef6ff 100%);
+    radial-gradient(circle at 14% 22%, rgba(0, 93, 255, 0.14), transparent 28%),
+    radial-gradient(circle at 86% 78%, rgba(20, 216, 255, 0.14), transparent 30%),
+    radial-gradient(circle at 42% 88%, rgba(7, 17, 32, 0.08), transparent 26%),
+    linear-gradient(135deg, #ffffff 0%, #f8fafc 54%, #eff6ff 100%);
 }
 
 .dot-grid {

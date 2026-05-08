@@ -89,7 +89,7 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Admin SaaS</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Operacao central do BankExtract</h2>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Operacao central do NC Finance</h2>
             <p className="mt-2 text-sm text-slate-500">
               Visao consolidada de empresas, assinaturas, uso e auditoria interna.
             </p>

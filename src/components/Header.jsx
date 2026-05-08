@@ -78,7 +78,7 @@ export default function Header({
               </div>
               <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700">
                 <Zap size={10} />
-                BankExtract Pro
+                NC Finance
               </div>
             </div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900 lg:text-2xl">{title}</h1>

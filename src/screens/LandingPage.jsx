@@ -14,6 +14,7 @@ import {
   Upload,
   WalletCards,
 } from 'lucide-react';
+import BrandLockup from '../components/branding/BrandLockup';
 import PlanCard from '../components/plans/PlanCard';
 import { getAllPlans } from '../constants/plans';
 
@@ -114,7 +115,7 @@ const faqItems = [
   },
   {
     question: 'Posso usar sem dominio proprio?',
-    answer: 'Sim. O BankExtract funciona como plataforma SaaS multiempresa sem exigir dominio proprio para iniciar a operacao.',
+    answer: 'Sim. O NC Finance funciona como plataforma SaaS multiempresa sem exigir dominio proprio para iniciar a operacao.',
   },
   {
     question: 'Os dados sao separados por empresa?',
@@ -198,15 +199,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
       <div className="mx-auto flex max-w-[1540px] flex-col gap-12 px-4 py-4 md:px-6 xl:px-8">
         <header className="sticky top-0 z-40 -mx-4 border-b border-slate-200/80 bg-white/82 px-4 py-2.5 shadow-[0_12px_28px_rgba(15,23,42,0.06)] backdrop-blur-xl transition-all md:-mx-6 md:px-6 xl:-mx-8 xl:px-8">
           <div className="mx-auto flex max-w-[1540px] flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-900/15">
-                <WalletCards size={20} />
-              </div>
-              <div>
-                <p className="text-base font-bold tracking-tight text-slate-950">BankExtract Pro</p>
-                <p className="text-xs text-slate-500">Gestao Financeira & Cobranca</p>
-              </div>
-            </div>
+            <BrandLockup variant="sidebar" />
 
             <nav className="hidden flex-wrap items-center gap-6 text-sm font-medium text-slate-600 lg:flex">
               <button type="button" onClick={() => handleSectionNavigation('recursos')} className="transition hover:text-slate-950">Recursos</button>
@@ -332,7 +325,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
           <div className="grid gap-6 xl:grid-cols-[1fr_auto] xl:items-end">
             <div className="fade-up">
               <h2 className="text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">
-                Empresas organizando sua cobranca com BankExtract Pro
+                Empresas organizando sua cobranca com NC Finance
               </h2>
               <p className="mt-3 max-w-3xl text-base leading-relaxed text-slate-600">
                 Mais controle operacional, menos inadimplencia e mais previsibilidade financeira.

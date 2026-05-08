@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="g" x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#005DFF"/>
+      <stop offset="1" stop-color="#14D8FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="#071120"/>
+  <rect x="1" y="1" width="62" height="62" rx="17" stroke="url(#g)" stroke-opacity=".5" stroke-width="2"/>
+  <path d="M14 52H24V46" stroke="#14D8FF" stroke-opacity=".3" stroke-width="1.5"/>
+  <path d="M40 12H50V18" stroke="#005DFF" stroke-opacity=".3" stroke-width="1.5"/>
+  <text x="32" y="40" text-anchor="middle" font-family="Inter Tight, Inter, sans-serif" font-size="24" font-weight="800" fill="url(#g)">NC</text>
+</svg>

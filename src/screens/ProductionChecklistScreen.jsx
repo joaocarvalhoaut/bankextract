@@ -286,7 +286,7 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
             </div>
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">Checklist de prontidao para cliente piloto</h2>
             <p className="mt-2 max-w-3xl text-sm text-slate-500">
-              Valide migracoes, fluxo operacional, billing interno, notificacoes e auditoria antes de liberar o BankExtract para {companyName || 'a empresa ativa'}.
+              Valide migracoes, fluxo operacional, billing interno, notificacoes e auditoria antes de liberar o NC Finance para {companyName || 'a empresa ativa'}.
             </p>
           </div>
 
