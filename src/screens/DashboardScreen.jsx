@@ -96,12 +96,12 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
 
   if (errorMessage) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-[32px] border border-amber-200 bg-white p-16 text-center shadow-soft">
+      <div className="surface-card flex flex-col items-center justify-center rounded-[32px] p-16 text-center">
         <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-amber-50">
           <Activity size={28} className="text-amber-500" />
         </div>
-        <h3 className="text-xl font-bold tracking-tight text-slate-900">Nao foi possivel carregar o dashboard</h3>
-        <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-600">{errorMessage}</p>
+        <h3 className="text-xl font-bold tracking-tight text-slate-50">Nao foi possivel carregar o dashboard</h3>
+        <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-300">{errorMessage}</p>
         {onRetry ? (
           <button type="button" onClick={onRetry} className="mt-5 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
             Tentar novamente
@@ -113,12 +113,12 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
 
   if (isEmpty) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-[32px] border border-dashed border-slate-300 bg-white p-16 text-center shadow-soft">
+      <div className="surface-card flex flex-col items-center justify-center rounded-[32px] border border-dashed border-slate-700 p-16 text-center">
         <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100">
           <Activity size={28} className="text-slate-400" />
         </div>
-        <h3 className="text-xl font-bold tracking-tight text-slate-900">Sem dados financeiros</h3>
-        <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-600">
+        <h3 className="text-xl font-bold tracking-tight text-slate-50">Sem dados financeiros</h3>
+        <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-300">
           Importe uma carteira para popular o dashboard executivo com metricas reais da empresa ativa.
         </p>
         {onRetry ? (
@@ -174,12 +174,12 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <article className="accent-bar rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+        <article className="accent-bar surface-card rounded-[28px] p-6">
           <SectionHeader title="Aging de carteira" subtitle="Distribuicao real por janela de atraso." />
           <MiniBars items={metrics.charts?.aging || []} />
         </article>
 
-        <article className="accent-bar rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+        <article className="accent-bar surface-card rounded-[28px] p-6">
           <SectionHeader title="Importacoes recentes" subtitle="Volume de linhas por lote no periodo." />
           {(metrics.charts?.importacoes || []).length ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -199,7 +199,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <article className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+        <article className="surface-card rounded-[28px] p-6">
           <SectionHeader title="Proximos vencimentos" subtitle="Titulos mais proximos da empresa ativa." />
           {(metrics.nextDueRows || []).length ? (
             <div className="space-y-3">
@@ -225,7 +225,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
           )}
         </article>
 
-        <article className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+        <article className="surface-card rounded-[28px] p-6">
           <SectionHeader title="Maiores valores em aberto" subtitle="Prioridades financeiras por valor." />
           {(metrics.biggestOpenRows || []).length ? (
             <div className="space-y-3">
@@ -253,7 +253,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-        <article className="rounded-[28px] border border-blue-100 bg-white p-6 shadow-soft xl:col-span-2">
+        <article className="surface-card rounded-[28px] xl:col-span-2 p-6">
           <SectionHeader
             title="Primeiros passos"
             subtitle="Acompanhe a ativacao inicial da empresa e avance para as proximas etapas."
@@ -292,7 +292,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
           )}
         </article>
 
-        <article className="rounded-[28px] border border-blue-100 bg-white p-6 shadow-soft">
+        <article className="surface-card rounded-[28px] p-6">
           <SectionHeader title="Ajuda rapida" subtitle="Guias essenciais para tirar duvidas sem sair da operacao." />
           <div className="space-y-3">
             {[
@@ -319,7 +319,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
 
       {/* Mini card de atividades recentes */}
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-        <article className="rounded-[28px] border border-violet-100 bg-white p-6 shadow-soft xl:col-span-2">
+        <article className="surface-card rounded-[28px] xl:col-span-2 p-6">
           <SectionHeader
             title="Ultimas atividades"
             subtitle={allCompanies ? 'Eventos operacionais recentes de todas as empresas.' : 'Eventos operacionais recentes desta empresa.'}
@@ -360,7 +360,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
           )}
         </article>
 
-        <article className="accent-bar rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+        <article className="accent-bar surface-card rounded-[28px] p-6">
           <SectionHeader title="Cobranca WhatsApp" subtitle="Status do agendador automatico." />
           <div className="space-y-3">
             {[
@@ -378,7 +378,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
       </section>
 
       <section className="grid grid-cols-1 gap-5">
-        <article className="accent-bar rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+        <article className="accent-bar surface-card rounded-[28px] p-6">
           <SectionHeader title="Leituras operacionais" subtitle="Sinais rapidos para operacao e venda do SaaS." badge={operational.recentAuditAction || 'Sem atividade recente'} />
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             {[

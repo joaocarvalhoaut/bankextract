@@ -85,7 +85,7 @@ export default function FinanceTable({
   };
 
   const statusClasses = (status) => {
-    if (status === 'liquidado') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    if (status === 'liquidado') return 'border-blue-500/20 bg-blue-500/10 text-cyan-200';
     if (status === 'negociacao') return 'border-amber-200 bg-amber-50 text-amber-700';
     if (status === 'promessa') return 'border-blue-200 bg-blue-50 text-blue-700';
     if (status === 'vencido') return 'border-red-200 bg-red-50 text-red-700';
@@ -132,7 +132,7 @@ export default function FinanceTable({
             <button
               type="button"
               onClick={() => onWhatsAppCharge(selectedRows)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white hover:bg-green-700"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
             >
               <MessageSquare size={14} />
               Cobrar WhatsApp ({selectedRows.size})
@@ -168,7 +168,7 @@ export default function FinanceTable({
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-soft">
+      <div className="surface-card rounded-xl p-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -179,7 +179,7 @@ export default function FinanceTable({
                 setPage(1);
               }}
               placeholder="Buscar em todos os campos..."
-              className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none ring-emerald-500 focus:ring-2"
+              className="w-full rounded-lg border border-slate-700 bg-[#0B172A] py-2 pl-9 pr-3 text-sm text-slate-100 outline-none ring-blue-500 focus:ring-2"
             />
           </div>
           {hasFilters ? (
@@ -190,10 +190,10 @@ export default function FinanceTable({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-soft">
+      <div className="surface-card overflow-hidden rounded-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50">
+            <thead className="bg-[#10213B]">
               <tr>
                 <th className="w-10 border-r border-slate-200 px-3 py-2">
                   <input
@@ -262,7 +262,7 @@ export default function FinanceTable({
                   return (
                     <tr
                       key={row.id}
-                      className={`border-t border-slate-100 ${selectedRows.has(row.id) ? 'bg-emerald-50/50' : 'hover:bg-slate-50'}`}
+                      className={`border-t border-slate-800 ${selectedRows.has(row.id) ? 'bg-blue-500/10' : 'hover:bg-slate-900/40'}`}
                     >
                       <td className="border-r border-slate-100 px-3 py-2">
                         <input type="checkbox" checked={selectedRows.has(row.id)} onChange={() => toggleRowSelection(row.id)} />

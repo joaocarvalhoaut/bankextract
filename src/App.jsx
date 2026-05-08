@@ -1435,23 +1435,23 @@ export default function App() {
 
   if (shouldBlockCompanyViews) {
     currentContent = (
-      <div className="rounded-[32px] border border-slate-200 bg-white p-10 text-center shadow-soft">
-        <h2 className="text-2xl font-semibold text-slate-900">Configure sua primeira empresa</h2>
-        <p className="mt-3 text-sm text-slate-500">
+      <div className="surface-card rounded-[32px] p-10 text-center">
+        <h2 className="text-2xl font-semibold text-slate-50">Configure sua primeira empresa</h2>
+        <p className="mt-3 text-sm text-slate-300">
           Sua conta ainda nao possui uma empresa ativa. Crie uma empresa ou entre por codigo de convite para continuar usando o NC Finance sem quebrar a operacao.
         </p>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <button
             type="button"
             onClick={() => handleOpenEmpresaModal(empresa.canCreateCompany ? 'criar' : 'entrar')}
-            className="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
+            className="btn-brand rounded-2xl px-5 py-3 text-sm font-semibold"
           >
             {empresa.canCreateCompany ? 'Criar ou entrar em empresa' : 'Entrar em empresa'}
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('onboarding')}
-            className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="rounded-2xl border border-slate-700 px-5 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-800"
           >
             Ver onboarding
           </button>
@@ -1759,7 +1759,7 @@ export default function App() {
   if (auth.authEnabled && !auth.user) {
     if (publicScreen === 'landing') {
       return (
-        <div className="min-h-screen bg-[#F7F9FC] px-4 py-6 lg:px-6">
+        <div className="min-h-screen bg-[#071120] px-4 py-6 lg:px-6">
           <div className="mx-auto max-w-7xl">
             <Suspense fallback={<ScreenFallback />}>
               <LandingPage
@@ -1774,25 +1774,25 @@ export default function App() {
 
     if (publicScreen === 'planos') {
       return (
-        <div className="min-h-screen bg-[#F7F9FC] px-4 py-6 lg:px-6">
+        <div className="min-h-screen bg-[#071120] px-4 py-6 lg:px-6">
           <div className="mx-auto max-w-6xl space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[28px] border border-slate-200 bg-white px-5 py-4 shadow-soft">
+            <div className="surface-card flex flex-wrap items-center justify-between gap-3 rounded-[28px] px-5 py-4">
               <div>
-                <h1 className="text-2xl font-semibold text-slate-900">Planos do NC Finance</h1>
-                <p className="text-sm text-slate-500">Compare os pacotes comerciais antes do login.</p>
+                <h1 className="text-2xl font-semibold text-slate-50">Planos do NC Finance</h1>
+                <p className="text-sm text-slate-300">Compare os pacotes comerciais antes do login.</p>
               </div>
               <div className="flex gap-3">
                 <button
                   type="button"
                   onClick={() => setPublicScreen('landing')}
-                  className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  className="rounded-2xl border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-800"
                 >
                   Voltar para landing
                 </button>
                 <button
                   type="button"
                   onClick={() => setPublicScreen('login')}
-                  className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+                  className="btn-brand rounded-2xl px-4 py-3 text-sm font-semibold"
                 >
                   Comecar agora
                 </button>
@@ -1813,7 +1813,7 @@ export default function App() {
     }
 
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F7F9FC] px-4">
+      <div className="flex min-h-screen items-center justify-center bg-[#071120] px-4">
         <Suspense fallback={<ScreenFallback />}>
           <LoginScreen
             onSignIn={auth.signIn}
@@ -1828,7 +1828,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F9FC]">
+    <div className="min-h-screen bg-[#071120]">
       <div className="flex flex-col lg:flex-row">
         <Sidebar
           activeTab={activeTab}
@@ -1861,11 +1861,11 @@ export default function App() {
               <div
                 className={`rounded-2xl px-5 py-4 text-sm font-medium shadow-soft ${
                   toast.type === 'erro'
-                    ? 'border border-red-200 bg-red-50 text-red-700'
-                    : 'border border-emerald-200 bg-emerald-50 text-emerald-800'
+                    ? 'border border-red-500/30 bg-red-500/10 text-red-200'
+                    : 'border border-blue-500/30 bg-blue-500/10 text-blue-100'
                 }`}
               >
-                {toast.message}
+                {toast.text}
               </div>
             )}
 

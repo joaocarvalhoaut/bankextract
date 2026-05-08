@@ -67,22 +67,22 @@ export default function Header({
   }, [menuOpen]);
 
   return (
-    <header className="accent-bar relative z-20 mb-6 overflow-visible rounded-[30px] border border-slate-200 bg-white shadow-card">
+    <header className="accent-bar surface-card relative z-20 mb-6 overflow-visible rounded-[30px]">
       <div className="overflow-visible px-5 py-4 lg:px-6 lg:py-5">
         <div className="flex flex-col gap-4 overflow-visible xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900/50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
                 <Building2 size={11} />
                 {companyName || 'Sem empresa ativa'}
               </div>
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">
                 <Zap size={10} />
                 NC Finance
               </div>
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 lg:text-2xl">{title}</h1>
-            {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
+            <h1 className="text-xl font-bold tracking-tight text-slate-50 lg:text-2xl">{title}</h1>
+            {subtitle && <p className="text-sm text-slate-300">{subtitle}</p>}
           </div>
 
           <div className="flex flex-wrap items-center gap-2 overflow-visible">
@@ -98,7 +98,7 @@ export default function Header({
               <button
                 type="button"
                 onClick={onViewPublicSite}
-                className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                className="flex items-center gap-1.5 rounded-xl border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800"
               >
                 <Globe2 size={13} />
                 Site
@@ -110,7 +110,7 @@ export default function Header({
                 ref={buttonRef}
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800"
               >
                 <User2 size={14} />
                 <span className="max-w-[120px] truncate">{userEmail || 'Conta'}</span>
@@ -120,18 +120,18 @@ export default function Header({
               {menuOpen && (
                 <div
                   ref={menuRef}
-                  className="fixed z-[200] min-w-[180px] rounded-2xl border border-slate-200 bg-white py-1 shadow-xl"
+                  className="fixed z-[200] min-w-[180px] rounded-2xl border border-slate-700 bg-[#10213B] py-1 shadow-xl"
                   style={{ top: menuPosition.top, right: menuPosition.right }}
                 >
-                  <div className="border-b border-slate-100 px-4 py-2.5">
-                    <p className="text-xs font-semibold text-slate-900">{userEmail || 'Conta'}</p>
-                    <p className="text-[11px] text-slate-500">Conta ativa</p>
+                  <div className="border-b border-slate-700 px-4 py-2.5">
+                    <p className="text-xs font-semibold text-slate-50">{userEmail || 'Conta'}</p>
+                    <p className="text-[11px] text-slate-300">Conta ativa</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => { onSignOut?.(); setMenuOpen(false); }}
                     disabled={signOutLoading}
-                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50"
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-medium text-red-300 hover:bg-red-500/10"
                   >
                     <LogOut size={14} />
                     {signOutLoading ? 'Saindo...' : 'Sair da conta'}

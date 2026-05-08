@@ -576,7 +576,7 @@ export default function VisaoGeralScreen({
 
   return (
     <div className="space-y-6">
-      <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-200 bg-white p-6 shadow-lifted lg:p-8">
+      <section className="hero-mesh border-brand overflow-hidden rounded-[32px] border p-6 shadow-lifted lg:p-8">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
@@ -594,18 +594,18 @@ export default function VisaoGeralScreen({
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Escopo atual</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Escopo atual</p>
+              <p className="mt-2 text-sm font-semibold text-slate-50">
                 {globalMode ? 'Todas as empresas' : activeCompanyName || 'Nenhuma empresa ativa'}
               </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Registros visiveis</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-950">{rows.length}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Registros visiveis</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-50">{rows.length}</p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Acoes destrutivas</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Acoes destrutivas</p>
+              <p className="mt-2 text-sm font-semibold text-slate-50">
                 {globalMode ? 'Bloqueadas no modo global' : canClearView ? 'Controladas por role' : 'Restritas'}
               </p>
             </div>
@@ -624,7 +624,7 @@ export default function VisaoGeralScreen({
         saveLabel="Salvar configuracao"
       />
 
-      <section className="accent-bar rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft">
+      <section className="accent-bar surface-card rounded-[28px] p-5">
         <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-slate-900">Carteira financeira</h3>
