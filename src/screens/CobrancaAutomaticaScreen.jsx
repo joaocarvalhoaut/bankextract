@@ -27,6 +27,7 @@ import {
   previewBillingTemplate,
   reprocessBillingFailures,
   runBillingAutomationNow,
+  sendSingleCharge,
   saveBillingConfig,
   saveDriveConfig,
   syncBoletoDriveIntelligent,
@@ -197,6 +198,7 @@ export default function CobrancaAutomaticaScreen({
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [boletoSyncReport, setBoletoSyncReport] = useState(null);
   const [boletoSyncSummary, setBoletoSyncSummary] = useState(null);
+  const [rowSendingId, setRowSendingId] = useState('');
   const [billingConfig, setBillingConfig] = useState({
     ativo: false,
     hora_execucao: '08:00',
@@ -436,6 +438,45 @@ export default function CobrancaAutomaticaScreen({
     },
   ];
 
+  const handleSendSingleCharge = useCallback(
+    async (row) => {
+      if (!resolvedCompanyId || globalMode) {
+        onToast?.('erro', 'Selecione uma empresa especifica para enviar a cobranca.');
+        return;
+      }
+
+      if (!canManage) {
+        onToast?.('erro', 'Seu perfil atual nao pode operar automacoes.');
+        return;
+      }
+
+      const registroId = String(row?.financeiro_id || row?.registro_id || row?.id || '').trim();
+      if (!registroId) {
+        onToast?.('erro', 'Esta linha nao possui um titulo financeiro associado para envio.');
+        return;
+      }
+
+      setRowSendingId(registroId);
+
+      try {
+        const result = await sendSingleCharge(resolvedCompanyId, registroId, { simulate: simulationMode });
+        await loadOverview();
+        onToast?.(
+          simulationMode ? 'aviso' : 'sucesso',
+          result?.message ||
+            (simulationMode
+              ? 'Simulacao executada, nenhuma mensagem real enviada.'
+              : 'Mensagem enviada via WhatsApp')
+        );
+      } catch (error) {
+        onToast?.('erro', error.message || 'Falha ao enviar a cobranca individual.');
+      } finally {
+        setRowSendingId('');
+      }
+    },
+    [canManage, globalMode, loadOverview, onToast, resolvedCompanyId, simulationMode]
+  );
+
   const columns = useMemo(
     () => [
       {
@@ -468,8 +509,29 @@ export default function CobrancaAutomaticaScreen({
             : '-',
       },
       { key: 'erro', label: 'Erro', render: (row) => row.erro || '-' },
+      {
+        key: 'acoes',
+        label: 'Acao',
+        render: (row) => {
+          const registroId = String(row?.financeiro_id || row?.registro_id || row?.id || '').trim();
+          const sending = rowSendingId === registroId;
+          const disabled = !canManage || !resolvedCompanyId || globalMode || !registroId || Boolean(rowSendingId);
+
+          return (
+            <button
+              type="button"
+              onClick={() => handleSendSingleCharge(row)}
+              disabled={disabled}
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {sending ? <Loader2 size={14} className="animate-spin" /> : <MessageSquareText size={14} />}
+              Enviar
+            </button>
+          );
+        },
+      },
     ],
-    []
+    [canManage, globalMode, handleSendSingleCharge, resolvedCompanyId, rowSendingId]
   );
 
   const boletoColumns = useMemo(

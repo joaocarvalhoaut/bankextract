@@ -165,6 +165,53 @@ export async function runBillingAutomationNow(companyId, options = {}) {
   return data;
 }
 
+export async function sendSingleCharge(companyId, registroId, options = {}) {
+  const simulate = options.simulate === true ? true : false;
+
+  if (!companyId) {
+    throw new Error('Selecione uma empresa especifica para enviar a cobranca.');
+  }
+
+  if (!registroId) {
+    throw new Error('Nenhum titulo valido foi informado para envio individual.');
+  }
+
+  const payload = {
+    action: 'send_single_charge',
+    companyId,
+    company_id: companyId,
+    registro_id: registroId,
+    charge_id: registroId,
+    simulate,
+  };
+
+  console.log('[SEND SINGLE CHARGE REQUEST]', payload);
+
+  if (!supabase) {
+    throw new Error('Supabase nao configurado.');
+  }
+
+  const { data, error } = await supabase.functions.invoke('billing-automation', { body: payload });
+  console.log('[SEND SINGLE CHARGE RESPONSE]', data, error);
+
+  if (error) {
+    throw buildError(error, 'Falha ao enviar a cobranca individual.');
+  }
+
+  const isSuccess = data?.ok === true || data?.success === true;
+  const isFailure = data?.ok === false || data?.success === false;
+
+  if (isFailure) {
+    throw formatEdgeError(data, 'Falha ao enviar a cobranca individual.');
+  }
+
+  if (!isSuccess) {
+    throw formatEdgeError(data, 'Falha ao enviar a cobranca individual.');
+  }
+
+  return data;
+}
+
 export async function reprocessBillingFailures(companyId) {
   return invokeBillingAutomation(
     {

@@ -2064,6 +2064,96 @@ async function sendRealChargesData(
   return { sent, failed };
 }
 
+async function sendSingleChargeData(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  userId: string | null,
+  registroId: string,
+  simulate: boolean,
+  options: { allowTestMode?: boolean } = {},
+) {
+  const preview = await buildChargePayloadPreview(supabaseAdmin, companyId, registroId);
+  const item = {
+    ...preview.payload,
+    id: registroId,
+    registro_id: registroId,
+    charge_id: registroId,
+    phone: String(preview.payload?.telefone || ''),
+    telefone: String(preview.payload?.telefone || ''),
+    message: preview.message,
+    mensagem: preview.message,
+  };
+
+  if (simulate) {
+    const { data: record, error } = await supabaseAdmin
+      .from('registros_financeiros')
+      .select('id, company_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, status')
+      .eq('id', registroId)
+      .eq('company_id', companyId)
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+    if (!record) throw new Error('Registro financeiro nao encontrado.');
+
+    const { numeroBoletoEfetivo, clienteEfetivo } = logCobrancaMapping(record);
+
+    await tryInsertLog(supabaseAdmin, {
+      financeiro_id: record.id,
+      company_id: companyId,
+      data_hora: new Date().toISOString(),
+      cliente_nome: clienteEfetivo || record.nome || 'Cliente',
+      cliente_numero: record.cliente_numero || null,
+      telefone: String(record.telefone || '') || null,
+      documento: String(record.documento || numeroBoletoEfetivo || '') || null,
+      numero_boleto: numeroBoletoEfetivo || null,
+      numero_nf: String(record.numero_nf || '') || null,
+      valor: Number(record.valor || 0),
+      vencimento: String(record.data_vencimento || '') || null,
+      tipo_cobranca: 'manual',
+      dias_atraso: 0,
+      arquivo_encontrado: temBoletoEncontrado(record),
+      drive_file_id: null,
+      status_envio: 'sucesso_simulado',
+      erro: null,
+      payload: {
+        ...preview.payload,
+        message: preview.message,
+        canal: 'whatsapp_simulado',
+        simulated: true,
+      },
+    });
+
+    return {
+      success: true,
+      simulated: true,
+      zapiResponse: null,
+      message: 'Simulacao executada, nenhuma mensagem real enviada.',
+      payload: preview.payload,
+    };
+  }
+
+  const result = await sendRealChargesData(
+    supabaseAdmin,
+    companyId,
+    userId,
+    [item],
+    options,
+  );
+
+  if (result.failed.length) {
+    const firstError = result.failed[0];
+    throw new Error(String(firstError?.error || 'Falha ao enviar a cobranca individual.'));
+  }
+
+  return {
+    success: true,
+    simulated: false,
+    zapiResponse: result.sent[0] || null,
+    message: 'Mensagem enviada via WhatsApp',
+    payload: preview.payload,
+  };
+}
+
 async function sendZapiDocument(
   zapiConfig: { instanceId: string; token: string; clientToken: string; source?: string },
   phone: string,
@@ -2477,7 +2567,7 @@ async function getOverview(supabaseAdmin: AdminClient, companyId: string, todayI
 
   const { data: rows, error } = await supabaseAdmin
     .from('logs_cobranca')
-    .select('id, cliente_nome, documento, numero_boleto, telefone, tipo_cobranca, status_envio, erro, data_hora, arquivo_encontrado, created_at')
+    .select('id, financeiro_id, cliente_nome, documento, numero_boleto, telefone, tipo_cobranca, status_envio, erro, data_hora, arquivo_encontrado, created_at')
     .eq('company_id', companyId)
     .gte('data_hora', start)
     .lte('data_hora', end)
@@ -3576,7 +3666,7 @@ Deno.serve(async (req: Request) => {
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
     }
 
-    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission' || action === 'get_boleto_sync_report' || action === 'preview_charge_payload' || action === 'prepare_manual_charge' || action === 'send_real' || action === 'validate_company_integration' || action === 'validate_connection' || action === 'get_qr_code' || action === 'get_connection_status') {
+    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission' || action === 'get_boleto_sync_report' || action === 'preview_charge_payload' || action === 'prepare_manual_charge' || action === 'send_real' || action === 'send_single_charge' || action === 'validate_company_integration' || action === 'validate_connection' || action === 'get_qr_code' || action === 'get_connection_status') {
       requireCompanyId(companyId);
     }
 
@@ -4010,6 +4100,49 @@ Deno.serve(async (req: Request) => {
           ok: false,
           success: false,
           action: 'send_real',
+          error: String(error instanceof Error ? error.message : error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
+    }
+
+    if (action === 'send_single_charge') {
+      try {
+        const registroId = String(body?.registro_id || body?.charge_id || '').trim();
+        const simulate = body?.simulate === true;
+
+        if (!registroId) {
+          return jsonResponse({
+            ok: false,
+            success: false,
+            action: 'send_single_charge',
+            error: 'registro_id e obrigatorio para envio individual.',
+          }, 200);
+        }
+
+        const result = await sendSingleChargeData(
+          admin,
+          companyId || '',
+          auth.userId,
+          registroId,
+          simulate,
+          { allowTestMode: auth.bypass === true },
+        );
+
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'send_single_charge',
+          simulated: result.simulated,
+          zapiResponse: result.zapiResponse,
+          message: result.message,
+          payload: result.payload,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'send_single_charge',
           error: String(error instanceof Error ? error.message : error),
           details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
