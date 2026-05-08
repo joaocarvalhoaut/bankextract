@@ -1659,6 +1659,8 @@ export default function App() {
             companyId={globalMode ? null : currentCompanyId}
             companyName={currentCompanyName}
             globalMode={globalMode}
+            userRole={empresa.userRole}
+            isSystemAdmin={empresa.isSystemAdmin}
             onGoogleSheetsSaved={async () => {
               await refreshAllData();
               showToast('sucesso', 'Integracao atualizada.');

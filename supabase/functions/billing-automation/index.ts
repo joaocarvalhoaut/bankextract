@@ -2021,8 +2021,23 @@ async function sendRealChargesData(
 
     try {
       const sendResult = await sendZapiText(supabaseAdmin, companyId, { phone: normalizedPhone, message }, options);
-      const sentAt = new Date().toISOString();
-      const providerMessageId = sendResult.messageId || sendResult.zaapId || sendResult.id || null;
+      console.log('[ZAPI RAW RESPONSE]', sendResult);
+
+      const providerMessageId =
+        sendResult?.messageId ||
+        sendResult?.raw?.messageId ||
+        sendResult?.raw?.message_id ||
+        sendResult?.id ||
+        sendResult?.zaapId ||
+        sendResult?.raw?.id ||
+        sendResult?.raw?.zaapId ||
+        sendResult?.raw?.response?.messageId ||
+        null;
+
+      const initialStatus = providerMessageId ? 'sent' : 'queued';
+      const sentAt = providerMessageId
+        ? new Date().toISOString()
+        : null;
 
       await insertWhatsappCharge(supabaseAdmin, {
         empresa_id: companyId,
@@ -2032,7 +2047,7 @@ async function sendRealChargesData(
         mensagem: message,
         provider: 'zapi',
         provider_message_id: providerMessageId,
-        status: normalizeWhatsappTrackingStatus(String(sendResult.raw?.status || sendResult.raw?.messageStatus || 'sent')),
+        status: initialStatus,
         sent_at: sentAt,
         delivered_at: null,
         read_at: null,
@@ -2065,6 +2080,12 @@ async function sendRealChargesData(
         },
       });
 
+      console.log('[WHATSAPP TRACKING SAVED]', {
+        providerMessageId,
+        initialStatus,
+        sentAt,
+      });
+
       if (record?.id) {
         await supabaseAdmin
           .from('registros_financeiros')
@@ -2083,7 +2104,7 @@ async function sendRealChargesData(
         cliente_nome: clienteEfetivo,
         documento: logBase.documento,
         numero_boleto: numeroBoletoEfetivo || '',
-        status: normalizeWhatsappTrackingStatus(String(sendResult.raw?.status || sendResult.raw?.messageStatus || 'sent')),
+        status: initialStatus,
         provider_message_id: providerMessageId,
         sent_at: sentAt,
         zapi_message_id: sendResult.messageId || null,

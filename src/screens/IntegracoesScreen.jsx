@@ -3,8 +3,6 @@ import {
   CircleCheck,
   CircleDashed,
   CircleX,
-  Database,
-  FileSpreadsheet,
   Loader2,
   MessageCircleMore,
   QrCode,
@@ -13,6 +11,8 @@ import {
   Smartphone,
 } from 'lucide-react';
 import GoogleSheetsConfig from '../components/GoogleSheetsConfig';
+import { getDriveBoletosConfig } from '../services/googleDriveService';
+import { normalizeUserRole } from '../security/permissions';
 import {
   getCompanyIntegration,
   getCompanyIntegrationQrCode,
@@ -20,32 +20,6 @@ import {
   saveCompanyIntegration,
   validateCompanyIntegration,
 } from '../services/companyIntegrationService';
-
-function IntegrationCard({ icon: Icon, title, description, tone = 'slate', badge = null }) {
-  const palette = {
-    slate: 'bg-slate-50 text-slate-700 border-slate-200',
-    blue: 'bg-blue-50 text-blue-800 border-blue-200',
-    green: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    gold: 'bg-amber-50 text-amber-700 border-amber-200',
-  };
-
-  return (
-    <div className="card-hover rounded-[26px] border border-slate-200 bg-white p-5 shadow-soft">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className={`inline-flex rounded-2xl border p-3 ${palette[tone] || palette.slate}`}>
-          <Icon size={18} />
-        </div>
-        {badge ? (
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-            {badge}
-          </span>
-        ) : null}
-      </div>
-      <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-      <p className="mt-2 text-sm leading-relaxed text-slate-500">{description}</p>
-    </div>
-  );
-}
 
 function StepCard({ step, title, description, example = '' }) {
   return (
@@ -64,6 +38,7 @@ function ZapiIntegrationCard({
   companyId,
   companyName,
   globalMode,
+  canManage,
   onSaved,
   onToast,
 }) {
@@ -76,6 +51,7 @@ function ZapiIntegrationCard({
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
   const [integrationMessage, setIntegrationMessage] = useState('');
   const [status, setStatus] = useState('nao_configurado');
+  const [lastValidatedAt, setLastValidatedAt] = useState('');
   const [form, setForm] = useState({
     instance_id: '',
     token: '',
@@ -134,6 +110,7 @@ function ZapiIntegrationCard({
       setQrCodeDataUrl('');
       setIntegrationMessage('');
       setStatus(integration?.connected ? 'salvo' : 'nao_configurado');
+      setLastValidatedAt(integration?.updated_at || integration?.created_at || '');
     } catch (error) {
       onToast?.('erro', error.message || 'Falha ao carregar integracao WhatsApp.');
     } finally {
@@ -185,6 +162,7 @@ function ZapiIntegrationCard({
       }));
       setStatus(connected ? 'conectado' : 'aguardando_qr');
       setIntegrationMessage(String(result?.message || ''));
+      setLastValidatedAt(new Date().toISOString());
       onToast?.('sucesso', result?.message || 'Integracao Z-API validada com sucesso.');
     } catch (error) {
       setForm((current) => ({ ...current, connected: false }));
@@ -224,6 +202,7 @@ function ZapiIntegrationCard({
         }));
         setStatus('conectado');
         setIntegrationMessage(String(result?.message || 'WhatsApp ja conectado'));
+        setLastValidatedAt(new Date().toISOString());
         onToast?.('sucesso', result?.message || 'WhatsApp ja conectado');
         return;
       }
@@ -234,6 +213,7 @@ function ZapiIntegrationCard({
       setQrCodeDataUrl(qrImage);
       setStatus('aguardando_qr');
       setIntegrationMessage(String(result?.message || 'QR Code carregado com sucesso.'));
+      setLastValidatedAt(new Date().toISOString());
       onToast?.('sucesso', result?.message || 'QR Code carregado com sucesso.');
     } catch (error) {
       setStatus('erro');
@@ -270,6 +250,7 @@ function ZapiIntegrationCard({
       }));
       setStatus(connected ? 'conectado' : 'aguardando_qr');
       setIntegrationMessage(String(result?.message || ''));
+      setLastValidatedAt(new Date().toISOString());
       onToast?.('sucesso', result?.message || 'Status da integracao atualizado.');
     } catch (error) {
       setStatus('erro');
@@ -299,6 +280,7 @@ function ZapiIntegrationCard({
       await saveCompanyIntegration(companyId, form, 'zapi');
       setStatus('salvo');
       setIntegrationMessage('Integracao salva com sucesso.');
+      setLastValidatedAt(new Date().toISOString());
       onSaved?.();
       onToast?.('sucesso', 'Integracao Z-API salva com sucesso.');
     } catch (error) {
@@ -404,7 +386,7 @@ function ZapiIntegrationCard({
             type="text"
             value={form.instance_id}
             onChange={(event) => setField('instance_id', event.target.value)}
-            disabled={loading || saving || validating || qrLoading || statusLoading}
+            disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
             placeholder="Ex: ABC123DEF456GHI789JKL012MNO345"
             className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2 disabled:opacity-60"
           />
@@ -416,7 +398,7 @@ function ZapiIntegrationCard({
             type="password"
             value={form.token}
             onChange={(event) => setField('token', event.target.value)}
-            disabled={loading || saving || validating || qrLoading || statusLoading}
+            disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
             placeholder="Ex: SEU_TOKEN_DA_INSTANCIA"
             className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2 disabled:opacity-60"
           />
@@ -428,7 +410,7 @@ function ZapiIntegrationCard({
             type="password"
             value={form.client_token}
             onChange={(event) => setField('client_token', event.target.value)}
-            disabled={loading || saving || validating || qrLoading || statusLoading}
+            disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
             placeholder="Ex: SEU_CLIENT_TOKEN"
             className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2 disabled:opacity-60"
           />
@@ -454,9 +436,28 @@ function ZapiIntegrationCard({
         </span>
       </div>
 
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <span className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Numero conectado</span>
+          <span className="mt-2 block font-semibold text-slate-900">{form.phone_number || 'Aguardando conexao'}</span>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <span className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ultima validacao</span>
+          <span className="mt-2 block font-semibold text-slate-900">
+            {lastValidatedAt ? new Date(lastValidatedAt).toLocaleString('pt-BR') : 'Ainda nao validada'}
+          </span>
+        </div>
+      </div>
+
       {integrationMessage ? (
         <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
           {integrationMessage}
+        </div>
+      ) : null}
+
+      {!canManage ? (
+        <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Seu perfil pode visualizar o status desta integracao, mas somente financeiro, admin ou system admin podem editar credenciais e gerar QR Code.
         </div>
       ) : null}
 
@@ -479,7 +480,7 @@ function ZapiIntegrationCard({
         <button
           type="button"
           onClick={handleValidate}
-          disabled={loading || saving || validating || qrLoading || statusLoading}
+          disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
         >
           {validating ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
@@ -488,7 +489,7 @@ function ZapiIntegrationCard({
         <button
           type="button"
           onClick={handleGenerateQrCode}
-          disabled={loading || saving || validating || qrLoading || statusLoading}
+          disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
         >
           {qrLoading ? <Loader2 size={14} className="animate-spin" /> : <QrCode size={14} />}
@@ -497,7 +498,7 @@ function ZapiIntegrationCard({
         <button
           type="button"
           onClick={handleRefreshStatus}
-          disabled={loading || saving || validating || qrLoading || statusLoading}
+          disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
         >
           {statusLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
@@ -506,7 +507,7 @@ function ZapiIntegrationCard({
         <button
           type="button"
           onClick={handleSave}
-          disabled={loading || saving || validating || qrLoading || statusLoading}
+          disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
           className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
         >
           {saving ? <Loader2 size={14} className="animate-spin" /> : <MessageCircleMore size={14} />}
@@ -527,7 +528,52 @@ export default function IntegracoesScreen({
   globalMode,
   onGoogleSheetsSaved,
   onToast,
+  userRole = 'operador',
+  isSystemAdmin = false,
 }) {
+  const normalizedRole = normalizeUserRole(userRole);
+  const canManageIntegrations = isSystemAdmin || normalizedRole === 'admin' || normalizedRole === 'financeiro';
+  const [googleMeta, setGoogleMeta] = useState({
+    service_account_email: '',
+    source_spreadsheet_id: '',
+    source_sheet_name: '',
+    last_source_sync_at: '',
+    last_source_sync_status: '',
+    last_source_sync_error: '',
+  });
+
+  const loadGoogleMeta = useCallback(async () => {
+    if (!companyId || globalMode) {
+      setGoogleMeta({
+        service_account_email: '',
+        source_spreadsheet_id: '',
+        source_sheet_name: '',
+        last_source_sync_at: '',
+        last_source_sync_status: '',
+        last_source_sync_error: '',
+      });
+      return;
+    }
+
+    try {
+      const data = await getDriveBoletosConfig(companyId);
+      setGoogleMeta({
+        service_account_email: data?.service_account_email || '',
+        source_spreadsheet_id: data?.source_spreadsheet_id || data?.spreadsheet_id || '',
+        source_sheet_name: data?.source_sheet_name || data?.sheet_name || '',
+        last_source_sync_at: data?.last_source_sync_at || '',
+        last_source_sync_status: data?.last_source_sync_status || '',
+        last_source_sync_error: data?.last_source_sync_error || '',
+      });
+    } catch (error) {
+      onToast?.('erro', error.message || 'Falha ao carregar o status do Google Drive / Google Sheets.');
+    }
+  }, [companyId, globalMode, onToast]);
+
+  useEffect(() => {
+    loadGoogleMeta();
+  }, [loadGoogleMeta]);
+
   return (
     <div className="space-y-6">
       <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-200 bg-white p-6 shadow-lifted lg:p-8">
@@ -538,11 +584,11 @@ export default function IntegracoesScreen({
               Integracoes
             </div>
             <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-slate-950 lg:text-4xl">
-              Conecte o BankExtract a rotinas externas sem expor credenciais no frontend.
+              Centralize WhatsApp e Google em um hub de integracoes simples, comercial e multiempresa.
             </h2>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 lg:text-base">
-              Esta area concentra Google Sheets, WhatsApp por empresa, exportacao e a base Supabase para operar com
-              company_id e auditoria centralizada.
+              Configure os canais essenciais da operacao em um unico lugar: WhatsApp Business para cobrancas e
+              Google Drive / Google Sheets para planilhas e sincronizacao operacional.
             </p>
           </div>
 
@@ -554,62 +600,42 @@ export default function IntegracoesScreen({
               </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Credenciais</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900">Seguras no backend</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Perfil atual</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">
+                {canManageIntegrations ? 'Pode gerenciar integracoes' : 'Somente visualiza status'}
+              </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Status comercial</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900">Pronto para multiempresa</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Credenciais</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">Seguras no backend</p>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-        <IntegrationCard
-          icon={Database}
-          title="Supabase"
-          description="Base multiempresa preparada para company_id, batch_id e automacoes."
-          tone="blue"
-          badge="Core"
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <ZapiIntegrationCard
+          companyId={companyId}
+          companyName={companyName}
+          globalMode={globalMode}
+          canManage={canManageIntegrations}
+          onSaved={onGoogleSheetsSaved}
+          onToast={onToast}
         />
-        <IntegrationCard
-          icon={FileSpreadsheet}
-          title="Google Sheets"
-          description="Exportacao e sincronizacao operacional por empresa ativa."
-          tone="green"
-          badge="Live"
-        />
-        <IntegrationCard
-          icon={MessageCircleMore}
-          title="WhatsApp"
-          description="Cada empresa conecta sua propria instancia Z-API para envios reais."
-          tone="gold"
-          badge="Multiempresa"
-        />
-        <IntegrationCard
-          icon={ShieldCheck}
-          title="Exportacao Excel"
-          description="Estrutura pronta para relatorios financeiros, historicos e auditoria."
-          tone="slate"
-          badge="Ready"
+
+        <GoogleSheetsConfig
+          empresaId={companyId}
+          empresaNome={companyName}
+          globalMode={globalMode}
+          onSaved={async () => {
+            await loadGoogleMeta();
+            await onGoogleSheetsSaved?.();
+          }}
+          variant="hub"
+          canManage={canManageIntegrations}
+          googleMeta={googleMeta}
         />
       </section>
-
-      <ZapiIntegrationCard
-        companyId={companyId}
-        companyName={companyName}
-        globalMode={globalMode}
-        onSaved={onGoogleSheetsSaved}
-        onToast={onToast}
-      />
-
-      <GoogleSheetsConfig
-        empresaId={companyId}
-        empresaNome={companyName}
-        globalMode={globalMode}
-        onSaved={onGoogleSheetsSaved}
-      />
     </div>
   );
 }
