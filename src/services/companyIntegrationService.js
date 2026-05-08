@@ -50,7 +50,7 @@ export async function validateCompanyIntegration(companyId, payload) {
 
   const { data, error } = await supabase.functions.invoke('billing-automation', {
     body: {
-      action: 'validate_company_integration',
+      action: 'validate_connection',
       company_id: companyId,
       provider: 'zapi',
       config: {
@@ -64,6 +64,56 @@ export async function validateCompanyIntegration(companyId, payload) {
   if (error) throw buildError(error, 'Falha ao validar integracao da empresa.');
   if (!(data?.ok === true || data?.success === true)) {
     throw new Error(data?.error || 'Falha ao validar integracao da empresa.');
+  }
+
+  return data;
+}
+
+export async function getCompanyIntegrationQrCode(companyId, payload) {
+  if (!supabase) throw new Error('Supabase nao configurado.');
+  if (!companyId) throw new Error('Nenhuma empresa ativa selecionada.');
+
+  const { data, error } = await supabase.functions.invoke('billing-automation', {
+    body: {
+      action: 'get_qr_code',
+      company_id: companyId,
+      provider: 'zapi',
+      config: {
+        instance_id: String(payload?.instance_id || '').trim(),
+        token: String(payload?.token || '').trim(),
+        client_token: String(payload?.client_token || '').trim(),
+      },
+    },
+  });
+
+  if (error) throw buildError(error, 'Falha ao carregar o QR Code da integracao.');
+  if (!(data?.ok === true || data?.success === true)) {
+    throw new Error(data?.error || 'Falha ao carregar o QR Code da integracao.');
+  }
+
+  return data;
+}
+
+export async function getCompanyIntegrationStatus(companyId, payload) {
+  if (!supabase) throw new Error('Supabase nao configurado.');
+  if (!companyId) throw new Error('Nenhuma empresa ativa selecionada.');
+
+  const { data, error } = await supabase.functions.invoke('billing-automation', {
+    body: {
+      action: 'get_connection_status',
+      company_id: companyId,
+      provider: 'zapi',
+      config: {
+        instance_id: String(payload?.instance_id || '').trim(),
+        token: String(payload?.token || '').trim(),
+        client_token: String(payload?.client_token || '').trim(),
+      },
+    },
+  });
+
+  if (error) throw buildError(error, 'Falha ao consultar o status da integracao.');
+  if (!(data?.ok === true || data?.success === true)) {
+    throw new Error(data?.error || 'Falha ao consultar o status da integracao.');
   }
 
   return data;

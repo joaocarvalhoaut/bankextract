@@ -549,6 +549,149 @@ async function validateZapiConnection(config: {
   return data as Record<string, unknown>;
 }
 
+function resolveInlineZapiConfig(config: Record<string, unknown> | null | undefined) {
+  const instanceId = String(config?.instance_id || '').trim();
+  const token = String(config?.token || '').trim();
+  const clientToken = String(config?.client_token || '').trim();
+
+  if (!instanceId || !token || !clientToken) {
+    throw new Error('Instance ID, Token e Client Token sao obrigatorios.');
+  }
+
+  return {
+    source: 'inline',
+    instanceId,
+    token,
+    clientToken,
+    phoneNumber: '',
+  };
+}
+
+async function resolveRequestedZapiConfig(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  config: Record<string, unknown> | null | undefined,
+  options: { allowTestMode?: boolean } = {},
+) {
+  const hasInlineConfig = Boolean(
+    String(config?.instance_id || '').trim() &&
+    String(config?.token || '').trim() &&
+    String(config?.client_token || '').trim(),
+  );
+
+  if (hasInlineConfig) {
+    const inlineConfig = resolveInlineZapiConfig(config);
+    console.log('[ZAPI COMPANY CONFIG]', {
+      company_id: companyId,
+      provider: 'zapi',
+      connected: false,
+      has_instance_id: true,
+      has_token: true,
+      has_client_token: true,
+      source: 'inline',
+      instance_id: maskSecret(inlineConfig.instanceId),
+    });
+    return inlineConfig;
+  }
+
+  return resolveCompanyZapiConfig(supabaseAdmin, companyId, options);
+}
+
+function extractZapiPhoneNumber(data: Record<string, unknown> | null | undefined) {
+  return String(
+    data?.phone ||
+    data?.mobile ||
+    data?.connectedPhone ||
+    data?.phoneNumber ||
+    '',
+  ).trim();
+}
+
+function isZapiConnected(data: Record<string, unknown> | null | undefined) {
+  const directFlag = data?.connected;
+  if (typeof directFlag === 'boolean') return directFlag;
+
+  const value = normalizeText(
+    String(
+      data?.status ||
+      data?.state ||
+      data?.instanceStatus ||
+      data?.session ||
+      '',
+    ),
+  );
+
+  return ['connected', 'conectado', 'online', 'open', 'ready'].some((item) => value.includes(item));
+}
+
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+async function getZapiQrCodeData(
+  config: { instanceId: string; token: string; clientToken: string },
+) {
+  const url = `https://api.z-api.io/instances/${config.instanceId}/token/${config.token}/qr-code/image`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Client-Token': config.clientToken,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  const contentType = response.headers.get('content-type') || '';
+  console.log('[ZAPI COMPANY REQUEST]', {
+    url,
+    ok: response.ok,
+    status: response.status,
+    mode: 'qr-code',
+    content_type: contentType,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    console.log('[ZAPI COMPANY RESPONSE]', errorData);
+    throw new Error(`Z-API qr-code erro ${response.status}: ${JSON.stringify(errorData)}`);
+  }
+
+  if (contentType.includes('application/json')) {
+    const data = await response.json().catch(() => ({}));
+    console.log('[ZAPI COMPANY RESPONSE]', data);
+    const image = String(data?.value || data?.image || data?.base64 || data?.qrCode || '').trim();
+    if (!image) {
+      throw new Error('A Z-API nao retornou um QR Code valido.');
+    }
+
+    if (image.startsWith('data:image/')) {
+      return { imageDataUrl: image, raw: data };
+    }
+
+    return {
+      imageDataUrl: `data:image/png;base64,${image}`,
+      raw: data,
+    };
+  }
+
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const imageDataUrl = `data:${contentType || 'image/png'};base64,${bytesToBase64(bytes)}`;
+  console.log('[ZAPI COMPANY RESPONSE]', {
+    mode: 'qr-code',
+    bytes: bytes.length,
+  });
+
+  return {
+    imageDataUrl,
+    raw: { bytes: bytes.length },
+  };
+}
+
 function formatCurrency(value: number) {
   return Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -1722,7 +1865,7 @@ async function sendRealChargesData(
       numero_nf: String(record?.numero_nf || item?.numero_nf || '') || null,
       valor: Number(record?.valor || item?.valor || 0),
       vencimento: String(record?.data_vencimento || item?.vencimento || '') || null,
-      tipo_cobranca: 'manual_real',
+      tipo_cobranca: 'manual',
       dias_atraso: 0,
       arquivo_encontrado: temBoletoEncontrado((record || item) as Partial<FinancialRow> & Record<string, unknown>),
       drive_file_id: String(item?.drive_file_id || '') || null,
@@ -1740,12 +1883,14 @@ async function sendRealChargesData(
         erro: errorMessage,
         enviado_por: userId,
       });
-      await insertLog(supabaseAdmin, {
+      await tryInsertLog(supabaseAdmin, {
         ...logBase,
         status_envio: 'erro',
         erro: errorMessage,
         payload: {
           message: '',
+          canal: 'whatsapp_real',
+          envio_real: true,
         },
       });
       failed.push({
@@ -1769,12 +1914,14 @@ async function sendRealChargesData(
         erro: errorMessage,
         enviado_por: userId,
       });
-      await insertLog(supabaseAdmin, {
+      await tryInsertLog(supabaseAdmin, {
         ...logBase,
         status_envio: 'erro',
         erro: errorMessage,
         payload: {
           message,
+          canal: 'whatsapp_real',
+          envio_real: true,
         },
       });
       failed.push({
@@ -1800,13 +1947,15 @@ async function sendRealChargesData(
         enviado_por: userId,
       });
 
-      await insertLog(supabaseAdmin, {
+      await tryInsertLog(supabaseAdmin, {
         ...logBase,
         telefone: sendResult.normalizedPhone,
         status_envio: 'sucesso',
         erro: null,
         payload: {
           message,
+          canal: 'whatsapp_real',
+          envio_real: true,
           zapi_message_id: sendResult.messageId || null,
           zapi_zaap_id: sendResult.zaapId || null,
           zapi_id: sendResult.id || null,
@@ -1847,12 +1996,14 @@ async function sendRealChargesData(
         erro: errorMessage,
         enviado_por: userId,
       });
-      await insertLog(supabaseAdmin, {
+      await tryInsertLog(supabaseAdmin, {
         ...logBase,
         status_envio: 'erro',
         erro: errorMessage,
         payload: {
           message,
+          canal: 'whatsapp_real',
+          envio_real: true,
         },
       });
       failed.push({
@@ -1995,8 +2146,20 @@ async function insertLog(
   supabaseAdmin: AdminClient,
   payload: Record<string, unknown>,
 ) {
+  console.log('[LOG_COBRANCA] payload', payload);
   const { error } = await supabaseAdmin.from('logs_cobranca').insert(payload);
   if (error) throw new Error(error.message);
+}
+
+async function tryInsertLog(
+  supabaseAdmin: AdminClient,
+  payload: Record<string, unknown>,
+) {
+  try {
+    await insertLog(supabaseAdmin, payload);
+  } catch (error) {
+    console.warn('[LOG_COBRANCA] warning', error instanceof Error ? error.message : error);
+  }
 }
 
 async function insertWhatsappCharge(
@@ -3365,7 +3528,7 @@ Deno.serve(async (req: Request) => {
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
     }
 
-    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission' || action === 'get_boleto_sync_report' || action === 'preview_charge_payload' || action === 'prepare_manual_charge' || action === 'send_real' || action === 'validate_company_integration') {
+    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission' || action === 'get_boleto_sync_report' || action === 'preview_charge_payload' || action === 'prepare_manual_charge' || action === 'send_real' || action === 'validate_company_integration' || action === 'validate_connection' || action === 'get_qr_code' || action === 'get_connection_status') {
       requireCompanyId(companyId);
     }
 
@@ -3656,42 +3819,109 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (action === 'validate_company_integration') {
+    if (action === 'validate_company_integration' || action === 'validate_connection') {
       try {
-        const config = body?.config || {};
-        const instanceId = String(config?.instance_id || '').trim();
-        const tokenValue = String(config?.token || '').trim();
-        const clientTokenValue = String(config?.client_token || '').trim();
-
-        if (!instanceId || !tokenValue || !clientTokenValue) {
-          return jsonResponse({
-            ok: false,
-            success: false,
-            action: 'validate_company_integration',
-            error: 'Instance ID, Token e Client Token sao obrigatorios.',
-          }, 200);
-        }
-
+        const zapiConfig = await resolveRequestedZapiConfig(
+          admin,
+          companyId || '',
+          (body?.config || {}) as Record<string, unknown>,
+          { allowTestMode: auth.bypass === true },
+        );
         const validation = await validateZapiConnection({
-          instanceId,
-          token: tokenValue,
-          clientToken: clientTokenValue,
+          instanceId: zapiConfig.instanceId,
+          token: zapiConfig.token,
+          clientToken: zapiConfig.clientToken,
         });
+        const connected = isZapiConnected(validation);
 
         return jsonResponse({
           ok: true,
           success: true,
-          action: 'validate_company_integration',
-          message: 'Integracao Z-API validada com sucesso.',
-          connected: true,
-          phone_number: String(validation?.phone || validation?.mobile || validation?.connectedPhone || ''),
+          action,
+          message: connected
+            ? 'Integracao Z-API validada com sucesso.'
+            : 'Credenciais validas. Gere o QR Code e conclua a conexao no WhatsApp.',
+          connected,
+          phone_number: extractZapiPhoneNumber(validation),
           data: validation,
         }, 200);
       } catch (error) {
         return jsonResponse({
           ok: false,
           success: false,
-          action: 'validate_company_integration',
+          action,
+          error: String(error instanceof Error ? error.message : error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
+    }
+
+    if (action === 'get_qr_code') {
+      try {
+        const zapiConfig = await resolveRequestedZapiConfig(
+          admin,
+          companyId || '',
+          (body?.config || {}) as Record<string, unknown>,
+          { allowTestMode: auth.bypass === true },
+        );
+        const qrCode = await getZapiQrCodeData({
+          instanceId: zapiConfig.instanceId,
+          token: zapiConfig.token,
+          clientToken: zapiConfig.clientToken,
+        });
+
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'get_qr_code',
+          connected: false,
+          image_data_url: qrCode.imageDataUrl,
+          data: qrCode.raw,
+          message: 'QR Code carregado com sucesso.',
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'get_qr_code',
+          error: String(error instanceof Error ? error.message : error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
+    }
+
+    if (action === 'get_connection_status') {
+      try {
+        const zapiConfig = await resolveRequestedZapiConfig(
+          admin,
+          companyId || '',
+          (body?.config || {}) as Record<string, unknown>,
+          { allowTestMode: auth.bypass === true },
+        );
+        const validation = await validateZapiConnection({
+          instanceId: zapiConfig.instanceId,
+          token: zapiConfig.token,
+          clientToken: zapiConfig.clientToken,
+        });
+        const connected = isZapiConnected(validation);
+
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'get_connection_status',
+          connected,
+          phone_number: extractZapiPhoneNumber(validation),
+          status_label: connected ? 'Conectado' : 'Aguardando leitura do QR Code',
+          data: validation,
+          message: connected
+            ? 'WhatsApp conectado com sucesso.'
+            : 'Instancia aguardando leitura do QR Code.',
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'get_connection_status',
           error: String(error instanceof Error ? error.message : error),
           details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
