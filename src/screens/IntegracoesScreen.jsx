@@ -74,6 +74,7 @@ function ZapiIntegrationCard({
   const [statusLoading, setStatusLoading] = useState(false);
   const [helperOpen, setHelperOpen] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
+  const [integrationMessage, setIntegrationMessage] = useState('');
   const [status, setStatus] = useState('nao_configurado');
   const [form, setForm] = useState({
     instance_id: '',
@@ -131,6 +132,7 @@ function ZapiIntegrationCard({
         connected: Boolean(integration?.connected),
       });
       setQrCodeDataUrl('');
+      setIntegrationMessage('');
       setStatus(integration?.connected ? 'salvo' : 'nao_configurado');
     } catch (error) {
       onToast?.('erro', error.message || 'Falha ao carregar integracao WhatsApp.');
@@ -153,6 +155,7 @@ function ZapiIntegrationCard({
     if (field !== 'phone_number') {
       setStatus('nao_configurado');
       setQrCodeDataUrl('');
+      setIntegrationMessage('');
     }
   };
 
@@ -181,10 +184,12 @@ function ZapiIntegrationCard({
         phone_number: result?.phone_number || current.phone_number,
       }));
       setStatus(connected ? 'conectado' : 'aguardando_qr');
+      setIntegrationMessage(String(result?.message || ''));
       onToast?.('sucesso', result?.message || 'Integracao Z-API validada com sucesso.');
     } catch (error) {
       setForm((current) => ({ ...current, connected: false }));
       setStatus('erro');
+      setIntegrationMessage('');
       onToast?.('erro', error.message || 'Falha ao validar a integracao Z-API.');
     } finally {
       setValidating(false);
@@ -208,7 +213,8 @@ function ZapiIntegrationCard({
     setQrLoading(true);
     try {
       const result = await getCompanyIntegrationQrCode(companyId, form);
-      const connected = Boolean(result?.connected);
+      console.log('[ZAPI get_qr_code]', result);
+      const connected = Boolean(result?.connected) || String(result?.status || '').toLowerCase() === 'connected';
       if (connected) {
         setQrCodeDataUrl('');
         setForm((current) => ({
@@ -217,6 +223,7 @@ function ZapiIntegrationCard({
           phone_number: result?.phone_number || current.phone_number,
         }));
         setStatus('conectado');
+        setIntegrationMessage(String(result?.message || 'WhatsApp ja conectado'));
         onToast?.('sucesso', result?.message || 'WhatsApp ja conectado');
         return;
       }
@@ -226,9 +233,11 @@ function ZapiIntegrationCard({
       }
       setQrCodeDataUrl(qrImage);
       setStatus('aguardando_qr');
+      setIntegrationMessage(String(result?.message || 'QR Code carregado com sucesso.'));
       onToast?.('sucesso', result?.message || 'QR Code carregado com sucesso.');
     } catch (error) {
       setStatus('erro');
+      setIntegrationMessage('');
       onToast?.('erro', error.message || 'Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
     } finally {
       setQrLoading(false);
@@ -260,9 +269,11 @@ function ZapiIntegrationCard({
         phone_number: result?.phone_number || current.phone_number,
       }));
       setStatus(connected ? 'conectado' : 'aguardando_qr');
+      setIntegrationMessage(String(result?.message || ''));
       onToast?.('sucesso', result?.message || 'Status da integracao atualizado.');
     } catch (error) {
       setStatus('erro');
+      setIntegrationMessage('');
       onToast?.('erro', error.message || 'Falha ao atualizar o status da integracao.');
     } finally {
       setStatusLoading(false);
@@ -287,10 +298,12 @@ function ZapiIntegrationCard({
     try {
       await saveCompanyIntegration(companyId, form, 'zapi');
       setStatus('salvo');
+      setIntegrationMessage('Integracao salva com sucesso.');
       onSaved?.();
       onToast?.('sucesso', 'Integracao Z-API salva com sucesso.');
     } catch (error) {
       setStatus('erro');
+      setIntegrationMessage('');
       onToast?.('erro', error.message || 'Falha ao salvar a integracao Z-API.');
     } finally {
       setSaving(false);
@@ -440,6 +453,12 @@ function ZapiIntegrationCard({
           Status da integracao: <span className="font-semibold">{statusMap[status]?.label || statusMap.nao_configurado.label}</span>
         </span>
       </div>
+
+      {integrationMessage ? (
+        <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          {integrationMessage}
+        </div>
+      ) : null}
 
       {qrCodeDataUrl ? (
         <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-5">
