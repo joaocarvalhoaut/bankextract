@@ -2070,9 +2070,11 @@ async function sendSingleChargeData(
   userId: string | null,
   registroId: string,
   simulate: boolean,
+  customMessage: string,
   options: { allowTestMode?: boolean } = {},
 ) {
   const preview = await buildChargePayloadPreview(supabaseAdmin, companyId, registroId);
+  const finalMessage = String(customMessage || preview.message || '').trim();
   const item = {
     ...preview.payload,
     id: registroId,
@@ -2080,8 +2082,8 @@ async function sendSingleChargeData(
     charge_id: registroId,
     phone: String(preview.payload?.telefone || ''),
     telefone: String(preview.payload?.telefone || ''),
-    message: preview.message,
-    mensagem: preview.message,
+    message: finalMessage,
+    mensagem: finalMessage,
   };
 
   if (simulate) {
@@ -2117,7 +2119,7 @@ async function sendSingleChargeData(
       erro: null,
       payload: {
         ...preview.payload,
-        message: preview.message,
+        message: finalMessage,
         canal: 'whatsapp_simulado',
         simulated: true,
       },
@@ -2128,7 +2130,10 @@ async function sendSingleChargeData(
       simulated: true,
       zapiResponse: null,
       message: 'Simulacao executada, nenhuma mensagem real enviada.',
-      payload: preview.payload,
+      payload: {
+        ...preview.payload,
+        message: finalMessage,
+      },
     };
   }
 
@@ -2150,7 +2155,10 @@ async function sendSingleChargeData(
     simulated: false,
     zapiResponse: result.sent[0] || null,
     message: 'Mensagem enviada via WhatsApp',
-    payload: preview.payload,
+    payload: {
+      ...preview.payload,
+      message: finalMessage,
+    },
   };
 }
 
@@ -4110,6 +4118,7 @@ Deno.serve(async (req: Request) => {
       try {
         const registroId = String(body?.registro_id || body?.charge_id || '').trim();
         const simulate = body?.simulate === true;
+        const customMessage = String(body?.custom_message || body?.message || '').trim();
 
         if (!registroId) {
           return jsonResponse({
@@ -4126,6 +4135,7 @@ Deno.serve(async (req: Request) => {
           auth.userId,
           registroId,
           simulate,
+          customMessage,
           { allowTestMode: auth.bypass === true },
         );
 

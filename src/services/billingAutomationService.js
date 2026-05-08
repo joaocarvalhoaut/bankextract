@@ -167,6 +167,7 @@ export async function runBillingAutomationNow(companyId, options = {}) {
 
 export async function sendSingleCharge(companyId, registroId, options = {}) {
   const simulate = options.simulate === true ? true : false;
+  const customMessage = String(options.custom_message || options.message || '').trim();
 
   if (!companyId) {
     throw new Error('Selecione uma empresa especifica para enviar a cobranca.');
@@ -183,6 +184,7 @@ export async function sendSingleCharge(companyId, registroId, options = {}) {
     registro_id: registroId,
     charge_id: registroId,
     simulate,
+    ...(customMessage ? { custom_message: customMessage, message: customMessage } : {}),
   };
 
   console.log('[SEND SINGLE CHARGE REQUEST]', payload);

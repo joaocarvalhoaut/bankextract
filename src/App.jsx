@@ -13,6 +13,7 @@ import { createNotification, syncTrialEndingNotification } from './services/noti
 import { getPlans, getUsageLimits, updateCompanyPlan } from './services/subscriptionService';
 import { incrementUsage } from './services/usageService';
 import { financeService, sanitizeSpreadsheetCell } from './services/financeService.ts';
+import { sendSingleCharge } from './services/billingAutomationService';
 import LoginScreen from './screens/LoginScreen';
 import { GLOBAL_COMPANY_ID } from './services/companyService';
 import { auditLog } from './services/auditService';
@@ -1148,6 +1149,21 @@ export default function App() {
       ...chargePreviewModal.row,
       mensagem: chargePreviewModal.message,
     };
+    const registroId = String(nextRow.registro_id || nextRow.financeiro_id || nextRow.id || '').trim();
+    const simulate = billingExecutionMode !== 'real';
+    const payload = {
+      action: 'send_single_charge',
+      companyId: nextRow.company_id || currentCompanyId,
+      company_id: nextRow.company_id || currentCompanyId,
+      registro_id: registroId,
+      charge_id: registroId,
+      simulate,
+      custom_message: nextRow.mensagem || '',
+      message: nextRow.mensagem || '',
+    };
+
+    console.log('[SEND MODAL WHATSAPP CLICKED]', chargePreviewModal.row);
+    console.log('[SEND MODAL WHATSAPP REQUEST]', payload);
 
     setChargePreviewSending(true);
     setChargeRows((prev) =>
@@ -1155,12 +1171,28 @@ export default function App() {
     );
 
     try {
-      await handleSendCharge(nextRow);
+      const data = await sendSingleCharge(payload.company_id, registroId, {
+        simulate,
+        custom_message: nextRow.mensagem || '',
+        message: nextRow.mensagem || '',
+      });
+      console.log('[SEND MODAL WHATSAPP RESPONSE]', data, null);
+      await refreshAllData();
+      showToast(
+        simulate ? 'aviso' : 'sucesso',
+        data?.message ||
+          (simulate
+            ? 'Simulacao executada, nenhuma mensagem real enviada.'
+            : 'Mensagem enviada via WhatsApp')
+      );
       setChargePreviewModal(null);
+    } catch (error) {
+      console.log('[SEND MODAL WHATSAPP RESPONSE]', null, error);
+      showToast('erro', error.message || 'Falha ao enviar cobranca via WhatsApp.');
     } finally {
       setChargePreviewSending(false);
     }
-  }, [chargePreviewModal, handleSendCharge]);
+  }, [billingExecutionMode, chargePreviewModal, currentCompanyId, refreshAllData, showToast]);
 
   const handleChargePreviewCollectionGenerated = useCallback(
     async (result) => {
