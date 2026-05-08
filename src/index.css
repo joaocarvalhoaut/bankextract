@@ -161,7 +161,7 @@ body {
   width: 3px;
   transform: translateY(-50%);
   border-radius: 999px;
-  background: linear-gradient(180deg, #10B981 0%, #2563eb 100%);
+  background: linear-gradient(180deg, #005dff 0%, #14d8ff 100%);
 }
 
 .hero-mesh {
@@ -235,6 +235,38 @@ button:active:not(:disabled) {
   transform: translateY(-1px);
 }
 
+.brand-gradient {
+  background: linear-gradient(135deg, #005dff 0%, #14d8ff 100%);
+}
+
+.brand-glow {
+  box-shadow: 0 18px 42px rgba(0, 93, 255, 0.22);
+}
+
+.btn-brand {
+  background: linear-gradient(135deg, #005dff 0%, #14d8ff 100%);
+  color: #ffffff;
+  box-shadow: 0 18px 40px rgba(0, 93, 255, 0.24);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.btn-brand:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 24px 48px rgba(0, 93, 255, 0.28);
+  filter: saturate(1.05);
+}
+
+.badge-brand {
+  border: 1px solid rgba(0, 93, 255, 0.18);
+  background: rgba(0, 93, 255, 0.08);
+  color: #005dff;
+}
+
+.nav-active-brand {
+  background: rgba(0, 93, 255, 0.08);
+  color: #005dff;
+}
+
 @keyframes shimmer {
   0% {
     background-position: -200% 0;
@@ -248,11 +280,11 @@ button:active:not(:disabled) {
 @keyframes ring-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.30);
+    box-shadow: 0 0 0 0 rgba(0, 93, 255, 0.30);
   }
 
   50% {
-    box-shadow: 0 0 0 9px rgba(16, 185, 129, 0);
+    box-shadow: 0 0 0 9px rgba(0, 93, 255, 0);
   }
 }
 

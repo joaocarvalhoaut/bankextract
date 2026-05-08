@@ -24,8 +24,8 @@ function ProgressRing({ pct = 0 }) {
       />
       <defs>
         <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#0E9F6E" />
-          <stop offset="100%" stopColor="#3b82f6" />
+          <stop offset="0%" stopColor="#005DFF" />
+          <stop offset="100%" stopColor="#14D8FF" />
         </linearGradient>
       </defs>
     </svg>
@@ -82,7 +82,7 @@ export default function OnboardingScreen({
             <button
               type="button"
               onClick={() => onOpenStep?.(nextStep)}
-              className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-emerald-700 active:scale-[0.98]"
+              className="btn-brand inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold active:scale-[0.98]"
             >
               Proximo passo
               <ArrowRight size={15} />
@@ -92,7 +92,7 @@ export default function OnboardingScreen({
 
         <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-blue-500 transition-all duration-700"
+            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-700"
             style={{ width: `${progress}%` }}
           />
         </div>

@@ -129,7 +129,7 @@ const faqItems = [
 
 function SectionBadge({ children }) {
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+    <span className="badge-brand inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em]">
       <Sparkles size={12} />
       {children}
     </span>
@@ -143,7 +143,7 @@ function PublicButton({ children, onClick, primary = false, fullWidth = false })
       onClick={onClick}
       className={
         primary
-          ? `inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-7 py-4 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(5,150,105,0.22)] transition duration-200 hover:-translate-y-1 hover:scale-[1.02] hover:bg-emerald-600 hover:shadow-[0_24px_48px_rgba(5,150,105,0.26)] active:scale-[0.99] ${fullWidth ? 'w-full' : ''}`
+          ? `btn-brand inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl px-7 py-4 text-sm font-semibold active:scale-[0.99] ${fullWidth ? 'w-full' : ''}`
           : `inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-7 py-4 text-sm font-semibold text-slate-700 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-slate-50 ${fullWidth ? 'w-full' : ''}`
       }
     >
@@ -152,9 +152,9 @@ function PublicButton({ children, onClick, primary = false, fullWidth = false })
   );
 }
 
-function InfoCard({ icon: Icon, title, description, tone = 'emerald' }) {
+function InfoCard({ icon: Icon, title, description, tone = 'blue' }) {
   const toneClass =
-    tone === 'red' ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700';
+    tone === 'red' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-700';
 
   return (
     <article className="fade-up rounded-[24px] border border-slate-200 bg-white p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card">
@@ -259,8 +259,8 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
             </div>
 
             <div className="relative fade-up xl:scale-[1.16] xl:origin-right">
-              <div className="absolute -left-10 top-10 h-40 w-40 rounded-full bg-emerald-200/45 blur-3xl" />
-              <div className="absolute -right-6 bottom-6 h-40 w-40 rounded-full bg-blue-200/45 blur-3xl" />
+              <div className="absolute -left-10 top-10 h-40 w-40 rounded-full bg-blue-200/45 blur-3xl" />
+              <div className="absolute -right-6 bottom-6 h-40 w-40 rounded-full bg-cyan-200/45 blur-3xl" />
               <div className="relative rounded-[34px] border border-slate-200 bg-slate-50 p-4 shadow-[0_34px_90px_rgba(15,23,42,0.14)] md:p-5">
                 <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft">
                   <div className="mb-5 flex items-center justify-between">
@@ -268,7 +268,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Painel operacional</p>
                       <h3 className="mt-1 text-lg font-semibold text-slate-950">Cobranca em simulacao</h3>
                     </div>
-                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700">
+                    <span className="badge-brand rounded-full px-3 py-1 text-[11px] font-bold">
                       Simulacao ativa
                     </span>
                   </div>
@@ -278,7 +278,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                       { label: 'Total em aberto', value: 'R$ 182.540', tone: 'text-slate-950' },
                       { label: 'Telefones validos', value: '84%', tone: 'text-emerald-700' },
                       { label: 'Boletos encontrados', value: '88%', tone: 'text-blue-700' },
-                      { label: 'Simulacoes hoje', value: '37', tone: 'text-emerald-700' },
+                      { label: 'Simulacoes hoje', value: '37', tone: 'text-blue-700' },
                     ].map((card) => (
                       <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
@@ -305,7 +305,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                         <span>{row.vencimento}</span>
                         <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                           row.status === 'Simulado'
-                            ? 'bg-emerald-50 text-emerald-700'
+                            ? 'bg-blue-50 text-blue-700'
                             : row.status === 'Em analise'
                               ? 'bg-blue-50 text-blue-700'
                               : 'bg-amber-50 text-amber-700'
@@ -332,7 +332,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
               </p>
             </div>
             <div className="fade-up inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              <ShieldCheck size={14} className="text-emerald-600" />
+                  <ShieldCheck size={14} className="text-blue-600" />
               Ambiente seguro • Operacao auditavel • Simulacao antes do envio real
             </div>
           </div>
@@ -396,10 +396,10 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                 className="fade-up relative rounded-[26px] border border-slate-200 bg-slate-50 p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card"
               >
                 <div className="mb-5 flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow-lg shadow-emerald-900/15">
+                  <div className="brand-gradient flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white shadow-lg shadow-blue-900/20">
                     {item.step}
                   </div>
-                  <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-emerald-700 shadow-soft">
+                  <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-blue-700 shadow-soft">
                     <item.icon size={18} />
                   </div>
                 </div>
@@ -422,7 +422,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                         <div
                           key={item}
                           className={`rounded-xl px-3 py-2 text-sm font-medium ${
-                            index === 1 ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'text-slate-600'
+                            index === 1 ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'text-slate-600'
                           }`}
                         >
                           {item}

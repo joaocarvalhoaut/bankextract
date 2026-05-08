@@ -54,7 +54,7 @@ function NavGroup({ label, badge, children }) {
       <div className="mb-1 ml-3 flex items-center gap-2">
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
         {badge ? (
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-emerald-700">
+          <span className="badge-brand rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em]">
             {badge}
           </span>
         ) : null}
@@ -129,10 +129,10 @@ export default function Sidebar({
 
             <div className={`mt-3 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] ${
               billingExecutionMode === 'real'
-                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                ? 'border-blue-500/30 bg-blue-500/10 text-blue-300'
                 : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
             }`}>
-              <Shield size={11} className={billingExecutionMode === 'real' ? 'text-emerald-400' : 'text-amber-400'} />
+              <Shield size={11} className={billingExecutionMode === 'real' ? 'text-blue-300' : 'text-amber-400'} />
               {billingExecutionMode === 'real' ? 'Envio real ativo' : 'Simulacao ativa'}
             </div>
 
@@ -232,11 +232,11 @@ export default function Sidebar({
                     onClick={() => setActiveTab(item.id)}
                     className={`flex w-full items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-medium transition-colors ${
                       isActive
-                        ? 'bg-emerald-50 text-emerald-700'
+                        ? 'nav-active-brand'
                         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                     }`}
                   >
-                    <Icon size={16} className={isActive ? 'text-emerald-600' : 'text-slate-400'} />
+                    <Icon size={16} className={isActive ? 'text-blue-600' : 'text-slate-400'} />
                     {item.label}
                   </button>
                 );

@@ -353,7 +353,7 @@ export default function GoogleSheetsConfig({
     return (
       <div className="card-hover rounded-[30px] border border-white/70 bg-white/90 p-5 shadow-soft backdrop-blur">
         <div className="mb-3 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
             <Sheet size={18} />
           </div>
           <div>
@@ -372,7 +372,7 @@ export default function GoogleSheetsConfig({
     return (
       <div className="card-hover rounded-[30px] border border-white/70 bg-white/90 p-5 shadow-soft backdrop-blur">
         <div className="mb-3 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
             <Sheet size={18} />
           </div>
           <div>
@@ -693,11 +693,11 @@ export default function GoogleSheetsConfig({
       <div className="hero-mesh border-b border-slate-200/80 px-5 py-5 sm:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 shadow-sm">
-              <Sheet size={18} />
-            </div>
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-100 text-blue-700 shadow-sm">
+            <Sheet size={18} />
+          </div>
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-700">
+              <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-700">
                 <Sparkles size={12} />
                 Integracao viva
               </div>
@@ -750,9 +750,9 @@ export default function GoogleSheetsConfig({
                 <p className="mt-2 text-base font-semibold text-blue-950">{lastSync ? 'Atualizada' : 'Nunca sincronizada'}</p>
                 <p className="mt-1 text-sm text-blue-700/80">A integracao nunca expone credenciais no frontend.</p>
               </div>
-              <div className="rounded-3xl border border-emerald-200/80 bg-emerald-50/70 p-4">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-700">Ultima sincronizacao</p>
-                <p className="mt-2 text-base font-semibold text-emerald-950">
+              <div className="rounded-3xl border border-blue-200/80 bg-blue-50/70 p-4">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-blue-700">Ultima sincronizacao</p>
+                <p className="mt-2 text-base font-semibold text-blue-950">
                   {lastSync
                     ? new Date(lastSync).toLocaleString('pt-BR', {
                         day: '2-digit',
@@ -827,7 +827,7 @@ export default function GoogleSheetsConfig({
                 type="button"
                 onClick={handleSync}
                 disabled={anyLoading || !hasConfig}
-                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_16px_28px_rgba(14,159,110,0.22)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_34px_rgba(14,159,110,0.28)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_16px_28px_rgba(37,99,235,0.22)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_34px_rgba(37,99,235,0.28)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
                 {syncing ? 'Sincronizando...' : 'Sincronizar agora'}

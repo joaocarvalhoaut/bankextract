@@ -17,11 +17,11 @@ export default function PlanCard({
   return (
     <article
       className={`relative overflow-hidden rounded-[28px] border p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card ${
-        highlight ? 'border-emerald-300 bg-white ring-1 ring-emerald-100' : 'border-slate-200 bg-white'
+        highlight ? 'border-blue-300 bg-white ring-1 ring-blue-100' : 'border-slate-200 bg-white'
       }`}
     >
       {plan?.badge ? (
-        <span className="absolute right-5 top-5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-700">
+        <span className="absolute right-5 top-5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-blue-700">
           {plan.badge}
         </span>
       ) : null}
@@ -41,7 +41,7 @@ export default function PlanCard({
       <div className={`mt-6 space-y-3 ${compact ? '' : 'min-h-[168px]'}`}>
         {(plan?.features || []).map((feature) => (
           <div key={feature} className="flex items-start gap-2 text-sm text-slate-700">
-            <BadgeCheck size={15} className="mt-0.5 shrink-0 text-emerald-600" />
+            <BadgeCheck size={15} className="mt-0.5 shrink-0 text-blue-600" />
             <span>{feature}</span>
           </div>
         ))}
@@ -66,9 +66,9 @@ export default function PlanCard({
         disabled={current && !onAction}
         className={`mt-6 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-sm font-semibold transition ${
           highlight
-            ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+            ? 'bg-blue-600 text-white hover:bg-blue-700'
             : current
-              ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+              ? 'border border-blue-200 bg-blue-50 text-blue-700'
               : 'border border-slate-200 bg-white text-slate-800 hover:bg-slate-50'
         }`}
       >

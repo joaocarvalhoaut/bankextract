@@ -66,7 +66,7 @@ function maskSensitiveValue(value) {
 function CredentialSummaryItem({ label, value, sensitive = false, status }) {
   const statusTone =
     status === 'Salvo'
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      ? 'border-blue-200 bg-blue-50 text-blue-700'
       : status === 'Pendente'
         ? 'border-amber-200 bg-amber-50 text-amber-700'
         : 'border-slate-200 bg-slate-100 text-slate-600';
@@ -120,7 +120,7 @@ function ZapiIntegrationCard({
     validando: { label: 'Validando...', tone: 'text-blue-700 border-blue-200 bg-blue-50' },
     conectado: { label: 'Conectado', tone: 'text-emerald-700 border-emerald-200 bg-emerald-50' },
     erro: { label: 'Erro na validacao', tone: 'text-red-700 border-red-200 bg-red-50' },
-    salvo: { label: 'Salvo', tone: 'text-emerald-700 border-emerald-200 bg-emerald-50' },
+    salvo: { label: 'Salvo', tone: 'text-blue-700 border-blue-200 bg-blue-50' },
   };
 
   const getStatusIcon = (value) => {
@@ -363,13 +363,13 @@ function ZapiIntegrationCard({
   return (
     <section className="group rounded-[32px] border border-slate-200/90 bg-white p-7 shadow-[0_22px_70px_rgba(15,23,42,0.08)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_28px_90px_rgba(15,23,42,0.1)] lg:p-8">
       <div className="flex items-start gap-4">
-        <div className="flex h-14 w-14 items-center justify-center rounded-[24px] bg-emerald-50 text-emerald-700 shadow-sm ring-1 ring-emerald-100">
+        <div className="flex h-14 w-14 items-center justify-center rounded-[24px] bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100">
           <Smartphone size={22} />
         </div>
         <div className="flex-1">
           <div className="flex flex-wrap items-center gap-3">
             <h3 className="text-xl font-semibold tracking-tight text-slate-950">WhatsApp Business (Z-API)</h3>
-            <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
+            <span className="badge-brand inline-flex rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]">
               Canal oficial
             </span>
           </div>
@@ -442,7 +442,7 @@ function ZapiIntegrationCard({
                   },
                 ].map((item) => (
                   <div key={item.step} className="flex gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-700 ring-1 ring-blue-100">
                       {item.step}
                     </div>
                     <div className="min-w-0">
@@ -518,7 +518,7 @@ function ZapiIntegrationCard({
                 onChange={(event) => setField('instance_id', event.target.value)}
                 disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
                 placeholder="Ex: ABC123DEF456GHI789JKL012MNO345"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2 disabled:opacity-60"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-blue-500 focus:ring-2 disabled:opacity-60"
               />
             </label>
 
@@ -530,7 +530,7 @@ function ZapiIntegrationCard({
                 onChange={(event) => setField('token', event.target.value)}
                 disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
                 placeholder="Ex: SEU_TOKEN_DA_INSTANCIA"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2 disabled:opacity-60"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-blue-500 focus:ring-2 disabled:opacity-60"
               />
             </label>
 
@@ -542,7 +542,7 @@ function ZapiIntegrationCard({
                 onChange={(event) => setField('client_token', event.target.value)}
                 disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
                 placeholder="Ex: SEU_CLIENT_TOKEN"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2 disabled:opacity-60"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none ring-blue-500 focus:ring-2 disabled:opacity-60"
               />
             </label>
 
@@ -640,7 +640,7 @@ function ZapiIntegrationCard({
           type="button"
           onClick={handleSave}
           disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
-          className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+          className="btn-brand inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
         >
           {saving ? <Loader2 size={14} className="animate-spin" /> : <MessageCircleMore size={14} />}
           Salvar integracao desta empresa
@@ -734,8 +734,8 @@ export default function IntegracoesScreen({
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-soft">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Ativacao</p>
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-soft">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-700">Ativacao</p>
               <p className="mt-2 text-sm font-semibold text-slate-900">{activeIntegrations}/2 integracoes ativas</p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">

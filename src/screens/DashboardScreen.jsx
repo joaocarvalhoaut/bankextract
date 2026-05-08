@@ -50,15 +50,15 @@ function MiniBars({ items = [] }) {
   );
 }
 
-function StatusPill({ active, label, tone = 'emerald' }) {
+function StatusPill({ active, label, tone = 'blue' }) {
   const toneClass =
     tone === 'amber'
       ? 'border-amber-200 bg-amber-50 text-amber-700'
       : tone === 'blue'
         ? 'border-blue-200 bg-blue-50 text-blue-700'
-        : 'border-emerald-200 bg-emerald-50 text-emerald-700';
+        : 'border-blue-200 bg-blue-50 text-blue-700';
 
-  const dotClass = tone === 'amber' ? 'bg-amber-500' : tone === 'blue' ? 'bg-blue-500' : 'bg-emerald-500';
+  const dotClass = tone === 'amber' ? 'bg-amber-500' : tone === 'blue' ? 'bg-blue-500' : 'bg-cyan-500';
 
   return (
     <span
@@ -253,7 +253,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-        <article className="rounded-[28px] border border-emerald-100 bg-white p-6 shadow-soft xl:col-span-2">
+        <article className="rounded-[28px] border border-blue-100 bg-white p-6 shadow-soft xl:col-span-2">
           <SectionHeader
             title="Primeiros passos"
             subtitle="Acompanhe a ativacao inicial da empresa e avance para as proximas etapas."
@@ -262,7 +262,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
               onNavigate ? (
                 <button
                   onClick={() => onNavigate('onboarding')}
-                  className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+                  className="flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100"
                 >
                   Abrir onboarding <ArrowRight size={12} />
                 </button>
@@ -364,7 +364,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
           <SectionHeader title="Cobranca WhatsApp" subtitle="Status do agendador automatico." />
           <div className="space-y-3">
             {[
-              { label: 'Status', value: operational.autoChargeActive ? 'Ativo' : 'Inativo', cls: operational.autoChargeActive ? 'text-emerald-700' : 'text-slate-500' },
+              { label: 'Status', value: operational.autoChargeActive ? 'Ativo' : 'Inativo', cls: operational.autoChargeActive ? 'text-blue-700' : 'text-slate-500' },
               { label: 'Ultima execucao', value: operational.lastAutoExecution || 'Nunca executada', cls: 'text-slate-900' },
               { label: 'Proxima janela', value: operational.nextRunHint || 'Automacao inativa', cls: 'text-slate-900' },
             ].map((row) => (
@@ -382,7 +382,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
           <SectionHeader title="Leituras operacionais" subtitle="Sinais rapidos para operacao e venda do SaaS." badge={operational.recentAuditAction || 'Sem atividade recente'} />
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             {[
-              { label: 'Cobertura de contato', desc: 'Use a taxa com telefone para medir a prontidao real da carteira para cobranca.', icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+              { label: 'Cobertura de contato', desc: 'Use a taxa com telefone para medir a prontidao real da carteira para cobranca.', icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-50' },
               { label: 'Modo teste', desc: operational.whatsappMockMode ? 'WhatsApp em mock ativo para validar o fluxo sem custo real.' : 'Ambiente preparado para ativar o provedor real depois.', icon: Zap, color: operational.whatsappMockMode ? 'text-amber-600' : 'text-slate-500', bg: operational.whatsappMockMode ? 'bg-amber-50' : 'bg-slate-50' },
               { label: 'Leitura multiempresa', desc: 'Voce esta em modo global com visao consolidada de todas as empresas, ou no escopo isolado de uma.', icon: BarChart3, color: 'text-blue-600', bg: 'bg-blue-50' },
             ].map(({ label, desc, icon: Icon, color, bg }) => (
