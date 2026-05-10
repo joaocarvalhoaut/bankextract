@@ -10,21 +10,24 @@ const DEFAULT_LIMITS_BY_PLAN = {
     imports_month: 50,
     automations_month: 100,
     users_count: 2,
-    companies: 1,
+    companies_count: 1,
+    integrations_count: 2,
   },
   pro: {
     charges_month: 2000,
     imports_month: 300,
     automations_month: 500,
     users_count: 3,
-    companies: 1,
+    companies_count: 1,
+    integrations_count: 4,
   },
   business: {
     charges_month: 10000,
     imports_month: 2000,
     automations_month: 2000,
     users_count: 10,
-    companies: 3,
+    companies_count: 3,
+    integrations_count: 10,
   },
 };
 
@@ -41,15 +44,19 @@ const DEFAULT_COUNTERS = {
   charges_month: 0,
   automations_month: 0,
   users_count: 1,
+  integrations_count: 0,
+  companies_count: 1,
 };
 
-const METRIC_ORDER = ['charges_month', 'imports_month', 'automations_month', 'users_count'];
+const METRIC_ORDER = ['charges_month', 'imports_month', 'automations_month', 'users_count', 'integrations_count', 'companies_count'];
 
 const METRIC_LABELS = {
   charges_month: 'Cobrancas',
   imports_month: 'Importacoes',
   automations_month: 'Automacoes',
   users_count: 'Usuarios',
+  integrations_count: 'Integracoes',
+  companies_count: 'Empresas',
 };
 
 const readMockStore = () => {
@@ -161,6 +168,8 @@ const buildLimitsJson = (planCode, planLimits = {}) => {
   const defaults = DEFAULT_LIMITS_BY_PLAN[normalizePlanId(planCode)] || DEFAULT_LIMITS_BY_PLAN.starter;
   return {
     ...defaults,
+    companies: defaults.companies_count,
+    users: defaults.users_count,
     ...(planLimits || {}),
   };
 };
@@ -195,7 +204,7 @@ async function resolvePlanContext(companyId) {
   }
 
   const { data: subscription } = await supabase
-    .from('company_subscriptions')
+    .from('subscriptions')
     .select('plan_code, current_period_start, current_period_end')
     .eq('company_id', companyId)
     .order('updated_at', { ascending: false })
@@ -211,7 +220,7 @@ async function resolvePlanContext(companyId) {
   const planCode = normalizePlanId(subscription?.plan_code || company?.subscription_plan || fallbackPlan);
   const planMeta = getPlanMeta(planCode);
   const { data: planRow } = await supabase
-    .from('subscription_plans')
+    .from('plans')
     .select('limits_json')
     .eq('code', planCode)
     .maybeSingle();
@@ -241,6 +250,7 @@ async function getActualCompanyCounts(companyId, periodStart) {
       record_count: 0,
       users_count: 0,
       import_count: 0,
+      integrations_count: 0,
     };
   }
 
@@ -250,6 +260,7 @@ async function getActualCompanyCounts(companyId, periodStart) {
       record_count: 0,
       users_count: 1,
       import_count: 0,
+      integrations_count: 0,
     };
   }
 
@@ -257,10 +268,12 @@ async function getActualCompanyCounts(companyId, periodStart) {
     { count: recordCount },
     { count: usersCount },
     { count: importCount },
+    { count: integrationsCount },
   ] = await Promise.all([
     supabase.from('registros_financeiros').select('id', { count: 'exact', head: true }).eq('company_id', companyId),
     supabase.from('usuarios_empresas').select('id', { count: 'exact', head: true }).eq('company_id', companyId),
     supabase.from('importacoes').select('id', { count: 'exact', head: true }).eq('company_id', companyId).gte('created_at', `${periodStart}T00:00:00.000Z`),
+    supabase.from('company_integrations').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('connected', true),
   ]);
 
   return {
@@ -268,6 +281,7 @@ async function getActualCompanyCounts(companyId, periodStart) {
     record_count: normalizeNumber(recordCount),
     users_count: Math.max(1, normalizeNumber(usersCount, 1)),
     import_count: normalizeNumber(importCount),
+    integrations_count: normalizeNumber(integrationsCount),
   };
 }
 
@@ -289,6 +303,8 @@ function getMockUsageSnapshot(companyId, planContext) {
     monthly_send_limit: planContext.monthlySendLimit,
     extra_send_credits: planContext.extraCredits,
     users_count: normalizeNumber(current.users_count, 1),
+    integrations_count: normalizeNumber(current.integrations_count),
+    companies_count: normalizeNumber(current.companies_count, 1),
   };
 }
 
@@ -313,6 +329,8 @@ export async function getCurrentUsage(companyId) {
       company_count: actualCounts.company_count,
       record_count: actualCounts.record_count,
       users_count: normalizeNumber(snapshot.users_count, actualCounts.users_count || 1),
+      integrations_count: normalizeNumber(snapshot.integrations_count, actualCounts.integrations_count),
+      companies_count: normalizeNumber(snapshot.companies_count, actualCounts.company_count || 1),
     };
   }
 
@@ -342,6 +360,8 @@ export async function getCurrentUsage(companyId) {
     company_count: actualCounts.company_count,
     record_count: actualCounts.record_count,
     users_count: actualCounts.users_count,
+    integrations_count: actualCounts.integrations_count,
+    companies_count: actualCounts.company_count,
   };
 }
 
@@ -386,6 +406,8 @@ export async function setUsage(companyId, metricKey, value) {
   const metricLimit =
     metricKey === 'users_count'
       ? planContext.limits.users_count ?? planContext.limits.users
+      : metricKey === 'companies_count'
+        ? planContext.limits.companies_count ?? planContext.limits.companies
       : planContext.limits[metricKey];
 
   const metricSummary = buildMetricSummary(
@@ -451,6 +473,8 @@ export async function getUsageSummary(companyId) {
     imports_month: buildMetricSummary('imports_month', usage.imports_month, limits.imports_month, usage.period_start, usage.period_end),
     automations_month: buildMetricSummary('automations_month', usage.automations_month, limits.automations_month, usage.period_start, usage.period_end),
     users_count: buildMetricSummary('users_count', usage.users_count, limits.users_count ?? limits.users, usage.period_start, usage.period_end),
+    integrations_count: buildMetricSummary('integrations_count', usage.integrations_count, limits.integrations_count, usage.period_start, usage.period_end),
+    companies_count: buildMetricSummary('companies_count', usage.companies_count, limits.companies_count ?? limits.companies, usage.period_start, usage.period_end),
   };
 
   const alerts = METRIC_ORDER.map((key) => metrics[key]?.alert).filter(Boolean);

@@ -10,10 +10,11 @@ import { useEmpresa } from './hooks/useEmpresa';
 import { useSupabaseAuth } from './hooks/useSupabaseAuth';
 import { getOnboardingStatus, markOnboardingStep } from './services/onboardingService';
 import { createNotification, syncTrialEndingNotification } from './services/notificationService';
-import { getPlans, getUsageLimits, updateCompanyPlan } from './services/subscriptionService';
+import { getPlans, getUsageLimits } from './services/subscriptionService';
 import { incrementUsage } from './services/usageService';
 import { financeService, sanitizeSpreadsheetCell } from './services/financeService.ts';
 import { sendSingleCharge } from './services/billingAutomationService';
+import { createStripeCheckoutSession, createStripePortalSession } from './services/billingService';
 import SplashScreen from './components/branding/SplashScreen';
 import LoginScreen from './screens/LoginScreen';
 import { GLOBAL_COMPANY_ID } from './services/companyService';
@@ -80,6 +81,11 @@ const formatDateValue = (value) => {
   } catch {
     return value;
   }
+};
+
+const getAppBaseUrl = () => {
+  if (typeof window === 'undefined') return '';
+  return window.location.origin;
 };
 
 const buildChargeMessage = (row, companyName) => {
@@ -196,11 +202,11 @@ const headerMap = {
   },
   planos: {
     title: 'Planos comerciais',
-    subtitle: 'Estrutura de oferta pronta para venda antes de conectar billing real.',
+    subtitle: 'Escolha o nivel ideal do NC Finance com trial, limites e checkout Stripe.',
   },
   billing: {
-    title: 'Billing comercial',
-    subtitle: 'Plano atual, consumo e proxima cobranca em modo mock.',
+    title: 'Billing',
+    subtitle: 'Assinatura, trial, limites e autoatendimento Stripe da empresa ativa.',
   },
   analytics: {
     title: 'Analytics interno',
@@ -1401,28 +1407,101 @@ export default function App() {
 
   const handleChoosePlan = useCallback(
     async (plan) => {
-      if (!plan?.id) return;
+      const targetPlanCode = plan?.code || plan?.id;
+      console.log('[App] handleChoosePlan called', {
+        planCode: targetPlanCode,
+        planName: plan?.name,
+        currentPlanId: billingOverview?.currentPlan?.id,
+        currentCompanyId,
+      });
+
+      if (!targetPlanCode) {
+        console.warn('[App] handleChoosePlan: targetPlanCode vazio, abortando');
+        return;
+      }
       if (!currentCompanyId) {
         showToast('erro', 'Selecione uma empresa antes de alterar o plano.');
         return;
       }
 
-      await updateCompanyPlan(currentCompanyId, plan.id);
+      const currentPlanId = billingOverview?.currentPlan?.id;
+      if (currentPlanId && targetPlanCode === currentPlanId) {
+        console.log('[App] handleChoosePlan: empresa ja esta no plano', targetPlanCode);
+        showToast('aviso', `A empresa ja esta no plano ${plan.name}.`);
+        setActiveTab('billing');
+        return;
+      }
+
+      const baseUrl = getAppBaseUrl();
+      const successUrl = `${baseUrl}/billing?checkout=success&plan=${encodeURIComponent(targetPlanCode)}`;
+      const cancelUrl = `${baseUrl}/planos?checkout=canceled`;
+
+      console.log('[App] iniciando createStripeCheckoutSession', { planCode: targetPlanCode, companyId: currentCompanyId });
+
+      let result;
+      try {
+        result = await createStripeCheckoutSession({
+          companyId: currentCompanyId,
+          planCode: targetPlanCode,
+          successUrl,
+          cancelUrl,
+        });
+        console.log('[App] stripe checkout response', { url: result?.url, result });
+      } catch (err) {
+        console.error('[App] stripe checkout error:', err);
+        throw err; // propaga para BillingScreen/PlanosScreen mostrarem o toast
+      }
+
       createAuditEvent(currentCompanyId, {
-        action: 'plan_changed',
-        entity_type: 'empresas',
-        title: 'Plano alterado',
-        description: `Plano atualizado para ${plan.name}`,
-        metadata: { to: plan.id, plan_name: plan.name },
+        action: 'billing_checkout_started',
+        entity_type: 'subscriptions',
+        title: 'Checkout iniciado',
+        description: `Checkout Stripe iniciado para o plano ${plan.name}`,
+        metadata: { to: targetPlanCode, plan_name: plan.name, checkout_url: result?.url || '' },
         userId: currentUserId,
         severity: 'info',
       }).catch(() => {});
-      await refreshAllData();
-      showToast('sucesso', `Plano ${plan.name} atualizado na estrutura interna do SaaS.`);
-      setActiveTab('billing');
+
+      if (result?.url && typeof window !== 'undefined') {
+        console.log('[App] redirecionando para Stripe Checkout:', result.url);
+        window.location.assign(result.url);
+        return;
+      }
+
+      console.warn('[App] stripe checkout sem URL. data recebido:', result);
+      showToast('erro', 'Nao foi possivel abrir o checkout Stripe. Verifique o console para detalhes.');
     },
-    [currentCompanyId, currentUserId, refreshAllData, showToast]
+    [billingOverview?.currentPlan?.id, currentCompanyId, currentUserId, showToast]
   );
+
+  const handleOpenBillingPortal = useCallback(async () => {
+    if (!currentCompanyId) {
+      showToast('erro', 'Selecione uma empresa antes de gerenciar a assinatura.');
+      return;
+    }
+
+    const result = await createStripePortalSession({
+      companyId: currentCompanyId,
+      returnUrl: `${getAppBaseUrl()}/billing`,
+    });
+
+    createAuditEvent(currentCompanyId, {
+      action: 'billing_portal_opened',
+      entity_type: 'subscriptions',
+      title: 'Portal do cliente aberto',
+      description: 'Portal Stripe solicitado para a empresa ativa.',
+      metadata: { portal_url: result?.url || '' },
+      userId: currentUserId,
+      severity: 'info',
+    }).catch(() => {});
+
+    if (result?.url && typeof window !== 'undefined') {
+      window.location.assign(result.url);
+      return;
+    }
+
+    showToast('erro', 'Nao foi possivel abrir o portal do cliente Stripe.');
+  }, [currentCompanyId, currentUserId, showToast]);
 
   let currentContent = null;
 
@@ -1731,6 +1810,8 @@ export default function App() {
           <BillingScreen
             billing={billingOverview}
             onOpenPlans={() => setActiveTab('planos')}
+            onChoosePlan={handleChoosePlan}
+            onOpenPortal={handleOpenBillingPortal}
             companyId={currentCompanyId}
             onToast={showToast}
           />
@@ -1856,6 +1937,44 @@ export default function App() {
               onNavigate={handleHeaderNavigation}
               onOpenNotifications={handleOpenNotifications}
             />
+
+            {billingOverview?.status === 'trialing' ? (
+              <div className="surface-card border-brand flex flex-col gap-3 rounded-[28px] px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Trial ativo</p>
+                  <p className="mt-1 text-sm text-slate-100">
+                    {billingOverview?.trialDaysRemaining > 0
+                      ? `Restam ${billingOverview.trialDaysRemaining} dia(s) no trial da empresa ativa.`
+                      : 'O trial termina hoje. Ative um plano para continuar operando sem interrupcao.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('billing')}
+                  className="btn-brand rounded-2xl px-4 py-3 text-sm font-semibold"
+                >
+                  Ativar plano
+                </button>
+              </div>
+            ) : null}
+
+            {billingOverview?.status === 'past_due' ? (
+              <div className="rounded-[28px] border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-100 shadow-soft">
+                <p className="font-semibold text-amber-50">Pagamento pendente</p>
+                <p className="mt-1">
+                  Identificamos uma pendencia de cobranca. Atualize a assinatura no Billing para evitar bloqueios operacionais.
+                </p>
+              </div>
+            ) : null}
+
+            {billingOverview?.blocked_by_limit ? (
+              <div className="rounded-[28px] border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-100 shadow-soft">
+                <p className="font-semibold text-red-50">Limite do plano atingido</p>
+                <p className="mt-1">
+                  O volume mensal da empresa ativa foi consumido. Faca upgrade ou ajuste a assinatura para liberar novos envios.
+                </p>
+              </div>
+            ) : null}
 
             {toast && (
               <div

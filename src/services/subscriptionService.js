@@ -14,7 +14,7 @@ import {
 
 const STORAGE_KEY = 'bankextract.subscription.mock';
 const DEFAULT_PERIOD_DAYS = 30;
-const DEFAULT_TRIAL_DAYS = 14;
+const DEFAULT_TRIAL_DAYS = 7;
 
 const planDbSeeds = {
   starter: {
@@ -28,6 +28,9 @@ const planDbSeeds = {
       automations_month: 100,
       users: 2,
       companies: 1,
+      users_count: 2,
+      companies_count: 1,
+      integrations_count: 2,
     },
     features_json: ['basic_import', 'manual_automation', 'basic_dashboard'],
   },
@@ -42,6 +45,9 @@ const planDbSeeds = {
       automations_month: 500,
       users: 3,
       companies: 1,
+      users_count: 3,
+      companies_count: 1,
+      integrations_count: 4,
     },
     features_json: ['basic_import', 'manual_automation', 'advanced_automation', 'billing_center', 'analytics'],
   },
@@ -56,6 +62,9 @@ const planDbSeeds = {
       automations_month: 2000,
       users: 10,
       companies: 3,
+      users_count: 10,
+      companies_count: 3,
+      integrations_count: 10,
     },
     features_json: [
       'basic_import',
@@ -218,11 +227,13 @@ const mergeSubscriptionWithPlan = (subscription, usage = null) => {
       manualSends: Number(usageSnapshot.manual_sends_count || 0),
       automaticSends: Number(usageSnapshot.automatic_sends_count || 0),
       companies: Number(usageSnapshot.company_count || 1),
+      companiesCount: Number(usageSnapshot.company_count || 1),
       records: Number(usageSnapshot.record_count || 0),
       importsMonth: Number(usageSnapshot.imports_month || 0),
       chargesMonth: Number(usageSnapshot.charges_month || 0),
       automationsMonth: Number(usageSnapshot.automations_month || 0),
       usersCount: Number(usageSnapshot.users_count || 0),
+      integrationsCount: Number(usageSnapshot.integrations_count || 0),
     },
     remainingRealSends: remaining,
     monthly_send_limit: monthlyLimit,
@@ -240,7 +251,13 @@ const mergeSubscriptionWithPlan = (subscription, usage = null) => {
       charges_month: Number(usageSnapshot.charges_month || 0),
       automations_month: Number(usageSnapshot.automations_month || 0),
       users_count: Number(usageSnapshot.users_count || 0),
+      integrations_count: Number(usageSnapshot.integrations_count || 0),
+      companies_count: Number(usageSnapshot.company_count || 1),
     },
+    trialDaysRemaining:
+      subscription?.status === 'trialing' && subscription?.trial_ends_at
+        ? Math.max(0, Math.ceil((new Date(subscription.trial_ends_at).getTime() - Date.now()) / 86400000))
+        : 0,
   };
 };
 
@@ -282,17 +299,32 @@ export async function getPlans() {
   }
 
   const { data, error } = await supabase
-    .from('subscription_plans')
+    .from('plans')
     .select('code, name, price_cents, billing_period, limits_json, features_json, active')
     .eq('active', true)
     .order('price_cents', { ascending: true });
 
-  if (error) {
+  if (error && error.code !== 'PGRST205') {
     throw new Error(error.message || 'Falha ao carregar os planos.');
   }
 
-  const rows = Array.isArray(data) && data.length
-    ? data.map(normalizePlanRecord)
+  let sourceRows = Array.isArray(data) && data.length ? data : [];
+  if (!sourceRows.length) {
+    const legacy = await supabase
+      .from('subscription_plans')
+      .select('code, name, price_cents, billing_period, limits_json, features_json, active')
+      .eq('active', true)
+      .order('price_cents', { ascending: true });
+
+    if (legacy.error) {
+      throw new Error(legacy.error.message || 'Falha ao carregar os planos.');
+    }
+
+    sourceRows = legacy.data || [];
+  }
+
+  const rows = Array.isArray(sourceRows) && sourceRows.length
+    ? sourceRows.map(normalizePlanRecord)
     : buildPlanCatalogForUi().map(normalizePlanRecord);
 
   return rows.map((row) => {
@@ -314,7 +346,7 @@ export async function ensureTrialSubscription(companyId) {
   }
 
   const { data: existing, error: existingError } = await supabase
-    .from('company_subscriptions')
+    .from('subscriptions')
     .select('*')
     .eq('company_id', companyId)
     .order('updated_at', { ascending: false })
@@ -332,12 +364,12 @@ export async function ensureTrialSubscription(companyId) {
   const now = new Date();
   const trialEndsAt = addDays(now, DEFAULT_TRIAL_DAYS);
   const periodEnd = addDays(now, DEFAULT_TRIAL_DAYS);
-  const planFields = buildCompanyCommercialFields('starter');
-
   const payload = {
     company_id: companyId,
+    provider: 'stripe',
     plan_code: 'starter',
     status: 'trialing',
+    trial_starts_at: now.toISOString(),
     trial_ends_at: trialEndsAt.toISOString(),
     current_period_start: now.toISOString(),
     current_period_end: periodEnd.toISOString(),
@@ -345,7 +377,7 @@ export async function ensureTrialSubscription(companyId) {
   };
 
   const { data: created, error: insertError } = await supabase
-    .from('company_subscriptions')
+    .from('subscriptions')
     .upsert(payload, { onConflict: 'company_id' })
     .select('*')
     .single();
@@ -353,16 +385,6 @@ export async function ensureTrialSubscription(companyId) {
   if (insertError) {
     throw new Error(insertError.message || 'Falha ao iniciar o trial da empresa.');
   }
-
-  await supabase
-    .from('empresas')
-    .update({
-      ...planFields,
-      billing_cycle_start: now.toISOString().slice(0, 10),
-      billing_cycle_end: periodEnd.toISOString().slice(0, 10),
-    })
-    .eq('id', companyId);
-
   return created;
 }
 
@@ -401,31 +423,19 @@ export async function updateCompanyPlan(companyId, planCode) {
 
   const payload = {
     company_id: companyId,
+    provider: 'stripe',
     plan_code: normalizedPlan,
     status: normalizedPlan === 'starter' ? 'trialing' : 'active',
+    trial_starts_at: normalizedPlan === 'starter' ? now.toISOString() : null,
     trial_ends_at: normalizedPlan === 'starter' ? addDays(now, DEFAULT_TRIAL_DAYS).toISOString() : null,
     current_period_start: now.toISOString(),
     current_period_end: periodEnd.toISOString(),
     cancel_at_period_end: false,
   };
 
-  const { error } = await supabase.from('company_subscriptions').upsert(payload, { onConflict: 'company_id' });
+  const { error } = await supabase.from('subscriptions').upsert(payload, { onConflict: 'company_id' });
   if (error) {
     throw new Error(error.message || 'Falha ao atualizar o plano da empresa.');
-  }
-
-  const companyFields = buildCompanyCommercialFields(normalizedPlan);
-  const { error: companyError } = await supabase
-    .from('empresas')
-    .update({
-      ...companyFields,
-      billing_cycle_start: now.toISOString().slice(0, 10),
-      billing_cycle_end: periodEnd.toISOString().slice(0, 10),
-    })
-    .eq('id', companyId);
-
-  if (companyError) {
-    throw new Error(companyError.message || 'Falha ao sincronizar os dados comerciais da empresa.');
   }
 
   return {

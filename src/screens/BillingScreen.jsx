@@ -1,8 +1,7 @@
-import { CreditCard, LifeBuoy, TrendingUp, Zap } from 'lucide-react';
+import { CreditCard, Crown, Gauge, Layers3, ShieldCheck, Sparkles, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import UsageMeter from '../components/UsageMeter';
 import PlanLimitNotice from '../components/PlanLimitNotice';
-import FeatureBadge from '../components/plans/FeatureBadge';
 import LimitWarningModal from '../components/plans/LimitWarningModal';
 import PlanCard from '../components/plans/PlanCard';
 import UpgradeBanner from '../components/plans/UpgradeBanner';
@@ -17,9 +16,64 @@ import {
 const toNoticeType = (level) => (level === 'warning' ? 'warning' : 'danger');
 const toMeterStatus = (percent) => (percent >= 95 ? 'danger' : percent >= 80 ? 'warning' : 'ok');
 
-export default function BillingScreen({ billing, onOpenPlans, companyId, onToast }) {
+const STATUS_META = {
+  trialing: {
+    label: 'Trial ativo',
+    badge: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200',
+    description: 'A empresa esta operando em periodo de trial com 7 dias de uso comercial.',
+  },
+  active: {
+    label: 'Assinatura ativa',
+    badge: 'border-blue-500/30 bg-blue-500/10 text-blue-100',
+    description: 'Checkout e portal Stripe estao prontos para upgrade, downgrade e autoatendimento.',
+  },
+  past_due: {
+    label: 'Pagamento pendente',
+    badge: 'border-amber-500/30 bg-amber-500/10 text-amber-100',
+    description: 'Existe uma pendencia de pagamento. Atualize a assinatura para evitar bloqueios.',
+  },
+  canceled: {
+    label: 'Assinatura cancelada',
+    badge: 'border-red-500/30 bg-red-500/10 text-red-100',
+    description: 'A assinatura foi cancelada e pode exigir reativacao para continuar usando limites pagos.',
+  },
+};
+
+const formatDateTime = (value) => {
+  if (!value) return 'Nao definido';
+  try {
+    return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' }).format(new Date(value));
+  } catch {
+    return value;
+  }
+};
+
+const fallbackLimit = (plan, key) => {
+  const planLimits = plan?.limits_json || {};
+  switch (key) {
+    case 'users_count':
+      return Number(planLimits.users_count ?? planLimits.users ?? (plan?.id === 'business' ? 10 : plan?.id === 'pro' ? 3 : 2));
+    case 'integrations_count':
+      return Number(planLimits.integrations_count ?? (plan?.id === 'business' ? 10 : plan?.id === 'pro' ? 4 : 2));
+    case 'companies_count':
+      return Number(planLimits.companies_count ?? planLimits.companies ?? (plan?.id === 'business' ? 3 : 1));
+    default:
+      return Number(planLimits[key] ?? 0);
+  }
+};
+
+export default function BillingScreen({
+  billing,
+  onOpenPlans,
+  onChoosePlan,
+  onOpenPortal,
+  companyId,
+  onToast,
+}) {
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [usageSummary, setUsageSummary] = useState(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
   const normalizedPlanId = normalizePlanId(billing?.currentPlan?.id);
   const currentPlan = useMemo(
     () => ({
@@ -31,13 +85,11 @@ export default function BillingScreen({ billing, onOpenPlans, companyId, onToast
 
   useEffect(() => {
     let alive = true;
-
     const loadUsage = async () => {
       if (!companyId) {
         if (alive) setUsageSummary(null);
         return;
       }
-
       try {
         const data = await getUsageSummary(companyId);
         if (alive) setUsageSummary(data);
@@ -46,56 +98,101 @@ export default function BillingScreen({ billing, onOpenPlans, companyId, onToast
         onToast?.('erro', error.message || 'Falha ao carregar o consumo comercial.');
       }
     };
-
     loadUsage();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [companyId, onToast]);
 
   const usage = {
     monthly_send_limit: Number(currentPlan?.monthly_send_limit || 0),
-    extra_send_credits: 0,
+    extra_send_credits: Number(billing?.extra_send_credits || 0),
     used_real_sends: Number(billing?.usage?.realSends || 0),
   };
   const remaining = calculateRemainingSends(usage);
   const upgrade = getUpgradeRecommendation(currentPlan.id, usage);
+  const statusMeta = STATUS_META[billing?.status] || STATUS_META.active;
+  const trialDays = Number(billing?.trialDaysRemaining || 0);
+
+  const usageMeters = [
+    usageSummary?.metrics?.charges_month,
+    usageSummary?.metrics?.automations_month,
+    usageSummary?.metrics?.users_count,
+    usageSummary?.metrics?.integrations_count,
+    usageSummary?.metrics?.companies_count,
+  ].filter(Boolean);
 
   const kpis = [
     {
       label: 'Plano atual',
-      value: currentPlan.name + ' - ' + currentPlan.subtitle,
+      value: currentPlan.name,
       sub: currentPlan.price_label,
-      bg: 'bg-emerald-50',
-      fg: 'text-emerald-700',
-      Icon: Zap,
+      tone: 'text-cyan-200',
+      icon: Crown,
     },
     {
-      label: 'Status',
-      value: billing?.status || 'Ativa',
-      sub: 'Base comercial preparada',
-      bg: 'bg-blue-50',
-      fg: 'text-blue-700',
-      valueColor: 'text-emerald-700',
-      Icon: CreditCard,
+      label: 'Status comercial',
+      value: statusMeta.label,
+      sub: billing?.status === 'trialing' ? `${trialDays} dia(s) restantes` : 'Stripe sincronizado com Supabase',
+      tone: 'text-blue-100',
+      icon: ShieldCheck,
     },
     {
-      label: 'Proxima cobranca',
-      value: billing?.nextCharge || '15/05/2026',
-      sub: 'Checkout sera liberado em breve',
-      bg: 'bg-amber-50',
-      fg: 'text-amber-700',
-      Icon: TrendingUp,
+      label: 'Proximo ciclo',
+      value: formatDateTime(billing?.currentPeriodEnd),
+      sub: billing?.status === 'past_due' ? 'Regularize para evitar bloqueios' : 'Periodo faturado no Stripe',
+      tone: 'text-slate-50',
+      icon: CreditCard,
     },
     {
       label: 'Envios restantes',
-      value: remaining,
-      sub: usage.used_real_sends + '/' + usage.monthly_send_limit + ' usados',
-      bg: 'bg-violet-50',
-      fg: 'text-violet-700',
-      Icon: LifeBuoy,
+      value: remaining.toLocaleString('pt-BR'),
+      sub: `${usage.used_real_sends.toLocaleString('pt-BR')}/${usage.monthly_send_limit.toLocaleString('pt-BR')} usados`,
+      tone: 'text-cyan-100',
+      icon: Gauge,
     },
   ];
+
+  // FIX: guard usa plan?.code || plan?.id (objetos do DB tem code, constantes locais tem id)
+  const handleCheckout = async (plan = upgrade?.target) => {
+    const planCode = plan?.code || plan?.id;
+    console.log('[BillingScreen] handleCheckout called', {
+      planCode,
+      planId: plan?.id,
+      planName: plan?.name,
+      hasUpgrade: !!upgrade,
+      upgradeTarget: upgrade?.target?.id,
+      hasOnChoosePlan: typeof onChoosePlan === 'function',
+    });
+
+    if (!planCode || !onChoosePlan) {
+      console.warn('[BillingScreen] handleCheckout blocked:', {
+        reason: !planCode ? 'planCode vazio - upgrade.target ausente' : 'onChoosePlan nao fornecido',
+      });
+      return;
+    }
+
+    setCheckoutLoading(true);
+    try {
+      await onChoosePlan(plan);
+    } catch (error) {
+      console.error('[BillingScreen] handleCheckout error:', error);
+      onToast?.('erro', error.message || 'Falha ao iniciar o checkout Stripe.');
+    } finally {
+      setCheckoutLoading(false);
+      setUpgradeModalOpen(false);
+    }
+  };
+
+  const handleOpenPortal = async () => {
+    if (!onOpenPortal) return;
+    setPortalLoading(true);
+    try {
+      await onOpenPortal();
+    } catch (error) {
+      onToast?.('erro', error.message || 'Falha ao abrir o portal do cliente.');
+    } finally {
+      setPortalLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -104,23 +201,55 @@ export default function BillingScreen({ billing, onOpenPlans, companyId, onToast
           type={toNoticeType(usageSummary.highestAlert.level)}
           title={usageSummary.highestAlert.title}
           message={usageSummary.highestAlert.message}
-          actionLabel="Fazer upgrade"
+          actionLabel="Ir para checkout"
           onAction={() => setUpgradeModalOpen(true)}
         />
       ) : null}
 
+      <section className="surface-card relative overflow-hidden rounded-[32px] px-6 py-6">
+        <div className="glow-brand pointer-events-none absolute -right-12 top-0 h-40 w-40 rounded-full" />
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+          <div className="max-w-3xl">
+            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${statusMeta.badge}`}>
+              <Sparkles size={12} />
+              {statusMeta.label}
+            </div>
+            <h2 className="mt-4 text-3xl font-semibold text-slate-50">Billing comercial pronto para venda</h2>
+            <p className="mt-3 text-sm leading-relaxed text-slate-300">
+              Checkout Stripe, portal do cliente, trial de 7 dias e limites operacionais por plano sincronizados com o ambiente SaaS.
+            </p>
+            <p className="mt-2 text-sm text-slate-400">{statusMeta.description}</p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => handleCheckout(upgrade?.target)}
+              disabled={checkoutLoading || !upgrade?.target}
+              className="btn-brand rounded-2xl px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {checkoutLoading ? 'Abrindo checkout...' : upgrade?.target ? `Upgrade para ${upgrade.target.name}` : 'Sem upgrade disponivel'}
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenPortal}
+              disabled={portalLoading}
+              className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-500/30 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {portalLoading ? 'Abrindo portal...' : 'Gerenciar assinatura'}
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {kpis.map(({ label, value, sub, bg, fg, valueColor, Icon }) => (
-          <article
-            key={label}
-            className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card"
-          >
-            <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-slate-200 via-emerald-300 to-blue-300 opacity-70" />
-            <div className={"mb-3 flex h-10 w-10 items-center justify-center rounded-2xl " + bg + " " + fg}>
+        {kpis.map(({ label, value, sub, tone, icon: Icon }) => (
+          <article key={label} className="surface-elevated rounded-[28px] border border-cyan-500/10 p-5 shadow-soft">
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-300">
               <Icon size={18} />
             </div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-            <p className={"mt-1.5 text-2xl font-semibold " + (valueColor || 'text-slate-900')}>{value}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
+            <p className={`mt-2 text-2xl font-semibold ${tone}`}>{value}</p>
             <p className="mt-1 text-xs text-slate-400">{sub}</p>
           </article>
         ))}
@@ -131,64 +260,35 @@ export default function BillingScreen({ billing, onOpenPlans, companyId, onToast
           currentPlan={upgrade.current}
           targetPlan={upgrade.target}
           reason={upgrade.reason}
+          actionLabel="Ir para checkout"
           onAction={() => setUpgradeModalOpen(true)}
         />
       ) : null}
 
-      <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_0.85fr]">
-        <article className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-soft">
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <article className="surface-card rounded-[32px] p-6">
           <div className="mb-1 flex items-center gap-2">
-            <h3 className="text-lg font-semibold text-slate-900">Seu plano inclui</h3>
-            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-700">
+            <h3 className="text-lg font-semibold text-slate-50">Limites do plano e consumo atual</h3>
+            <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-300">
               {currentPlan.name}
             </span>
           </div>
-          <p className="mb-6 text-sm text-slate-500">Recursos, limites e bloqueios compartilhados a partir do catalogo central.</p>
+          <p className="mb-6 text-sm text-slate-400">
+            Usuarios, empresas, integracoes, automacoes e volume mensal sincronizados com o plano comercial.
+          </p>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            {(currentPlan.features || []).map((feature) => (
-              <FeatureBadge key={feature}>{feature}</FeatureBadge>
+          <div className="grid gap-4 md:grid-cols-2">
+            {usageMeters.map((metric) => (
+              <UsageMeter
+                key={metric.key}
+                label={metric.label}
+                used={metric.used}
+                limit={metric.limit || fallbackLimit(currentPlan, metric.key)}
+                percentage={metric.percent}
+                remaining={metric.remaining}
+                status={toMeterStatus(metric.percent)}
+              />
             ))}
-            {(currentPlan.limitations || []).map((feature) => (
-              <FeatureBadge key={feature} enabled={false}>
-                {feature}
-              </FeatureBadge>
-            ))}
-          </div>
-
-          <div className="mt-6 space-y-4">
-            <UsageMeter
-              label="Cobrancas do mes"
-              used={usageSummary?.metrics?.charges_month?.used ?? usage.used_real_sends}
-              limit={usageSummary?.metrics?.charges_month?.limit ?? usage.monthly_send_limit}
-              percentage={usageSummary?.metrics?.charges_month?.percent ?? 0}
-              remaining={usageSummary?.metrics?.charges_month?.remaining ?? remaining}
-              status={toMeterStatus(usageSummary?.metrics?.charges_month?.percent ?? 0)}
-            />
-            <UsageMeter
-              label="Importacoes do mes"
-              used={usageSummary?.metrics?.imports_month?.used ?? 0}
-              limit={usageSummary?.metrics?.imports_month?.limit ?? 0}
-              percentage={usageSummary?.metrics?.imports_month?.percent ?? 0}
-              remaining={usageSummary?.metrics?.imports_month?.remaining ?? 0}
-              status={toMeterStatus(usageSummary?.metrics?.imports_month?.percent ?? 0)}
-            />
-            <UsageMeter
-              label="Automacoes do mes"
-              used={usageSummary?.metrics?.automations_month?.used ?? 0}
-              limit={usageSummary?.metrics?.automations_month?.limit ?? 0}
-              percentage={usageSummary?.metrics?.automations_month?.percent ?? 0}
-              remaining={usageSummary?.metrics?.automations_month?.remaining ?? 0}
-              status={toMeterStatus(usageSummary?.metrics?.automations_month?.percent ?? 0)}
-            />
-            <UsageMeter
-              label="Usuarios"
-              used={usageSummary?.metrics?.users_count?.used ?? (billing?.usage?.usersCount || 0)}
-              limit={usageSummary?.metrics?.users_count?.limit ?? (currentPlan.id === 'business' ? 10 : currentPlan.id === 'pro' ? 3 : 2)}
-              percentage={usageSummary?.metrics?.users_count?.percent ?? 0}
-              remaining={usageSummary?.metrics?.users_count?.remaining ?? 0}
-              status={toMeterStatus(usageSummary?.metrics?.users_count?.percent ?? 0)}
-            />
           </div>
         </article>
 
@@ -198,42 +298,65 @@ export default function BillingScreen({ billing, onOpenPlans, companyId, onToast
               plan={upgrade.target}
               compact
               onAction={() => setUpgradeModalOpen(true)}
-              actionLabel="Fazer upgrade"
+              actionLabel="Abrir checkout"
             />
           ) : null}
 
-          <article className="flex flex-col rounded-[32px] border border-slate-200 bg-white p-6 shadow-soft">
-            <h3 className="text-lg font-semibold text-slate-900">Proximas acoes</h3>
-            <p className="mt-1 text-sm text-slate-500">
-              Organize a operacao agora e conecte pagamento real depois.
+          <article className="surface-card flex flex-col rounded-[32px] p-6">
+            <h3 className="text-lg font-semibold text-slate-50">Operacao comercial</h3>
+            <p className="mt-1 text-sm text-slate-400">
+              Controle o ciclo de trial, abra o portal do cliente e leve a empresa para um plano superior com poucos cliques.
             </p>
 
-            <div className="mt-6 space-y-3">
+            <div className="mt-6 grid gap-3">
+              <div className="surface-elevated rounded-[24px] border border-cyan-500/10 p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-100">
+                  <Layers3 size={16} className="text-cyan-300" />
+                  Trial e periodo faturado
+                </div>
+                <p className="mt-2 text-sm text-slate-300">
+                  Trial restante: {billing?.status === 'trialing' ? `${trialDays} dia(s)` : 'Nao aplicavel'}
+                </p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Periodo atual ate {formatDateTime(billing?.currentPeriodEnd)}
+                </p>
+              </div>
+
+              <div className="surface-elevated rounded-[24px] border border-cyan-500/10 p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-100">
+                  <Users size={16} className="text-cyan-300" />
+                  Limites elegantes
+                </div>
+                <p className="mt-2 text-sm text-slate-300">
+                  Quando a empresa excede um limite, o produto bloqueia com aviso comercial e direciona para upgrade ou portal.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={() => (upgrade?.target ? setUpgradeModalOpen(true) : onOpenPlans?.())}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800 active:scale-[0.98]"
+                onClick={() => handleCheckout(upgrade?.target)}
+                disabled={checkoutLoading || !upgrade?.target}
+                className="btn-brand rounded-2xl px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <Zap size={15} />
-                Fazer upgrade
+                {checkoutLoading ? 'Abrindo checkout...' : 'Upgrade / downgrade'}
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenPortal}
+                disabled={portalLoading}
+                className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-cyan-500/30 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {portalLoading ? 'Abrindo portal...' : 'Customer Portal Stripe'}
               </button>
               <button
                 type="button"
                 onClick={onOpenPlans}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-3.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 active:scale-[0.98]"
+                className="rounded-2xl border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-900/60"
               >
-                <LifeBuoy size={15} />
-                Ver planos
+                Comparar planos
               </button>
-            </div>
-
-            <div className="mt-auto pt-6">
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-                <p className="text-xs font-semibold text-amber-800">Checkout em breve</p>
-                <p className="mt-0.5 text-xs text-amber-700">
-                  O fluxo comercial esta pronto para upgrade e bloqueio, mas a cobranca real ainda sera ativada em uma proxima fase.
-                </p>
-              </div>
             </div>
           </article>
         </div>
@@ -243,11 +366,14 @@ export default function BillingScreen({ billing, onOpenPlans, companyId, onToast
         open={upgradeModalOpen}
         currentPlan={currentPlan}
         targetPlan={upgrade?.target}
-        description="Seu plano atual ja esta funcionando para simulacao e operacao assistida. O checkout sera liberado em breve para ativar upgrades reais."
-        onUpgrade={() => {
-          setUpgradeModalOpen(false);
-          onToast?.('aviso', 'Upgrade sera ativado em breve.');
-        }}
+        title="Atualize o plano da empresa"
+        description="O checkout Stripe sera aberto para concluir o upgrade ou downgrade com trial, limites e faturamento sincronizados ao NC Finance."
+        primaryActionLabel="Abrir checkout"
+        secondaryActionLabel="Abrir portal"
+        tertiaryActionLabel="Agora nao"
+        loading={checkoutLoading}
+        onUpgrade={() => handleCheckout(upgrade?.target)}
+        onSecondaryAction={handleOpenPortal}
         onClose={() => setUpgradeModalOpen(false)}
       />
     </div>
