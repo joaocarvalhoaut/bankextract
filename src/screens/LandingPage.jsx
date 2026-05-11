@@ -217,7 +217,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
         </header>
 
         <section className="hero-mesh overflow-hidden rounded-[38px] border border-cyan-500/10 bg-slate-900/60 px-8 py-12 shadow-[0_30px_80px_rgba(15,23,42,0.10)] md:px-10 md:py-14 xl:px-14 xl:py-20">
-          <div className="grid gap-12 xl:grid-cols-[1.08fr_0.92fr] xl:items-center">
+          <div className="grid gap-12 xl:grid-cols-[1.15fr_0.85fr] xl:items-center">
             <div className="fade-up space-y-8">
               <SectionBadge>Plataforma de cobranca inteligente</SectionBadge>
 
@@ -258,7 +258,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
               </div>
             </div>
 
-            <div className="relative fade-up xl:scale-[1.16] xl:origin-right">
+            <div className="relative fade-up">
               <div className="absolute -left-10 top-10 h-40 w-40 rounded-full bg-blue-200/45 blur-3xl" />
               <div className="absolute -right-6 bottom-6 h-40 w-40 rounded-full bg-cyan-200/45 blur-3xl" />
               <div className="relative rounded-[34px] border border-cyan-500/20 bg-slate-800/50 p-4 shadow-[0_34px_90px_rgba(0,0,0,0.5)] md:p-5">
