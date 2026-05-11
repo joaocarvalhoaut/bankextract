@@ -11,7 +11,7 @@ export default function RepresentanteModal({ modalData, companyName, onClose, on
       <div className="w-full max-w-md overflow-hidden rounded-2xl bg-slate-900/60 shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-700 px-5 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400">
               {modalData.modo === 'novo' ? <UserPlus size={18} /> : <PencilLine size={18} />}
             </div>
             <div>
@@ -34,7 +34,7 @@ export default function RepresentanteModal({ modalData, companyName, onClose, on
             <input
               value={modalData.rep.nome}
               onChange={(event) => onChange('nome', event.target.value)}
-              className="w-full rounded-lg border border-slate-700 px-3 py-2 text-sm outline-none ring-emerald-500 focus:ring-2"
+              className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-50 placeholder-slate-500 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30"
             />
           </label>
 
@@ -46,7 +46,7 @@ export default function RepresentanteModal({ modalData, companyName, onClose, on
               <input
                 value={modalData.rep.telefone}
                 onChange={(event) => onChange('telefone', event.target.value)}
-                className="w-full rounded-lg border border-slate-700 px-3 py-2 text-sm outline-none ring-emerald-500 focus:ring-2"
+                className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-50 placeholder-slate-500 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30"
               />
             </label>
             <label className="block text-xs font-medium text-slate-200">
@@ -56,7 +56,7 @@ export default function RepresentanteModal({ modalData, companyName, onClose, on
               <input
                 value={modalData.rep.email}
                 onChange={(event) => onChange('email', event.target.value)}
-                className="w-full rounded-lg border border-slate-700 px-3 py-2 text-sm outline-none ring-emerald-500 focus:ring-2"
+                className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-50 placeholder-slate-500 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30"
               />
             </label>
           </div>
@@ -69,7 +69,7 @@ export default function RepresentanteModal({ modalData, companyName, onClose, on
               value={modalData.rep.observacao}
               onChange={(event) => onChange('observacao', event.target.value)}
               rows={3}
-              className="w-full resize-none rounded-lg border border-slate-700 px-3 py-2 text-sm outline-none ring-emerald-500 focus:ring-2"
+              className="w-full resize-none rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-50 placeholder-slate-500 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30"
             />
           </label>
 
@@ -93,7 +93,7 @@ export default function RepresentanteModal({ modalData, companyName, onClose, on
           {modalData.modo === 'editar' ? (
             <button
               onClick={() => onDelete(modalData.rep.id)}
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-red-400 hover:bg-red-500/10"
             >
               <Trash2 size={14} /> Excluir
             </button>
@@ -102,7 +102,7 @@ export default function RepresentanteModal({ modalData, companyName, onClose, on
           )}
 
           <div className="flex items-center gap-2">
-            <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-slate-300 hover:bg-slate-200">
+            <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/60">
               Cancelar
             </button>
             <button onClick={onSave} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">

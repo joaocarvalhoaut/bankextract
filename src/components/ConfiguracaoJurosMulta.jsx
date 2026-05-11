@@ -42,16 +42,16 @@ export default function ConfiguracaoJurosMulta({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-on-light text-sm font-medium">{title}</p>
+            <p className="text-slate-50 text-sm font-medium">{title}</p>
             {showRealtimeBadge ? (
               <span className="badge-brand inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium">
                 Atualizacao em tempo real
               </span>
             ) : null}
           </div>
-          <p className="text-on-light-muted text-xs">{subtitle}</p>
+          <p className="text-slate-400 text-xs">{subtitle}</p>
           {notice ? (
-            <p className="mt-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            <p className="mt-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
               {notice}
             </p>
           ) : null}
@@ -59,7 +59,7 @@ export default function ConfiguracaoJurosMulta({
 
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <label className="text-on-light-muted mb-1 block text-xs font-medium">
+            <label className="text-slate-400 mb-1 block text-xs font-medium">
               Multa (%)
             </label>
             <input
@@ -70,11 +70,11 @@ export default function ConfiguracaoJurosMulta({
               value={draft.multaPercentual}
               onChange={(e) => handleFieldChange('multaPercentual', e.target.value)}
               disabled={disabled}
-              className="input-light w-24 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-24 rounded-xl border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-50 placeholder-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-60"
             />
           </div>
           <div>
-            <label className="text-on-light-muted mb-1 block text-xs font-medium">
+            <label className="text-slate-400 mb-1 block text-xs font-medium">
               Juros diario (%)
             </label>
             <input
@@ -85,7 +85,7 @@ export default function ConfiguracaoJurosMulta({
               value={draft.jurosPercentualDia}
               onChange={(e) => handleFieldChange('jurosPercentualDia', e.target.value)}
               disabled={disabled}
-              className="input-light w-28 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-28 rounded-xl border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-50 placeholder-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-60"
             />
           </div>
           <button
