@@ -144,7 +144,7 @@ function PublicButton({ children, onClick, primary = false, fullWidth = false })
       className={
         primary
           ? `btn-brand inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl px-7 py-4 text-sm font-semibold active:scale-[0.99] ${fullWidth ? 'w-full' : ''}`
-          : `inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-7 py-4 text-sm font-semibold text-slate-700 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-slate-50 ${fullWidth ? 'w-full' : ''}`
+          : `inline-flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-cyan-500/10 bg-slate-900/60 px-7 py-4 text-sm font-semibold text-slate-200 shadow-soft transition duration-200 hover:-translate-y-0.5 hover:bg-slate-800/40 ${fullWidth ? 'w-full' : ''}`
       }
     >
       {children}
@@ -154,15 +154,15 @@ function PublicButton({ children, onClick, primary = false, fullWidth = false })
 
 function InfoCard({ icon: Icon, title, description, tone = 'blue' }) {
   const toneClass =
-    tone === 'red' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-700';
+    tone === 'red' ? 'bg-red-50 text-red-600' : 'bg-blue-900/30 text-blue-300';
 
   return (
-    <article className="fade-up rounded-[24px] border border-slate-200 bg-white p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card">
+    <article className="fade-up rounded-[24px] border border-cyan-500/10 bg-slate-900/60 p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card">
       <div className={`mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl ${toneClass}`}>
         <Icon size={20} />
       </div>
-      <h3 className="text-lg font-semibold text-slate-950">{title}</h3>
-      <p className="mt-2 text-sm leading-relaxed text-slate-600">{description}</p>
+      <h3 className="text-lg font-semibold text-slate-50">{title}</h3>
+      <p className="mt-2 text-sm leading-relaxed text-slate-300">{description}</p>
     </article>
   );
 }
@@ -197,7 +197,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
   return (
     <div className="pb-28 md:pb-10">
       <div className="mx-auto flex max-w-[1540px] flex-col gap-12 px-4 py-4 md:px-6 xl:px-8">
-        <header className="sticky top-0 z-40 -mx-4 border-b border-slate-200/80 bg-[#071120]/82 px-4 py-2.5 shadow-[0_12px_28px_rgba(0,0,0,0.26)] backdrop-blur-xl transition-all md:-mx-6 md:px-6 xl:-mx-8 xl:px-8">
+        <header className="sticky top-0 z-40 -mx-4 border-b border-slate-700/50 bg-[#071120]/82 px-4 py-2.5 shadow-[0_12px_28px_rgba(0,0,0,0.26)] backdrop-blur-xl transition-all md:-mx-6 md:px-6 xl:-mx-8 xl:px-8">
           <div className="mx-auto flex max-w-[1540px] flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <BrandLockup variant="sidebar" />
 
@@ -216,7 +216,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
           </div>
         </header>
 
-        <section className="hero-mesh overflow-hidden rounded-[38px] border border-slate-200 bg-white px-8 py-12 shadow-[0_30px_80px_rgba(15,23,42,0.10)] md:px-10 md:py-14 xl:px-14 xl:py-20">
+        <section className="hero-mesh overflow-hidden rounded-[38px] border border-cyan-500/10 bg-slate-900/60 px-8 py-12 shadow-[0_30px_80px_rgba(15,23,42,0.10)] md:px-10 md:py-14 xl:px-14 xl:py-20">
           <div className="grid gap-12 xl:grid-cols-[1.08fr_0.92fr] xl:items-center">
             <div className="fade-up space-y-8">
               <SectionBadge>Plataforma de cobranca inteligente</SectionBadge>
@@ -241,7 +241,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                 </PublicButton>
               </div>
 
-              <p className="text-sm font-medium text-slate-500">
+              <p className="text-sm font-medium text-slate-400">
                 Sem instalacao • Ambiente seguro • Comece em minutos
               </p>
 
@@ -249,10 +249,10 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                 {trustMetrics.map((metric) => (
                   <article
                     key={metric.label}
-                    className="fade-up rounded-[22px] border border-slate-200 bg-white/92 p-4 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card"
+                    className="fade-up rounded-[22px] border border-cyan-500/10 bg-slate-900/70 p-4 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card"
                   >
-                    <p className="text-2xl font-bold tracking-tight text-slate-950">{metric.value}</p>
-                    <p className="mt-1 text-sm leading-relaxed text-slate-600">{metric.label}</p>
+                    <p className="text-2xl font-bold tracking-tight text-slate-50">{metric.value}</p>
+                    <p className="mt-1 text-sm leading-relaxed text-slate-300">{metric.label}</p>
                   </article>
                 ))}
               </div>
@@ -261,12 +261,12 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
             <div className="relative fade-up xl:scale-[1.16] xl:origin-right">
               <div className="absolute -left-10 top-10 h-40 w-40 rounded-full bg-blue-200/45 blur-3xl" />
               <div className="absolute -right-6 bottom-6 h-40 w-40 rounded-full bg-cyan-200/45 blur-3xl" />
-              <div className="relative rounded-[34px] border border-slate-200 bg-slate-50 p-4 shadow-[0_34px_90px_rgba(15,23,42,0.14)] md:p-5">
-                <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft">
+              <div className="relative rounded-[34px] border border-cyan-500/20 bg-slate-800/50 p-4 shadow-[0_34px_90px_rgba(0,0,0,0.5)] md:p-5">
+                <div className="surface-card rounded-[28px] p-5">
                   <div className="mb-5 flex items-center justify-between">
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Painel operacional</p>
-                      <h3 className="mt-1 text-lg font-semibold text-slate-950">Cobranca em simulacao</h3>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Painel operacional</p>
+                      <h3 className="mt-1 text-lg font-semibold text-slate-50">Cobranca em simulacao</h3>
                     </div>
                     <span className="badge-brand rounded-full px-3 py-1 text-[11px] font-bold">
                       Simulacao ativa
@@ -275,20 +275,20 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
 
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      { label: 'Total em aberto', value: 'R$ 182.540', tone: 'text-slate-950' },
-                      { label: 'Telefones validos', value: '84%', tone: 'text-emerald-700' },
-                      { label: 'Boletos encontrados', value: '88%', tone: 'text-blue-700' },
-                      { label: 'Simulacoes hoje', value: '37', tone: 'text-blue-700' },
+                      { label: 'Total em aberto', value: 'R$ 182.540', tone: 'text-slate-50' },
+                      { label: 'Telefones validos', value: '84%', tone: 'text-emerald-300' },
+                      { label: 'Boletos encontrados', value: '88%', tone: 'text-blue-300' },
+                      { label: 'Simulacoes hoje', value: '37', tone: 'text-blue-300' },
                     ].map((card) => (
-                      <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
+                      <div key={card.label} className="rounded-2xl border border-cyan-500/10 bg-slate-900/60 p-4 shadow-soft">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{card.label}</p>
                         <p className={`mt-2 text-2xl font-bold ${card.tone}`}>{card.value}</p>
                       </div>
                     ))}
                   </div>
 
-                  <div className="mt-4 rounded-[22px] border border-slate-200 bg-white shadow-soft">
-                    <div className="grid grid-cols-[1.45fr_1fr_1fr_0.95fr] gap-3 border-b border-slate-200 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  <div className="mt-4 rounded-[22px] border border-cyan-500/10 bg-slate-900/60 shadow-soft">
+                    <div className="grid grid-cols-[1.45fr_1fr_1fr_0.95fr] gap-3 border-b border-cyan-500/10 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
                       <span>Cliente</span>
                       <span>Boleto</span>
                       <span>Vencimento</span>
@@ -299,16 +299,16 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                       { cliente: 'Industria Norte', boleto: '8841-9', vencimento: '11/05/2026', status: 'Em analise' },
                       { cliente: 'Clinica Central', boleto: '1208-4', vencimento: '12/05/2026', status: 'Sem boleto' },
                     ].map((row, index) => (
-                      <div key={`${row.cliente}-${index}`} className="grid grid-cols-[1.45fr_1fr_1fr_0.95fr] gap-3 px-4 py-3 text-sm text-slate-700">
-                        <span className="font-medium text-slate-900">{row.cliente}</span>
+                      <div key={`${row.cliente}-${index}`} className="grid grid-cols-[1.45fr_1fr_1fr_0.95fr] gap-3 px-4 py-3 text-sm text-slate-200">
+                        <span className="font-medium text-slate-50">{row.cliente}</span>
                         <span>{row.boleto}</span>
                         <span>{row.vencimento}</span>
                         <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                           row.status === 'Simulado'
-                            ? 'bg-blue-50 text-blue-700'
+                            ? 'bg-blue-900/30 text-blue-300'
                             : row.status === 'Em analise'
-                              ? 'bg-blue-50 text-blue-700'
-                              : 'bg-amber-50 text-amber-700'
+                              ? 'bg-blue-900/30 text-blue-300'
+                              : 'bg-amber-900/30 text-amber-300'
                         }`}>
                           {row.status}
                         </span>
@@ -321,17 +321,17 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
           </div>
         </section>
 
-        <section className="rounded-[32px] border border-slate-200 bg-white px-8 py-8 shadow-soft md:px-10 xl:px-14">
+        <section className="rounded-[32px] border border-cyan-500/10 bg-slate-900/60 px-8 py-8 shadow-soft md:px-10 xl:px-14">
           <div className="grid gap-6 xl:grid-cols-[1fr_auto] xl:items-end">
             <div className="fade-up">
-              <h2 className="text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">
+              <h2 className="text-2xl font-bold tracking-tight text-slate-50 md:text-3xl">
                 Empresas organizando sua cobranca com NC Finance
               </h2>
-              <p className="mt-3 max-w-3xl text-base leading-relaxed text-slate-600">
+              <p className="mt-3 max-w-3xl text-base leading-relaxed text-slate-300">
                 Mais controle operacional, menos inadimplencia e mais previsibilidade financeira.
               </p>
             </div>
-            <div className="fade-up inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+            <div className="fade-up inline-flex items-center gap-2 rounded-full border border-cyan-500/10 bg-slate-800/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
                   <ShieldCheck size={14} className="text-blue-600" />
               Ambiente seguro • Operacao auditavel • Simulacao antes do envio real
             </div>
@@ -341,7 +341,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
             {socialLogos.map((logo) => (
               <div
                 key={logo}
-                className="fade-up flex h-16 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold uppercase tracking-[0.22em] text-slate-400 transition duration-200 hover:border-slate-300 hover:bg-white hover:text-slate-500"
+                className="fade-up flex h-16 items-center justify-center rounded-2xl border border-cyan-500/10 bg-slate-800/40 px-4 text-sm font-bold uppercase tracking-[0.22em] text-slate-400 transition duration-200 hover:border-slate-700 hover:bg-slate-900/60 hover:text-slate-400"
               >
                 {logo}
               </div>
@@ -349,10 +349,10 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
           </div>
         </section>
 
-        <section className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-soft lg:p-10">
+        <section className="rounded-[32px] border border-cyan-500/10 bg-slate-900/60 p-8 shadow-soft lg:p-10">
           <div className="max-w-3xl fade-up">
             <SectionBadge>Problema</SectionBadge>
-            <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
+            <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-50">
               Cobrar manualmente custa tempo, dinheiro e controle
             </h2>
           </div>
@@ -363,13 +363,13 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
           </div>
         </section>
 
-        <section id="recursos" className="rounded-[32px] border border-slate-200 bg-slate-50 px-8 py-10 shadow-soft lg:px-10">
+        <section id="recursos" className="rounded-[32px] border border-cyan-500/10 bg-slate-800/40 px-8 py-10 shadow-soft lg:px-10">
           <div className="max-w-3xl fade-up">
             <SectionBadge>Solucao em modulos</SectionBadge>
-            <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
+            <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-50">
               Uma plataforma completa para operar sua cobranca
             </h2>
-            <p className="mt-3 text-base leading-relaxed text-slate-600">
+            <p className="mt-3 text-base leading-relaxed text-slate-300">
               Do monitoramento da carteira a auditoria de envio, tudo em um fluxo seguro antes da ativacao real.
             </p>
           </div>
@@ -380,11 +380,11 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
           </div>
         </section>
 
-        <section id="como-funciona" className="rounded-[32px] border border-slate-200 bg-white px-8 py-10 shadow-soft lg:px-10">
+        <section id="como-funciona" className="rounded-[32px] border border-cyan-500/10 bg-slate-900/60 px-8 py-10 shadow-soft lg:px-10">
           <div className="max-w-3xl fade-up">
             <SectionBadge>Como funciona na pratica</SectionBadge>
-            <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">Como funciona na pratica</h2>
-            <p className="mt-3 text-base leading-relaxed text-slate-600">
+            <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-50">Como funciona na pratica</h2>
+            <p className="mt-3 text-base leading-relaxed text-slate-300">
               Fluxo operacional desenhado para cobranca segura e escalavel.
             </p>
           </div>
@@ -393,36 +393,36 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
             {practicalFlow.map((item) => (
               <article
                 key={item.step}
-                className="fade-up relative rounded-[26px] border border-slate-200 bg-slate-50 p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card"
+                className="fade-up relative rounded-[26px] border border-cyan-500/10 bg-slate-800/40 p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card"
               >
                 <div className="mb-5 flex items-center gap-4">
                   <div className="brand-gradient flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white shadow-lg shadow-blue-900/20">
                     {item.step}
                   </div>
-                  <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-blue-700 shadow-soft">
+                  <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900/60 text-blue-300 shadow-soft">
                     <item.icon size={18} />
                   </div>
                 </div>
-                <h3 className="text-xl font-semibold text-slate-950">{item.title}</h3>
-                <p className="mt-3 text-sm leading-relaxed text-slate-600">{item.description}</p>
+                <h3 className="text-xl font-semibold text-slate-50">{item.title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-slate-300">{item.description}</p>
               </article>
             ))}
           </div>
         </section>
 
-        <section id="clientes" className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-soft lg:p-10">
+        <section id="clientes" className="rounded-[32px] border border-cyan-500/10 bg-slate-900/60 p-8 shadow-soft lg:p-10">
           <div className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr] xl:items-center">
-            <div className="fade-up rounded-[28px] border border-slate-200 bg-slate-50 p-5 shadow-soft">
-              <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-soft">
+            <div className="fade-up rounded-[28px] border border-cyan-500/10 bg-slate-800/40 p-5 shadow-soft">
+              <div className="rounded-[24px] border border-cyan-500/10 bg-slate-900/60 p-5 shadow-soft">
                 <div className="grid gap-5 lg:grid-cols-[240px_1fr]">
-                  <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Sidebar resumida</p>
+                  <div className="rounded-[22px] border border-cyan-500/10 bg-slate-800/40 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Sidebar resumida</p>
                     <div className="mt-4 space-y-2">
                       {['Dashboard', 'Cobranca Automatica', 'Central Operacional', 'Auditoria de Dados', 'Checklist Pre-Envio'].map((item, index) => (
                         <div
                           key={item}
                           className={`rounded-xl px-3 py-2 text-sm font-medium ${
-                            index === 1 ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'text-slate-600'
+                            index === 1 ? 'bg-blue-900/30 text-blue-300 ring-1 ring-blue-700/40' : 'text-slate-300'
                           }`}
                         >
                           {item}
@@ -439,7 +439,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
                         { label: 'Com inconsistencia', value: '9 itens' },
                         { label: 'Auditoria', value: 'Ativa' },
                       ].map((card) => (
-                        <div key={card.label} className="rounded-xl bg-white/10 p-3">
+                        <div key={card.label} className="rounded-xl bg-slate-800/20 p-3">
                           <p className="text-[11px] text-slate-400">{card.label}</p>
                           <p className="mt-0.5 text-sm font-bold text-white">{card.value}</p>
                         </div>
