@@ -33,9 +33,9 @@ function extractSpreadsheetId(input) {
 function StatusBadge({ type, message }) {
   if (!message) return null;
   const styles = {
-    success: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-    error: 'border-red-200 bg-red-50 text-red-700',
-    info: 'border-blue-700/40 bg-blue-900/20 text-blue-700',
+    success: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+    error: 'border-red-500/30 bg-red-500/10 text-red-300',
+    info: 'border-blue-500/30 bg-blue-500/10 text-blue-300',
   };
   const Icon = type === 'success' ? CheckCircle2 : type === 'error' ? AlertCircle : Sparkles;
   return (
@@ -492,8 +492,8 @@ export default function GoogleSheetsConfig({
           <div className="surface-elevated rounded-[28px] bg-slate-800/40 p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Conexao</p>
-                <p className="text-on-light-muted mt-1 text-sm">Visao da configuracao ativa da planilha.</p>
+                <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Conexao</p>
+                <p className="text-slate-400 mt-1 text-xs">Visao da configuracao ativa da planilha.</p>
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900/60 text-slate-200 shadow-sm ring-1 ring-slate-700">
                 <Wifi size={16} />
@@ -502,25 +502,25 @@ export default function GoogleSheetsConfig({
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="surface-elevated rounded-2xl bg-slate-900/70 px-4 py-4 shadow-sm ring-1 ring-slate-700/40">
-                <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Status</p>
-                <p className="text-on-light mt-2 text-sm font-semibold">{resolvedStatus.label}</p>
+                <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Status</p>
+                <p className="text-slate-50 mt-2 text-sm font-semibold">{resolvedStatus.label}</p>
               </div>
               <div className="surface-elevated rounded-2xl bg-slate-900/70 px-4 py-4 shadow-sm ring-1 ring-slate-700/40">
-                <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Email Google conectado</p>
+                <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Email Google conectado</p>
                 <p
                   title={resolvedGoogleEmail || 'Credencial tecnica do ambiente'}
-                  className="text-on-light mt-2 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold"
+                  className="text-slate-50 mt-2 max-w-full truncate text-xs font-semibold"
                 >
                   {resolvedGoogleEmail || 'Credencial tecnica do ambiente'}
                 </p>
               </div>
               <div className="surface-elevated rounded-2xl bg-slate-900/70 px-4 py-4 shadow-sm ring-1 ring-slate-700/40">
-                <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Planilha selecionada</p>
-                <p className="text-on-light mt-2 text-sm font-semibold">{resolvedSpreadsheetName}</p>
+                <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Planilha selecionada</p>
+                <p className="text-slate-50 mt-2 truncate text-xs font-semibold">{resolvedSpreadsheetName}</p>
               </div>
               <div className="surface-elevated rounded-2xl bg-slate-900/70 px-4 py-4 shadow-sm ring-1 ring-slate-700/40">
-                <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Aba selecionada</p>
-                <p className="text-on-light mt-2 text-sm font-semibold">{resolvedSheetName}</p>
+                <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Aba selecionada</p>
+                <p className="text-slate-50 mt-2 text-sm font-semibold">{resolvedSheetName}</p>
               </div>
             </div>
           </div>
@@ -528,8 +528,8 @@ export default function GoogleSheetsConfig({
           <div className="surface-elevated rounded-[28px] bg-slate-800/40 p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Operacao</p>
-                <p className="text-on-light-muted mt-1 text-sm">Indicadores operacionais e saude da sincronizacao.</p>
+                <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Operacao</p>
+                <p className="text-slate-400 mt-1 text-xs">Indicadores operacionais e saude da sincronizacao.</p>
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900/60 text-slate-200 shadow-sm ring-1 ring-slate-700">
                 <Activity size={16} />
@@ -538,7 +538,7 @@ export default function GoogleSheetsConfig({
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className={`rounded-2xl px-4 py-4 shadow-sm ring-1 ring-inset ${syncToneClass}`}>
-                <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Ultima sincronizacao</p>
+                <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Ultima sincronizacao</p>
                 <p className="mt-2 text-sm font-semibold">{`${effectiveSyncHealthMeta.icon} ${syncMeta.label}`}</p>
                 <p className="mt-1 text-xs opacity-80">{formatDateTime(effectiveLastSync)}</p>
               </div>
@@ -549,8 +549,8 @@ export default function GoogleSheetsConfig({
                     <Database size={16} />
                   </div>
                   <div>
-                    <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Registros hoje</p>
-                    <p className="text-on-light mt-1 text-lg font-semibold">{statusSnapshot?.records_today ?? googleMeta?.records_today ?? 0} registros</p>
+                    <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Registros hoje</p>
+                    <p className="text-slate-50 mt-1 text-sm font-semibold leading-snug">{statusSnapshot?.records_today ?? googleMeta?.records_today ?? 0} registros</p>
                   </div>
                 </div>
               </div>
@@ -561,9 +561,9 @@ export default function GoogleSheetsConfig({
                     <Clock3 size={16} />
                   </div>
                   <div>
-                    <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Ultima importacao</p>
-                    <p className="text-on-light mt-1 text-lg font-semibold">{`${importMeta.icon} ${importMeta.label}`}</p>
-                    <p className="text-on-light-muted mt-1 text-xs">{statusSnapshot?.last_import_file || 'Nenhuma importacao recente'}</p>
+                    <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Ultima importacao</p>
+                    <p className="text-slate-50 mt-1 text-sm font-semibold leading-snug">{`${importMeta.icon} ${importMeta.label}`}</p>
+                    <p className="text-slate-400 mt-1 text-xs">{statusSnapshot?.last_import_file || 'Nenhuma importacao recente'}</p>
                   </div>
                 </div>
               </div>
@@ -574,8 +574,8 @@ export default function GoogleSheetsConfig({
                     <Activity size={16} />
                   </div>
                   <div>
-                    <p className="text-on-light-muted text-[11px] font-semibold uppercase tracking-[0.18em]">Saude conexao</p>
-                    <p className="text-on-light mt-1 text-lg font-semibold">{effectiveSyncHealthMeta.health}</p>
+                    <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Saude conexao</p>
+                    <p className="text-slate-50 mt-1 text-sm font-semibold leading-snug">{effectiveSyncHealthMeta.health}</p>
                   </div>
                 </div>
               </div>
@@ -602,7 +602,7 @@ export default function GoogleSheetsConfig({
               onChange={(e) => setSpreadsheetId(e.target.value)}
               placeholder="Cole o ID ou a URL completa da planilha"
               disabled={anyLoading || !canManage}
-              className="input-light w-full rounded-xl px-3 py-2.5 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm text-slate-50 placeholder-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-60"
             />
             <p className="text-on-light-muted mt-2 text-xs">
               Cole a URL da planilha ou apenas o ID do Google Sheets.
@@ -617,7 +617,7 @@ export default function GoogleSheetsConfig({
               onChange={(e) => setSheetName(e.target.value)}
               placeholder="Pagina1"
               disabled={anyLoading || !canManage}
-              className="input-light w-full rounded-xl px-3 py-2.5 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm text-slate-50 placeholder-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-60"
             />
             <p className="text-on-light-muted mt-2 text-xs">Informe o nome exato da aba que recebera a sincronizacao.</p>
           </label>
