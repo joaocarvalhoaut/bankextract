@@ -76,7 +76,7 @@ export default function Header({
                 <Building2 size={11} />
                 {companyName || 'Sem empresa ativa'}
               </div>
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-900/200/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">
                 <Zap size={10} />
                 NC Finance
               </div>

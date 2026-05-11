@@ -44,8 +44,8 @@ import { incrementUsage } from '../services/usageService';
 
 const statusTone = {
   sucesso: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  sucesso_simulado: 'bg-blue-50 text-blue-700 ring-blue-200',
-  simulado: 'bg-blue-50 text-blue-700 ring-blue-200',
+  sucesso_simulado: 'bg-blue-900/20 text-blue-700 ring-blue-200',
+  simulado: 'bg-blue-900/20 text-blue-700 ring-blue-200',
   erro: 'bg-red-50 text-red-700 ring-red-200',
   ignorado: 'bg-amber-50 text-amber-700 ring-amber-200',
 };
@@ -85,7 +85,7 @@ const delaySteps = [1, 3, 5, 10, 15, 30];
 
 function StatCard({ label, value, helper, tone = 'slate' }) {
   const palette = {
-    slate: 'from-slate-400 to-slate-500 text-slate-950',
+    slate: 'from-slate-400 to-slate-500 text-slate-50',
     emerald: 'from-emerald-400 to-emerald-600 text-emerald-700',
     blue: 'from-blue-400 to-blue-600 text-blue-700',
     red: 'from-red-400 to-red-600 text-red-700',
@@ -93,14 +93,14 @@ function StatCard({ label, value, helper, tone = 'slate' }) {
   };
 
   return (
-    <article className="relative overflow-hidden rounded-[24px] border border-slate-200 bg-white p-5 shadow-soft">
+    <article className="relative overflow-hidden rounded-[24px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
       <div
         className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${
           palette[tone]?.split(' text-')[0] || 'from-slate-400 to-slate-500'
         } opacity-80`}
       />
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className={`mt-2 text-3xl font-semibold ${palette[tone]?.split(' ').pop() || 'text-slate-950'}`}>{value}</p>
+      <p className={`mt-2 text-3xl font-semibold ${palette[tone]?.split(' ').pop() || 'text-slate-50'}`}>{value}</p>
       <p className="mt-2 text-xs text-slate-500">{helper}</p>
     </article>
   );
@@ -108,9 +108,9 @@ function StatCard({ label, value, helper, tone = 'slate' }) {
 
 function SmallSummaryCard({ label, value, helper }) {
   return (
-    <article className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-soft">
+    <article className="rounded-[20px] border border-slate-700 bg-slate-900/60 p-4 shadow-soft">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-lg font-semibold text-slate-950">{value}</p>
+      <p className="mt-2 text-lg font-semibold text-slate-50">{value}</p>
       <p className="mt-1 text-xs text-slate-500">{helper}</p>
     </article>
   );
@@ -124,7 +124,7 @@ function TabButton({ active, icon: Icon, label, onClick }) {
       className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
         active
           ? 'border-emerald-200 bg-emerald-50 text-emerald-700 shadow-soft'
-          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+          : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/40 hover:text-slate-50'
       }`}
     >
       <Icon size={16} />
@@ -135,10 +135,10 @@ function TabButton({ active, icon: Icon, label, onClick }) {
 
 function SectionCard({ title, description, children, aside = null }) {
   return (
-    <section className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-5 shadow-soft">
+    <section className="rounded-[24px] border border-slate-700 bg-slate-800/40/80 p-5 shadow-soft">
       <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-sm font-semibold text-slate-950">{title}</p>
+          <p className="text-sm font-semibold text-slate-50">{title}</p>
           {description ? <p className="mt-1 text-xs leading-relaxed text-slate-500">{description}</p> : null}
         </div>
         {aside}
@@ -485,7 +485,7 @@ export default function CobrancaAutomaticaScreen({
       {
         key: 'cliente_nome',
         label: 'Cliente',
-        render: (row) => <span className="font-medium text-slate-900">{row.cliente_nome || 'Sem nome'}</span>,
+        render: (row) => <span className="font-medium text-slate-50">{row.cliente_nome || 'Sem nome'}</span>,
       },
       { key: 'documento', label: 'Documento', render: (row) => row.documento || row.numero_boleto || '-' },
       { key: 'tipo_cobranca', label: 'Tipo', render: (row) => row.tipo_cobranca || '-' },
@@ -496,7 +496,7 @@ export default function CobrancaAutomaticaScreen({
         render: (row) => (
           <span
             className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
-              statusTone[row.status_envio] || 'bg-slate-100 text-slate-700 ring-slate-200'
+              statusTone[row.status_envio] || 'bg-slate-800/60 text-slate-200 ring-slate-700'
             }`}
           >
             {row.status_envio || '-'}
@@ -566,7 +566,7 @@ export default function CobrancaAutomaticaScreen({
                 ? 'bg-amber-50 text-amber-700 ring-amber-200'
                 : row.status === 'conflito' || row.status === 'erro'
                   ? 'bg-red-50 text-red-700 ring-red-200'
-                  : 'bg-slate-100 text-slate-700 ring-slate-200'
+                  : 'bg-slate-800/60 text-slate-200 ring-slate-700'
           }`}>
             {row.status || '-'}
           </span>
@@ -876,22 +876,22 @@ export default function CobrancaAutomaticaScreen({
   }
 
   return (
-    <section className="space-y-6 rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+    <section className="space-y-6 rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
             <CheckCircle2 size={13} />
             Cobranca automatica
           </div>
-          <h3 className="mt-3 text-xl font-semibold text-slate-950">Cobranca automatica com boletos do Google Drive</h3>
-          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600">
-            Painel operacional da empresa <span className="font-semibold text-slate-900">{companyName}</span> com
+          <h3 className="mt-3 text-xl font-semibold text-slate-50">Cobranca automatica com boletos do Google Drive</h3>
+          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-300">
+            Painel operacional da empresa <span className="font-semibold text-slate-50">{companyName}</span> com
             sincronizacao da planilha financeira, localizacao automatica do boleto e envio auditavel por WhatsApp.
           </p>
         </div>
 
         <div className="flex flex-col items-start gap-3">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 shadow-soft">
+          <div className="rounded-2xl border border-slate-700 bg-slate-800/40 p-2 shadow-soft">
             <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
               <ShieldCheck size={12} />
               Modo de envio
@@ -903,7 +903,7 @@ export default function CobrancaAutomaticaScreen({
                 className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
                   simulationMode
                     ? 'bg-amber-500 text-white shadow-soft'
-                    : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    : 'border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/40'
                 }`}
               >
                 Simulacao
@@ -913,7 +913,7 @@ export default function CobrancaAutomaticaScreen({
                 onClick={() => onBillingExecutionModeChange?.('real')}
                 className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
                   simulationMode
-                    ? 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    ? 'border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/40'
                     : 'bg-emerald-600 text-white shadow-soft'
                 }`}
               >
@@ -956,7 +956,7 @@ export default function CobrancaAutomaticaScreen({
             type="button"
             onClick={() => runAction('reprocess', reprocessBillingFailures, 'Falhas reprocessadas com sucesso.')}
             disabled={Boolean(executingAction)}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-soft transition hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition hover:bg-slate-800/40 disabled:opacity-50"
           >
             {executingAction === 'reprocess' ? <Loader2 size={15} className="animate-spin" /> : <RefreshCcw size={15} />}
             Reprocessar falhas
@@ -965,7 +965,7 @@ export default function CobrancaAutomaticaScreen({
             type="button"
             onClick={() => runAction('sheet', syncBillingSheet, 'Planilha sincronizada com sucesso.')}
             disabled={Boolean(executingAction)}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-soft transition hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition hover:bg-slate-800/40 disabled:opacity-50"
           >
             {executingAction === 'sheet' ? <Loader2 size={15} className="animate-spin" /> : <Sheet size={15} />}
             Sincronizar planilha
@@ -984,7 +984,7 @@ export default function CobrancaAutomaticaScreen({
         />
       ) : null}
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-4">
+      <div className="flex flex-wrap gap-2 border-b border-slate-700 pb-4">
         {tabItems.map((tab) => (
           <TabButton
             key={tab.id}
@@ -1022,74 +1022,74 @@ export default function CobrancaAutomaticaScreen({
             description="Ajuste a regua operacional, mantendo os mesmos dados e o mesmo salvamento ja existentes."
           >
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-              <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <label className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Ativar cobranca automatica</span>
-                <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <span className="text-sm font-medium text-slate-700">{billingConfig.ativo ? 'Ativa' : 'Desativada'}</span>
+                <div className="flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3">
+                  <span className="text-sm font-medium text-slate-200">{billingConfig.ativo ? 'Ativa' : 'Desativada'}</span>
                   <input
                     type="checkbox"
                     checked={Boolean(billingConfig.ativo)}
                     onChange={(event) => setBillingConfig((current) => ({ ...current, ativo: event.target.checked }))}
-                    className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    className="h-4 w-4 rounded border-slate-700 text-emerald-600 focus:ring-emerald-500"
                   />
                 </div>
               </label>
 
-              <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <label className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Horario de execucao</span>
                 <input
                   type="time"
                   value={billingConfig.hora_execucao}
                   onChange={(event) => setBillingConfig((current) => ({ ...current, hora_execucao: event.target.value }))}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+                  className="w-full rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-50 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
                 />
               </label>
 
-              <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <label className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Preventiva dias antes</span>
                 <input
                   type="number"
                   min="0"
                   value={billingConfig.preventiva_dias_antes}
                   onChange={(event) => setBillingConfig((current) => ({ ...current, preventiva_dias_antes: Number(event.target.value || 0) }))}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+                  className="w-full rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-50 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
                 />
               </label>
 
-              <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <label className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Enviar no dia do vencimento</span>
-                <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <span className="text-sm font-medium text-slate-700">{billingConfig.enviar_no_vencimento ? 'Sim' : 'Nao'}</span>
+                <div className="flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3">
+                  <span className="text-sm font-medium text-slate-200">{billingConfig.enviar_no_vencimento ? 'Sim' : 'Nao'}</span>
                   <input
                     type="checkbox"
                     checked={Boolean(billingConfig.enviar_no_vencimento)}
                     onChange={(event) => setBillingConfig((current) => ({ ...current, enviar_no_vencimento: event.target.checked }))}
-                    className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    className="h-4 w-4 rounded border-slate-700 text-emerald-600 focus:ring-emerald-500"
                   />
                 </div>
               </label>
 
-              <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <label className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Permitir envio sem boleto</span>
-                <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <span className="text-sm font-medium text-slate-700">{billingConfig.permitir_envio_sem_boleto ? 'Sim' : 'Nao'}</span>
+                <div className="flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3">
+                  <span className="text-sm font-medium text-slate-200">{billingConfig.permitir_envio_sem_boleto ? 'Sim' : 'Nao'}</span>
                   <input
                     type="checkbox"
                     checked={Boolean(billingConfig.permitir_envio_sem_boleto)}
                     onChange={(event) => setBillingConfig((current) => ({ ...current, permitir_envio_sem_boleto: event.target.checked }))}
-                    className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    className="h-4 w-4 rounded border-slate-700 text-emerald-600 focus:ring-emerald-500"
                   />
                 </div>
               </label>
 
-              <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <label className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Limite por titulo</span>
                 <input
                   type="number"
                   min="1"
                   value={billingConfig.limite_cobrancas_por_titulo}
                   onChange={(event) => setBillingConfig((current) => ({ ...current, limite_cobrancas_por_titulo: Number(event.target.value || 1) }))}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+                  className="w-full rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-50 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
                 />
               </label>
             </div>
@@ -1110,16 +1110,16 @@ export default function CobrancaAutomaticaScreen({
                     className={`relative rounded-[22px] border p-4 text-left transition ${
                       active
                         ? 'border-emerald-200 bg-emerald-50 shadow-soft'
-                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                        : 'border-slate-700 bg-slate-900/60 hover:bg-slate-800/40'
                     }`}
                   >
                     {index < delaySteps.length - 1 ? (
                       <span className="pointer-events-none absolute left-[calc(100%-8px)] top-1/2 hidden h-px w-4 -translate-y-1/2 bg-slate-200 xl:block" />
                     ) : null}
                     <div className="flex items-center justify-between gap-3">
-                      <span className={`text-lg font-semibold ${active ? 'text-emerald-700' : 'text-slate-900'}`}>D+{day}</span>
+                      <span className={`text-lg font-semibold ${active ? 'text-emerald-700' : 'text-slate-50'}`}>D+{day}</span>
                       <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
-                        active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                        active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-800/60 text-slate-500'
                       }`}>
                         {active ? 'Ativo' : 'Inativo'}
                       </span>
@@ -1156,7 +1156,7 @@ export default function CobrancaAutomaticaScreen({
                 className={`rounded-2xl border px-4 py-2.5 text-sm font-semibold transition ${
                   activeTemplateTab === tab.id
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700 shadow-soft'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/40'
                 }`}
               >
                 {tab.label}
@@ -1172,7 +1172,7 @@ export default function CobrancaAutomaticaScreen({
                 type="button"
                 onClick={handlePreviewTemplate}
                 disabled={templatePreviewLoading}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-soft transition hover:bg-slate-50 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition hover:bg-slate-800/40 disabled:opacity-50"
               >
                 {templatePreviewLoading ? <Loader2 size={15} className="animate-spin" /> : <Sheet size={15} />}
                 Testar template
@@ -1180,7 +1180,7 @@ export default function CobrancaAutomaticaScreen({
             }
           >
             <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
                 <textarea
                   rows={14}
                   value={billingConfig[selectedTemplate.field] || ''}
@@ -1190,16 +1190,16 @@ export default function CobrancaAutomaticaScreen({
                       [selectedTemplate.field]: event.target.value,
                     }))
                   }
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+                  className="w-full rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-50 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
                 />
               </div>
 
               <div className="space-y-4">
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Variaveis disponiveis</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {['{nome}', '{numero_boleto}', '{vencimento}', '{valor}', '{dias_atraso}', '{empresa}', '{telefone}', '{linha_digitavel}', '{codigo_barras}', '{link_boleto}'].map((item) => (
-                      <span key={item} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                      <span key={item} className="rounded-full border border-slate-700 bg-slate-800/40 px-3 py-1 text-xs font-medium text-slate-300">
                         {item}
                       </span>
                     ))}
@@ -1267,7 +1267,7 @@ export default function CobrancaAutomaticaScreen({
                     ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
                     : driveConfig.status === 'erro'
                       ? 'bg-red-50 text-red-700 ring-red-200'
-                      : 'bg-slate-100 text-slate-600 ring-slate-200'
+                      : 'bg-slate-800/60 text-slate-300 ring-slate-700'
                 }`}
               >
                 {driveConfig.status === 'sucesso' ? 'Conectado' : driveConfig.status === 'erro' ? 'Com erro' : 'Pendente'}
@@ -1277,13 +1277,13 @@ export default function CobrancaAutomaticaScreen({
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-sm">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-emerald-700 shadow-soft">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900/60 text-emerald-700 shadow-soft">
                     <ShieldCheck size={18} />
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">Credencial Google Drive</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-950">Configurada com seguranca</p>
-                    <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-700">
+                    <p className="mt-1 text-sm font-semibold text-slate-50">Configurada com seguranca</p>
+                    <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-slate-900/60 px-3 py-1 text-xs font-semibold text-emerald-700">
                       <CheckCircle2 size={13} />
                       Conectada
                     </div>
@@ -1291,25 +1291,25 @@ export default function CobrancaAutomaticaScreen({
                 </div>
               </div>
 
-              <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <label className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">ID da pasta do Google Drive</span>
                 <input
                   type="text"
                   value={driveFolderInput}
                   onChange={(event) => setDriveFolderInput(event.target.value)}
                   placeholder="Cole aqui o ID da pasta compartilhada"
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+                  className="w-full rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-50 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
                 />
               </label>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Nome da pasta</p>
-                <p className="mt-2 text-sm font-medium text-slate-900">{driveConfig.folder_name || 'Ainda nao identificado'}</p>
+                <p className="mt-2 text-sm font-medium text-slate-50">{driveConfig.folder_name || 'Ainda nao identificado'}</p>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Status da conexao</p>
-                <p className="mt-2 text-sm font-medium text-slate-900">
+                <p className="mt-2 text-sm font-medium text-slate-50">
                   {driveConfig.status === 'sucesso'
                     ? `Conexao valida com ${driveConfig.quantidade_arquivos_pdf} PDF(s).`
                     : driveConfig.mensagem_erro || 'Configure a pasta e teste a conexao.'}
@@ -1331,7 +1331,7 @@ export default function CobrancaAutomaticaScreen({
                 type="button"
                 onClick={handleTestDrive}
                 disabled={driveTesting}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-soft transition hover:bg-slate-50 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition hover:bg-slate-800/40 disabled:opacity-50"
               >
                 {driveTesting ? <Loader2 size={15} className="animate-spin" /> : <RefreshCcw size={15} />}
                 Testar conexao
@@ -1340,7 +1340,7 @@ export default function CobrancaAutomaticaScreen({
                 type="button"
                 onClick={() => runAction('drive', syncBillingDrive, 'Drive sincronizado com sucesso.')}
                 disabled={Boolean(executingAction)}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-soft transition hover:bg-slate-50 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition hover:bg-slate-800/40 disabled:opacity-50"
               >
                 {executingAction === 'drive' ? <Loader2 size={15} className="animate-spin" /> : <RefreshCcw size={15} />}
                 Sincronizar Drive
@@ -1357,7 +1357,7 @@ export default function CobrancaAutomaticaScreen({
                   ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
                   : driveConfig.last_source_sync_status === 'error'
                     ? 'bg-red-50 text-red-700 ring-red-200'
-                    : 'bg-slate-100 text-slate-600 ring-slate-200'
+                    : 'bg-slate-800/60 text-slate-300 ring-slate-700'
               }`}>
                 {driveConfig.last_source_sync_status === 'success'
                   ? 'Sincronizacao ok'
@@ -1368,40 +1368,40 @@ export default function CobrancaAutomaticaScreen({
             }
           >
             <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <label className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">ID da planilha</span>
                 <input
                   type="text"
                   value={driveConfig.source_spreadsheet_id || driveConfig.spreadsheet_id || ''}
                   readOnly
                   placeholder="Nao configurado"
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none"
+                  className="w-full rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-200 outline-none"
                 />
               </label>
 
-              <label className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <label className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Nome da planilha / aba</span>
                 <input
                   type="text"
                   value={driveConfig.source_sheet_name || driveConfig.sheet_name || ''}
                   readOnly
                   placeholder="Nao configurado"
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none"
+                  className="w-full rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-200 outline-none"
                 />
               </label>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Ultima sincronizacao</p>
-                <p className="mt-2 text-sm font-medium text-slate-900">
+                <p className="mt-2 text-sm font-medium text-slate-50">
                   {driveConfig.last_source_sync_at
                     ? new Date(driveConfig.last_source_sync_at).toLocaleString('pt-BR')
                     : 'Ainda nao sincronizada'}
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Status operacional</p>
-                <p className="mt-2 text-sm font-medium text-slate-900">
+                <p className="mt-2 text-sm font-medium text-slate-50">
                   {driveConfig.last_source_sync_error || 'Pronto para sincronizacao manual.'}
                 </p>
               </div>
@@ -1419,7 +1419,7 @@ export default function CobrancaAutomaticaScreen({
                 type="button"
                 onClick={() => runAction('sheet', syncBillingSheet, 'Planilha sincronizada com sucesso.')}
                 disabled={Boolean(executingAction)}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-soft transition hover:bg-slate-50 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition hover:bg-slate-800/40 disabled:opacity-50"
               >
                 {executingAction === 'sheet' ? <Loader2 size={15} className="animate-spin" /> : <Sheet size={15} />}
                 Sincronizar planilha
@@ -1451,7 +1451,7 @@ export default function CobrancaAutomaticaScreen({
               <StatCard label="Erros" value={visibleBoletoSummary.erros} helper="Falhas na leitura ou no match" tone="red" />
             </div>
 
-            <div className="mt-5 rounded-[22px] border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mt-5 rounded-[22px] border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
               <DataTable
                 columns={boletoColumns}
                 rows={boletoRows}
@@ -1471,14 +1471,14 @@ export default function CobrancaAutomaticaScreen({
               </div>
             }
           >
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-5">
-              <p className="text-sm leading-relaxed text-slate-600">
+            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-5">
+              <p className="text-sm leading-relaxed text-slate-300">
                 A estrutura comercial e a simulacao continuam funcionando normalmente. O envio real continuara bloqueado ate a fase de configuracao da Z-API.
               </p>
               <button
                 type="button"
                 onClick={() => onToast?.('aviso', 'Configuracao de Z-API sera liberada em breve.')}
-                className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-2.5 text-sm font-semibold text-slate-300 transition hover:bg-slate-800/60"
               >
                 Configurar Z-API em breve
               </button>

@@ -36,7 +36,7 @@ import { formatCurrencyBRL } from '../utils/format';
 
 function CenterCard({ label, value, tone = 'slate' }) {
   const palette = {
-    slate: 'from-slate-400 to-slate-500 text-slate-950',
+    slate: 'from-slate-400 to-slate-500 text-slate-50',
     emerald: 'from-emerald-400 to-emerald-600 text-emerald-700',
     blue: 'from-blue-400 to-blue-600 text-blue-700',
     amber: 'from-amber-400 to-orange-400 text-amber-700',
@@ -44,25 +44,25 @@ function CenterCard({ label, value, tone = 'slate' }) {
   };
 
   return (
-    <article className="relative overflow-hidden rounded-[24px] border border-slate-200 bg-white p-5 shadow-soft">
+    <article className="relative overflow-hidden rounded-[24px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
       <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${palette[tone]?.split(' text-')[0] || 'from-slate-400 to-slate-500'} opacity-80`} />
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className={`mt-2 text-3xl font-semibold ${palette[tone]?.split(' ').pop() || 'text-slate-950'}`}>{value}</p>
+      <p className={`mt-2 text-3xl font-semibold ${palette[tone]?.split(' ').pop() || 'text-slate-50'}`}>{value}</p>
     </article>
   );
 }
 
 const toneByStatus = {
-  pendente: 'bg-slate-100 text-slate-700 ring-slate-200',
+  pendente: 'bg-slate-800/60 text-slate-200 ring-slate-700',
   pago: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  negociado: 'bg-blue-50 text-blue-700 ring-blue-200',
+  negociado: 'bg-blue-900/20 text-blue-700 ring-blue-200',
   suspenso: 'bg-amber-50 text-amber-700 ring-amber-200',
 };
 
 const boletoStatusTone = {
   encontrado: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
   baixa_confianca: 'bg-amber-50 text-amber-700 ring-amber-200',
-  pendente: 'bg-slate-100 text-slate-700 ring-slate-200',
+  pendente: 'bg-slate-800/60 text-slate-200 ring-slate-700',
   sem_boleto: 'bg-red-50 text-red-700 ring-red-200',
   nao_encontrado: 'bg-orange-50 text-orange-700 ring-orange-200',
   conflito: 'bg-red-50 text-red-700 ring-red-200',
@@ -673,7 +673,7 @@ export default function CentralCobrancaScreen({
             type="checkbox"
             checked={allSelected}
             onChange={toggleAllRows}
-            className="h-4 w-4 rounded border-slate-300"
+            className="h-4 w-4 rounded border-slate-700"
           />
         ),
         render: (row) => (
@@ -681,14 +681,14 @@ export default function CentralCobrancaScreen({
             type="checkbox"
             checked={selectedRows.has(row.id)}
             onChange={() => toggleRowSelection(row.id)}
-            className="h-4 w-4 rounded border-slate-300"
+            className="h-4 w-4 rounded border-slate-700"
           />
         ),
       },
       {
         key: 'cliente_nome',
         label: 'Cliente',
-        render: (row) => <span className="font-medium text-slate-900">{getClienteEfetivo(row) || row.cliente_nome}</span>,
+        render: (row) => <span className="font-medium text-slate-50">{getClienteEfetivo(row) || row.cliente_nome}</span>,
       },
       {
         key: 'numero_boleto',
@@ -703,7 +703,7 @@ export default function CentralCobrancaScreen({
       {
         key: 'valor',
         label: 'Valor',
-        render: (row) => <span className="font-semibold text-slate-900">{formatCurrencyBRL(row.valor)}</span>,
+        render: (row) => <span className="font-semibold text-slate-50">{formatCurrencyBRL(row.valor)}</span>,
       },
       {
         key: 'telefone',
@@ -714,7 +714,7 @@ export default function CentralCobrancaScreen({
         key: 'status',
         label: 'Status',
         render: (row) => (
-          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${toneByStatus[row.status || 'pendente'] || 'bg-slate-100 text-slate-700 ring-slate-200'}`}>
+          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${toneByStatus[row.status || 'pendente'] || 'bg-slate-800/60 text-slate-200 ring-slate-700'}`}>
             {row.status || 'pendente'}
           </span>
         ),
@@ -742,7 +742,7 @@ export default function CentralCobrancaScreen({
               ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
               : confidence >= 50
                 ? 'bg-amber-50 text-amber-700 ring-amber-200'
-                : 'bg-slate-100 text-slate-700 ring-slate-200';
+                : 'bg-slate-800/60 text-slate-200 ring-slate-700';
           return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${tone}`}>{confidence.toFixed(0)}%</span>;
         },
       },
@@ -756,7 +756,7 @@ export default function CentralCobrancaScreen({
               <button
                 type="button"
                 onClick={() => copyText(row.linha_digitavel, 'Linha digitavel copiada com sucesso.')}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50"
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900/60 px-2 py-1 text-[11px] font-semibold text-slate-300 transition hover:bg-slate-800/40"
               >
                 <Copy size={11} />
                 Copiar
@@ -818,7 +818,7 @@ export default function CentralCobrancaScreen({
               type="button"
               disabled={!row.boleto_url}
               onClick={() => window.open(row.boleto_url, '_blank', 'noopener,noreferrer')}
-              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
             >
               <ExternalLink size={12} />
               Abrir boleto
@@ -827,14 +827,14 @@ export default function CentralCobrancaScreen({
               <button
                 type="button"
                 onClick={() => setOpenMenuRowId((current) => (current === row.id ? null : row.id))}
-                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-800/40"
               >
                 <MoreHorizontal size={12} />
                 Mais acoes
                 <ChevronDown size={12} />
               </button>
               {openMenuRowId === row.id ? (
-                <div className="absolute right-0 top-[calc(100%+8px)] z-[9999] min-w-[220px] rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                <div className="absolute right-0 top-[calc(100%+8px)] z-[9999] min-w-[220px] rounded-2xl border border-slate-700 bg-slate-900/60 p-2 shadow-xl">
                   <button
                     type="button"
                     disabled={!canManageCharges || Boolean(runningAction)}
@@ -846,7 +846,7 @@ export default function CentralCobrancaScreen({
                         'Simulacao registrada com sucesso.'
                       );
                     }}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
                   >
                     <Send size={12} />
                     Simular cobranca
@@ -862,7 +862,7 @@ export default function CentralCobrancaScreen({
                         'Previa do envio montada com sucesso.'
                       );
                     }}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
                   >
                     <Receipt size={12} />
                     Previa do envio
@@ -878,7 +878,7 @@ export default function CentralCobrancaScreen({
                         'Titulo marcado como pago.'
                       );
                     }}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
                   >
                     <CheckCircle2 size={12} />
                     Marcar como pago
@@ -894,7 +894,7 @@ export default function CentralCobrancaScreen({
                         'Titulo marcado como negociado.'
                       );
                     }}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
                   >
                     <Receipt size={12} />
                     Marcar como negociado
@@ -910,7 +910,7 @@ export default function CentralCobrancaScreen({
                         'Cobranca suspensa para este titulo.'
                       );
                     }}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
                   >
                     <PhoneOff size={12} />
                     Suspender cobranca
@@ -926,7 +926,7 @@ export default function CentralCobrancaScreen({
                         'Busca de boletos reprocessada com sucesso.'
                       );
                     }}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
                   >
                     <RefreshCcw size={12} />
                     Reprocessar boleto
@@ -960,23 +960,23 @@ export default function CentralCobrancaScreen({
   return (
     <div className="space-y-6">
       {limitNotice ? <PlanLimitNotice {...limitNotice} /> : null}
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
               <Receipt size={13} />
               Central de cobranca
             </div>
-            <h3 className="mt-4 text-2xl font-semibold text-slate-950">Operacao da regua por titulo</h3>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
-              Visao consolidada da carteira da empresa <span className="font-semibold text-slate-900">{companyName}</span> com etapa da regua, boleto encontrado e ultimas simulacoes.
+            <h3 className="mt-4 text-2xl font-semibold text-slate-50">Operacao da regua por titulo</h3>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-300">
+              Visao consolidada da carteira da empresa <span className="font-semibold text-slate-50">{companyName}</span> com etapa da regua, boleto encontrado e ultimas simulacoes.
             </p>
           </div>
           <button
             type="button"
             onClick={loadCenter}
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-soft transition hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition hover:bg-slate-800/40 disabled:opacity-50"
           >
             {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCcw size={15} />}
             Atualizar central
@@ -985,7 +985,7 @@ export default function CentralCobrancaScreen({
             type="button"
             onClick={() => handlePrepareSelected({ fallbackToEligible: true })}
             disabled={Boolean(runningAction)}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-soft transition hover:bg-slate-100"
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-2.5 text-sm font-semibold text-slate-300 shadow-soft transition hover:bg-slate-800/60"
           >
             <Send size={15} />
             Preparar cobranca
@@ -994,7 +994,7 @@ export default function CentralCobrancaScreen({
             type="button"
             onClick={() => handlePrepareSelected({ fallbackToEligible: false })}
             disabled={!selectedRows.size || Boolean(runningAction)}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-soft transition hover:bg-slate-100 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-2.5 text-sm font-semibold text-slate-300 shadow-soft transition hover:bg-slate-800/60 disabled:opacity-50"
           >
             {runningAction === 'prepare-selected' ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
             Preparar lote
@@ -1014,7 +1014,7 @@ export default function CentralCobrancaScreen({
       </section>
 
       {simulationResult ? (
-        <section className="rounded-[28px] border border-blue-200 bg-blue-50/70 p-6 shadow-soft">
+        <section className="rounded-[28px] border border-blue-700/40 bg-blue-900/20/70 p-6 shadow-soft">
           <div className="flex items-start gap-3">
             <CheckCircle2 className="mt-0.5 text-blue-700" size={18} />
             <div className="w-full">
@@ -1022,7 +1022,7 @@ export default function CentralCobrancaScreen({
               <p className="mt-1 text-xs text-blue-700">
                 Arquivo encontrado: {simulationResult.arquivo_encontrado ? 'sim' : 'nao'}.
               </p>
-              <pre className="mt-3 overflow-x-auto rounded-2xl border border-blue-100 bg-white p-4 text-xs leading-relaxed text-slate-700">
+              <pre className="mt-3 overflow-x-auto rounded-2xl border border-blue-100 bg-slate-900/60 p-4 text-xs leading-relaxed text-slate-200">
                 {simulationResult.mensagem_gerada || 'Nenhuma mensagem gerada.'}
               </pre>
               <div className="mt-4">
@@ -1061,7 +1061,7 @@ export default function CentralCobrancaScreen({
         </section>
       ) : null}
 
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <DataTable
           columns={columns}
           rows={rows}
@@ -1072,7 +1072,7 @@ export default function CentralCobrancaScreen({
 
       {previewResult ? (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/45 p-4">
-          <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[28px] border border-emerald-200 bg-white p-6 shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[28px] border border-emerald-200 bg-slate-900/60 p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-emerald-900">Previa do envio</p>
@@ -1081,7 +1081,7 @@ export default function CentralCobrancaScreen({
               <button
                 type="button"
                 onClick={() => setPreviewResult(null)}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                className="rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200"
               >
                 Fechar
               </button>
@@ -1118,13 +1118,13 @@ export default function CentralCobrancaScreen({
                 savingTemplate={savingTemplate}
               />
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
-                <p><span className="font-semibold text-slate-900">Numero boleto:</span> {getNumeroBoletoEfetivo(previewResult.payload) || '-'}</p>
-                <p className="mt-2"><span className="font-semibold text-slate-900">Linha digitavel:</span> {previewResult.payload?.linha_digitavel || '-'}</p>
-                <p className="mt-2"><span className="font-semibold text-slate-900">Codigo barras:</span> {previewResult.payload?.codigo_barras || '-'}</p>
-                <p className="mt-2"><span className="font-semibold text-slate-900">Link boleto:</span> {previewResult.payload?.boleto_url || '-'}</p>
-                <p className="mt-2"><span className="font-semibold text-slate-900">PDF:</span> {previewResult.payload?.drive_file_id || '-'}</p>
-                <p className="mt-2"><span className="font-semibold text-slate-900">Status:</span> Simulacao - nao enviado</p>
+              <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 text-sm text-slate-200">
+                <p><span className="font-semibold text-slate-50">Numero boleto:</span> {getNumeroBoletoEfetivo(previewResult.payload) || '-'}</p>
+                <p className="mt-2"><span className="font-semibold text-slate-50">Linha digitavel:</span> {previewResult.payload?.linha_digitavel || '-'}</p>
+                <p className="mt-2"><span className="font-semibold text-slate-50">Codigo barras:</span> {previewResult.payload?.codigo_barras || '-'}</p>
+                <p className="mt-2"><span className="font-semibold text-slate-50">Link boleto:</span> {previewResult.payload?.boleto_url || '-'}</p>
+                <p className="mt-2"><span className="font-semibold text-slate-50">PDF:</span> {previewResult.payload?.drive_file_id || '-'}</p>
+                <p className="mt-2"><span className="font-semibold text-slate-50">Status:</span> Simulacao - nao enviado</p>
               </div>
             </div>
           </div>
@@ -1133,7 +1133,7 @@ export default function CentralCobrancaScreen({
 
       {manualResult ? (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/45 p-4">
-          <div className="max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-[28px] border border-emerald-200 bg-white p-6 shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-[28px] border border-emerald-200 bg-slate-900/60 p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-emerald-900">Envio manual assistido</p>
@@ -1144,7 +1144,7 @@ export default function CentralCobrancaScreen({
                   <button
                     type="button"
                     onClick={() => downloadManualCsv(manualResult.items || [])}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                    className="rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200"
                   >
                     Baixar CSV
                   </button>
@@ -1160,7 +1160,7 @@ export default function CentralCobrancaScreen({
                 <button
                   type="button"
                   onClick={() => setManualResult(null)}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                  className="rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200"
                 >
                   Fechar
                 </button>
@@ -1182,22 +1182,22 @@ export default function CentralCobrancaScreen({
 
             <div className="mt-5 space-y-4">
               {(manualResult.items || []).map((item, index) => (
-                <div key={`${item.drive_file_id || getNumeroBoletoEfetivo(item) || index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div key={`${item.drive_file_id || getNumeroBoletoEfetivo(item) || index}`} className="rounded-2xl border border-slate-700 bg-slate-800/40 p-4">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-2 text-sm text-slate-700">
-                      <p><span className="font-semibold text-slate-900">Cliente:</span> {getClienteEfetivo(item) || '-'}</p>
-                      <p><span className="font-semibold text-slate-900">Telefone:</span> {item.telefone || '-'}</p>
-                      <p><span className="font-semibold text-slate-900">Numero boleto:</span> {getNumeroBoletoEfetivo(item) || '-'}</p>
-                      <p><span className="font-semibold text-slate-900">Linha digitavel:</span> {item.linha_digitavel || '-'}</p>
-                      <p><span className="font-semibold text-slate-900">Codigo de barras:</span> {item.codigo_barras || '-'}</p>
-                      <p><span className="font-semibold text-slate-900">Link/PDF:</span> {item.boleto_url || '-'}</p>
+                    <div className="space-y-2 text-sm text-slate-200">
+                      <p><span className="font-semibold text-slate-50">Cliente:</span> {getClienteEfetivo(item) || '-'}</p>
+                      <p><span className="font-semibold text-slate-50">Telefone:</span> {item.telefone || '-'}</p>
+                      <p><span className="font-semibold text-slate-50">Numero boleto:</span> {getNumeroBoletoEfetivo(item) || '-'}</p>
+                      <p><span className="font-semibold text-slate-50">Linha digitavel:</span> {item.linha_digitavel || '-'}</p>
+                      <p><span className="font-semibold text-slate-50">Codigo de barras:</span> {item.codigo_barras || '-'}</p>
+                      <p><span className="font-semibold text-slate-50">Link/PDF:</span> {item.boleto_url || '-'}</p>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={() => copyText(item.message || '', 'Mensagem copiada com sucesso.')}
-                        className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700"
+                        className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200"
                       >
                         <Copy size={12} />
                         Copiar mensagem
@@ -1205,7 +1205,7 @@ export default function CentralCobrancaScreen({
                       <button
                         type="button"
                         onClick={() => copyText(item.linha_digitavel || '', 'Linha digitavel copiada com sucesso.')}
-                        className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700"
+                        className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200"
                       >
                         <Copy size={12} />
                         Copiar linha digitavel
@@ -1214,7 +1214,7 @@ export default function CentralCobrancaScreen({
                         type="button"
                         disabled={!item.boleto_url || item.boleto_url === 'nao localizado'}
                         onClick={() => window.open(item.boleto_url, '_blank', 'noopener,noreferrer')}
-                        className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200 disabled:opacity-50"
                       >
                         <ExternalLink size={12} />
                         Abrir boleto

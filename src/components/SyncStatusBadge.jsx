@@ -15,7 +15,7 @@ export default function SyncStatusBadge({ status, message }) {
     [SYNC_STATUS.SYNCING]: {
       icon: <Loader2 size={13} className="animate-spin" />,
       label: 'Sincronizando Google Sheets...',
-      className: 'border-blue-200 bg-blue-50 text-blue-700',
+      className: 'border-blue-700/40 bg-blue-900/20 text-blue-700',
     },
     [SYNC_STATUS.SYNCED]: {
       icon: <CheckCircle2 size={13} />,

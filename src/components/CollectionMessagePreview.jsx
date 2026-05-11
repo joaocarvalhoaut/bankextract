@@ -4,7 +4,7 @@ import CollectionToneSelector from './CollectionToneSelector';
 import { generateCollectionMessage, getDefaultCollectionTone } from '../services/collectionMessageService';
 
 const severityClasses = {
-  info: 'bg-blue-50 text-blue-700 ring-blue-200',
+  info: 'bg-blue-900/20 text-blue-700 ring-blue-200',
   warning: 'bg-amber-50 text-amber-700 ring-amber-200',
   danger: 'bg-red-50 text-red-700 ring-red-200',
   success: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
@@ -64,10 +64,10 @@ export default function CollectionMessagePreview({
   };
 
   return (
-    <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-soft">
+    <section className="rounded-[24px] border border-slate-700 bg-slate-900/60 p-4 shadow-soft">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-sm font-semibold text-slate-950">{title}</p>
+          <p className="text-sm font-semibold text-slate-50">{title}</p>
           <p className="mt-1 text-xs leading-relaxed text-slate-500">
             Gere uma mensagem local por regras, revise o tom e ajuste o texto antes de usar no WhatsApp.
           </p>
@@ -83,7 +83,7 @@ export default function CollectionMessagePreview({
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="rounded-2xl border border-slate-700 bg-slate-800/40 p-4">
           <textarea
             rows={11}
             value={message}
@@ -91,18 +91,18 @@ export default function CollectionMessagePreview({
               setMessage(event.target.value);
               onMessageChange?.(event.target.value);
             }}
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+            className="w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm text-slate-50 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
           />
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Assunto / resumo</p>
-            <p className="mt-2 text-sm font-semibold text-slate-900">{generated?.subject || '-'}</p>
+            <p className="mt-2 text-sm font-semibold text-slate-50">{generated?.subject || '-'}</p>
             <p className="mt-2 text-xs text-slate-500">{generated?.actionSuggestion || '-'}</p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Acoes</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button
@@ -116,7 +116,7 @@ export default function CollectionMessagePreview({
               <button
                 type="button"
                 onClick={handleCopy}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800/40"
               >
                 <Copy size={13} />
                 Copiar mensagem
@@ -124,7 +124,7 @@ export default function CollectionMessagePreview({
               <button
                 type="button"
                 onClick={handleRestore}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800/40"
               >
                 <RefreshCcw size={13} />
                 Restaurar mensagem padrao
@@ -134,7 +134,7 @@ export default function CollectionMessagePreview({
                   type="button"
                   disabled={savingTemplate}
                   onClick={() => onSaveTemplate(message)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
                 >
                   <Copy size={13} />
                   {savingTemplate ? 'Salvando modelo...' : saveTemplateLabel}

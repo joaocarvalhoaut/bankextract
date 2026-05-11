@@ -6,14 +6,14 @@ import { formatCurrencyBRL } from '../utils/format';
 
 function DashboardCard({ title, value, tone = 'slate', subtitle = '', badges = [], action = null }) {
   const tones = {
-    slate: 'text-slate-900 border-slate-200 bg-white',
+    slate: 'text-slate-50 border-slate-700 bg-slate-900/60',
     red: 'text-red-700 border-red-200 bg-red-50',
-    blue: 'text-blue-700 border-blue-200 bg-blue-50',
+    blue: 'text-blue-700 border-blue-700/40 bg-blue-900/20',
     green: 'text-emerald-700 border-emerald-200 bg-emerald-50',
     orange: 'text-orange-700 border-orange-200 bg-orange-50',
     yellow: 'text-amber-700 border-amber-200 bg-amber-50',
     darkred: 'text-rose-800 border-rose-200 bg-rose-50',
-    neutral: 'text-slate-700 border-slate-200 bg-slate-50',
+    neutral: 'text-slate-200 border-slate-700 bg-slate-800/40',
   };
 
   return (
@@ -132,12 +132,12 @@ export default function CobrancaIndicators({
     <section className="space-y-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">Indicadores de cobranca</h3>
+          <h3 className="text-lg font-semibold text-slate-50">Indicadores de cobranca</h3>
           <p className="text-sm text-slate-500">Painel financeiro e comercial com foco em cobranca e recuperacao.</p>
         </div>
         <button
           type="button"
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800/40"
         >
           <ArrowRightCircle size={14} />
           Ver relatorio
@@ -169,7 +169,7 @@ export default function CobrancaIndicators({
           tone="green"
           badges={[
             { label: `Manual ${meta.manualWhatsAppCharges}`, className: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
-            { label: `Auto ${meta.autoWhatsAppCharges}`, className: 'border-blue-200 bg-blue-50 text-blue-700' },
+            { label: `Auto ${meta.autoWhatsAppCharges}`, className: 'border-blue-700/40 bg-blue-900/20 text-blue-700' },
           ]}
           action={<MessageCircleMore size={18} className="shrink-0 text-emerald-500" />}
         />

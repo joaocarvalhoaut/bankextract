@@ -8,14 +8,14 @@ import { formatCurrencyBRL } from '../utils/format';
 
 function MetricCard({ label, value, tone = 'slate', suffix = '' }) {
   const palette = {
-    slate: 'text-slate-950 bg-slate-50',
+    slate: 'text-slate-50 bg-slate-800/40',
     emerald: 'text-emerald-700 bg-emerald-50',
-    blue: 'text-blue-700 bg-blue-50',
+    blue: 'text-blue-700 bg-blue-900/20',
     red: 'text-red-700 bg-red-50',
   };
 
   return (
-    <article className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-soft">
+    <article className="rounded-[24px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
       <div className={`mt-3 inline-flex rounded-2xl px-4 py-3 ${palette[tone] || palette.slate}`}>
         <p className="text-2xl font-bold">
@@ -35,10 +35,10 @@ function AgingBars({ items = [] }) {
       {items.map((item) => (
         <div key={item.label}>
           <div className="mb-2 flex items-center justify-between text-xs">
-            <span className="font-semibold text-slate-700">{item.label}</span>
-            <span className="font-semibold text-slate-900">{formatCurrencyBRL(item.value || 0)}</span>
+            <span className="font-semibold text-slate-200">{item.label}</span>
+            <span className="font-semibold text-slate-50">{formatCurrencyBRL(item.value || 0)}</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+          <div className="h-2 overflow-hidden rounded-full bg-slate-800/60">
             <div
               className="h-full rounded-full transition-all duration-500"
               style={{
@@ -127,9 +127,9 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
 
   if (!companyId) {
     return (
-      <div className="rounded-[32px] border border-dashed border-slate-300 bg-white p-12 text-center shadow-soft">
+      <div className="rounded-[32px] border border-dashed border-slate-700 bg-slate-900/60 p-12 text-center shadow-soft">
         <BarChart3 className="mx-auto mb-4 text-slate-300" size={30} />
-        <h2 className="text-xl font-semibold text-slate-900">Selecione uma empresa para abrir o analytics</h2>
+        <h2 className="text-xl font-semibold text-slate-50">Selecione uma empresa para abrir o analytics</h2>
         <p className="mt-2 text-sm text-slate-500">As metricas financeiras e operacionais sao calculadas por company_id.</p>
       </div>
     );
@@ -151,11 +151,11 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
           message={usageSummary.highestAlert.message}
         />
       ) : null}
-      <section className="rounded-[30px] border border-slate-200 bg-white p-7 shadow-soft">
+      <section className="rounded-[30px] border border-slate-700 bg-slate-900/60 p-7 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Analytics interno</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Leituras operacionais de {companyName || 'uma empresa ativa'}</h2>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-50">Leituras operacionais de {companyName || 'uma empresa ativa'}</h2>
             <p className="mt-2 text-sm text-slate-500">
               Acompanhe importacoes, recebiveis, simulacoes e sinais de cobranca sem depender de integracoes pagas.
             </p>
@@ -173,25 +173,25 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
         ))}
       </section>
 
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="mb-5">
-          <h3 className="text-lg font-semibold text-slate-900">Uso do plano no ciclo atual</h3>
+          <h3 className="text-lg font-semibold text-slate-50">Uso do plano no ciclo atual</h3>
           <p className="text-sm text-slate-500">Medicao real por empresa para importacoes, cobrancas, automacoes e usuarios.</p>
         </div>
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {usageCards.map((metric) => (
-            <article key={metric.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <article key={metric.key} className="rounded-2xl border border-slate-700 bg-slate-800/40 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{metric.label}</p>
-                  <p className="mt-2 text-2xl font-bold text-slate-950">
+                  <p className="mt-2 text-2xl font-bold text-slate-50">
                     {metric.used} / {metric.limit || 'sem limite'}
                   </p>
                 </div>
-                <div className="rounded-2xl bg-white px-3 py-2 text-right shadow-soft">
+                <div className="rounded-2xl bg-slate-900/60 px-3 py-2 text-right shadow-soft">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">% consumido</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-900">{metric.percent}%</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-50">{metric.percent}%</p>
                 </div>
               </div>
               <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
@@ -212,36 +212,36 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-        <article className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+        <article className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
           <div className="mb-5">
-            <h3 className="text-lg font-semibold text-slate-900">Aging da carteira</h3>
+            <h3 className="text-lg font-semibold text-slate-50">Aging da carteira</h3>
             <p className="text-sm text-slate-500">Visual rapido dos recebiveis por faixa de atraso.</p>
           </div>
           <AgingBars items={analytics?.aging || []} />
         </article>
 
-        <article className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+        <article className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
           <div className="mb-5">
-            <h3 className="text-lg font-semibold text-slate-900">Indicadores SaaS</h3>
+            <h3 className="text-lg font-semibold text-slate-50">Indicadores SaaS</h3>
             <p className="text-sm text-slate-500">Base interna para acompanhamento comercial e operacional.</p>
           </div>
 
           <div className="grid grid-cols-1 gap-3">
-            <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="rounded-2xl bg-slate-800/40 p-4">
               <div className="flex items-center gap-2 text-slate-500">
                 <Building2 size={16} />
                 <span className="text-xs font-semibold uppercase tracking-[0.16em]">Empresas ativas</span>
               </div>
-              <p className="mt-2 text-2xl font-bold text-slate-900">{analytics?.activeCompanies || 0}</p>
+              <p className="mt-2 text-2xl font-bold text-slate-50">{analytics?.activeCompanies || 0}</p>
             </div>
-            <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="rounded-2xl bg-slate-800/40 p-4">
               <div className="flex items-center gap-2 text-slate-500">
                 <Users size={16} />
                 <span className="text-xs font-semibold uppercase tracking-[0.16em]">Usuarios ativos</span>
               </div>
-              <p className="mt-2 text-2xl font-bold text-slate-900">{analytics?.activeUsers || 0}</p>
+              <p className="mt-2 text-2xl font-bold text-slate-50">{analytics?.activeUsers || 0}</p>
             </div>
-            <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="rounded-2xl bg-slate-800/40 p-4">
               <div className="flex items-center gap-2 text-slate-500">
                 <Receipt size={16} />
                 <span className="text-xs font-semibold uppercase tracking-[0.16em]">Cobrancas simuladas</span>

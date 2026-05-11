@@ -47,10 +47,7 @@ type SubscriptionRow = {
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: {
-      ...corsHeaders,
-      'Content-Type': 'application/json',
-    },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 }
 
@@ -65,11 +62,7 @@ function requireEnv(name: string) {
 }
 
 function getBaseUrl(req: Request) {
-  return (
-    getEnv('APP_BASE_URL') ||
-    getEnv('SITE_URL') ||
-    new URL(req.url).origin
-  );
+  return getEnv('APP_BASE_URL') || getEnv('SITE_URL') || new URL(req.url).origin;
 }
 
 function getPlanPriceFallback(planCode: string) {
@@ -79,6 +72,11 @@ function getPlanPriceFallback(planCode: string) {
     business: getEnv('STRIPE_PRICE_BUSINESS'),
   };
   return map[planCode] || '';
+}
+
+/** Returns true when STRIPE_SECRET_KEY is absent — enables mock/sandbox mode. */
+function isMockStripe(): boolean {
+  return !getEnv('STRIPE_SECRET_KEY');
 }
 
 function buildAdminClient() {
@@ -91,58 +89,37 @@ function buildAuthClient(req: Request) {
   const supabaseUrl = requireEnv('SUPABASE_URL');
   const anonKey = requireEnv('SUPABASE_ANON_KEY');
   return createClient(supabaseUrl, anonKey, {
-    global: {
-      headers: {
-        Authorization: req.headers.get('Authorization') || '',
-      },
-    },
+    global: { headers: { Authorization: req.headers.get('Authorization') || '' } },
   });
 }
 
 async function getAuthenticatedUser(req: Request) {
   const authClient = buildAuthClient(req);
-  const {
-    data: { user },
-    error,
-  } = await authClient.auth.getUser();
-
-  if (error || !user) {
-    throw new Error('Sessao invalida para billing.');
-  }
-
+  const { data: { user }, error } = await authClient.auth.getUser();
+  if (error || !user) throw new Error('Sessao invalida para billing.');
   return user;
 }
 
 async function userHasCompanyAccess(admin: AdminClient, userId: string, companyId: string) {
   const [{ data: membership }, { data: systemAdmin }] = await Promise.all([
-    admin
-      .from('usuarios_empresas')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('company_id', companyId)
-      .maybeSingle(),
-    admin
-      .from('system_admins')
-      .select('id')
-      .eq('user_id', userId)
-      .maybeSingle(),
+    admin.from('usuarios_empresas').select('id').eq('user_id', userId).eq('company_id', companyId).maybeSingle(),
+    admin.from('system_admins').select('id').eq('user_id', userId).maybeSingle(),
   ]);
-
   return Boolean(membership?.id || systemAdmin?.id);
 }
 
 async function getCompany(admin: AdminClient, companyId: string) {
+  // Only selects guaranteed columns — subscription_plan/status may not exist yet
   const { data, error } = await admin
     .from('empresas')
-    .select('id, nome, subscription_plan, subscription_status')
+    .select('id, nome')
     .eq('id', companyId)
     .maybeSingle();
 
   if (error || !data) {
     throw new Error(error?.message || 'Empresa nao encontrada.');
   }
-
-  return data;
+  return data as { id: string; nome: string };
 }
 
 async function getPlan(admin: AdminClient, planCode: string): Promise<PlanRow> {
@@ -154,9 +131,8 @@ async function getPlan(admin: AdminClient, planCode: string): Promise<PlanRow> {
     .maybeSingle();
 
   if (error || !data) {
-    throw new Error(error?.message || 'Plano nao encontrado para checkout.');
+    throw new Error(error?.message || `Plano '${planCode}' nao encontrado. Verifique se a tabela 'plans' existe e tem registros ativos.`);
   }
-
   return data as PlanRow;
 }
 
@@ -167,13 +143,8 @@ async function ensureSubscription(admin: AdminClient, companyId: string, planCod
     .eq('company_id', companyId)
     .maybeSingle();
 
-  if (error) {
-    throw new Error(error.message || 'Falha ao carregar assinatura.');
-  }
-
-  if (existing) {
-    return existing as SubscriptionRow;
-  }
+  if (error) throw new Error(error.message || 'Falha ao carregar assinatura.');
+  if (existing) return existing as SubscriptionRow;
 
   const plan = await getPlan(admin, planCode);
   const now = new Date();
@@ -197,28 +168,43 @@ async function ensureSubscription(admin: AdminClient, companyId: string, planCod
     .select('*')
     .single();
 
-  if (insertError || !created) {
-    throw new Error(insertError?.message || 'Falha ao criar assinatura trial.');
-  }
-
+  if (insertError || !created) throw new Error(insertError?.message || 'Falha ao criar assinatura trial.');
   return created as SubscriptionRow;
 }
 
+/**
+ * Calls the Stripe REST API.
+ * When STRIPE_SECRET_KEY is absent (mock mode) returns stub data so the
+ * entire checkout flow can be exercised without real credentials.
+ */
 async function fetchStripe(path: string, init: RequestInit) {
+  if (isMockStripe()) {
+    const mockId = `mock_${Date.now()}`;
+    const bodyStr = typeof init.body === 'string' ? init.body : '';
+    const params = new URLSearchParams(bodyStr);
+    console.log('[stripe-billing] MOCK mode — STRIPE_SECRET_KEY ausente. path:', path);
+
+    if (path === 'customers') {
+      return { id: `cus_${mockId}`, object: 'customer', livemode: false };
+    }
+    if (path === 'checkout/sessions') {
+      const successUrl = params.get('success_url') || '';
+      return { id: `cs_${mockId}`, object: 'checkout.session', url: successUrl, livemode: false };
+    }
+    if (path === 'billing_portal/sessions') {
+      const returnUrl = params.get('return_url') || '';
+      return { id: `bps_${mockId}`, object: 'billing_portal.session', url: returnUrl, livemode: false };
+    }
+    return { id: mockId, object: 'mock', livemode: false };
+  }
+
   const secretKey = requireEnv('STRIPE_SECRET_KEY');
   const response = await fetch(`https://api.stripe.com/v1/${path}`, {
     ...init,
-    headers: {
-      Authorization: `Bearer ${secretKey}`,
-      ...(init.headers || {}),
-    },
+    headers: { Authorization: `Bearer ${secretKey}`, ...(init.headers || {}) },
   });
-
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data?.error?.message || `Stripe erro ${response.status}.`);
-  }
-
+  if (!response.ok) throw new Error(data?.error?.message || `Stripe erro ${response.status}.`);
   return data;
 }
 
@@ -228,9 +214,7 @@ async function ensureStripeCustomer(
   companyName: string,
   billingEmail: string,
 ) {
-  if (subscription.stripe_customer_id) {
-    return subscription.stripe_customer_id;
-  }
+  if (subscription.stripe_customer_id) return subscription.stripe_customer_id;
 
   const payload = new URLSearchParams();
   payload.set('name', companyName);
@@ -240,33 +224,23 @@ async function ensureStripeCustomer(
 
   const customer = await fetchStripe('customers', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: payload.toString(),
   });
 
   const customerId = String(customer?.id || '');
-  if (!customerId) {
-    throw new Error('Falha ao criar customer Stripe.');
-  }
+  if (!customerId) throw new Error('Falha ao criar customer Stripe.');
 
   await admin
     .from('subscriptions')
-    .update({
-      stripe_customer_id: customerId,
-      billing_email: billingEmail || subscription.billing_email || null,
-    })
+    .update({ stripe_customer_id: customerId, billing_email: billingEmail || subscription.billing_email || null })
     .eq('id', subscription.id);
 
   return customerId;
 }
 
 function getTrialDaysRemaining(subscription: SubscriptionRow, plan: PlanRow) {
-  if (subscription.status !== 'trialing' || !subscription.trial_ends_at) {
-    return 0;
-  }
-
+  if (subscription.status !== 'trialing' || !subscription.trial_ends_at) return 0;
   const end = new Date(subscription.trial_ends_at).getTime();
   const diffDays = Math.ceil((end - Date.now()) / 86400000);
   if (diffDays <= 0) return 0;
@@ -274,30 +248,22 @@ function getTrialDaysRemaining(subscription: SubscriptionRow, plan: PlanRow) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
     const body = await req.json().catch(() => ({}));
     const action = String(body?.action || '').trim();
 
-    if (!action) {
-      return jsonResponse({ success: false, error: 'Action obrigatoria.' }, 400);
-    }
+    if (!action) return jsonResponse({ success: false, error: 'Action obrigatoria.' }, 400);
 
     const user = await getAuthenticatedUser(req);
     const admin = buildAdminClient();
     const companyId = String(body?.companyId || body?.company_id || '').trim();
 
-    if (!companyId) {
-      return jsonResponse({ success: false, error: 'companyId obrigatorio.' }, 400);
-    }
+    if (!companyId) return jsonResponse({ success: false, error: 'companyId obrigatorio.' }, 400);
 
     const canAccess = await userHasCompanyAccess(admin, user.id, companyId);
-    if (!canAccess) {
-      return jsonResponse({ success: false, error: 'Acesso negado para esta empresa.' }, 403);
-    }
+    if (!canAccess) return jsonResponse({ success: false, error: 'Acesso negado para esta empresa.' }, 403);
 
     const company = await getCompany(admin, companyId);
 
@@ -308,10 +274,10 @@ Deno.serve(async (req) => {
       const customerId = await ensureStripeCustomer(admin, subscription, company.nome || 'Empresa', user.email || '');
       const priceId = plan.stripe_price_id || getPlanPriceFallback(plan.code);
 
-      if (!priceId) {
+      if (!priceId && !isMockStripe()) {
         return jsonResponse({
           success: false,
-          error: 'Plano sem Stripe Price ID configurado.',
+          error: `Plano sem Stripe Price ID. Configure STRIPE_PRICE_${planCode.toUpperCase()} nas secrets do Supabase.`,
         }, 400);
       }
 
@@ -323,8 +289,10 @@ Deno.serve(async (req) => {
       params.set('success_url', successUrl);
       params.set('cancel_url', cancelUrl);
       params.set('allow_promotion_codes', 'true');
-      params.set('line_items[0][price]', priceId);
-      params.set('line_items[0][quantity]', '1');
+      if (priceId) {
+        params.set('line_items[0][price]', priceId);
+        params.set('line_items[0][quantity]', '1');
+      }
       params.set('metadata[company_id]', companyId);
       params.set('metadata[plan_code]', plan.code);
       params.set('subscription_data[metadata][company_id]', companyId);
@@ -337,9 +305,7 @@ Deno.serve(async (req) => {
 
       const session = await fetchStripe('checkout/sessions', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: params.toString(),
       });
 
@@ -354,19 +320,17 @@ Deno.serve(async (req) => {
           metadata: {
             ...(subscription.metadata || {}),
             last_checkout_created_at: new Date().toISOString(),
+            mock_mode: isMockStripe(),
           },
         })
         .eq('id', subscription.id);
 
-      return jsonResponse({
-        success: true,
-        sessionId: session?.id || null,
-        url: session?.url || null,
-      });
+      return jsonResponse({ success: true, sessionId: session?.id || null, url: session?.url || null, mock: isMockStripe() });
     }
 
     if (action === 'create_customer_portal_session') {
-      const subscription = await ensureSubscription(admin, companyId, String(company.subscription_plan || 'starter'));
+      // Use 'starter' as safe default — does not depend on subscription_plan column
+      const subscription = await ensureSubscription(admin, companyId, 'starter');
       const customerId = await ensureStripeCustomer(admin, subscription, company.nome || 'Empresa', user.email || '');
       const returnUrl = String(body?.returnUrl || `${getBaseUrl(req)}/billing`).trim();
       const params = new URLSearchParams();
@@ -375,34 +339,23 @@ Deno.serve(async (req) => {
 
       const session = await fetchStripe('billing_portal/sessions', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: params.toString(),
       });
 
       await admin
         .from('subscriptions')
-        .update({
-          stripe_customer_id: customerId,
-          stripe_portal_last_url: session?.url || null,
-        })
+        .update({ stripe_customer_id: customerId })
         .eq('id', subscription.id);
 
-      return jsonResponse({
-        success: true,
-        url: session?.url || null,
-      });
+      return jsonResponse({ success: true, url: session?.url || null, mock: isMockStripe() });
     }
 
     return jsonResponse({ success: false, error: 'Action nao suportada.' }, 400);
   } catch (error) {
-    console.error('[stripe-billing] erro', error);
+    console.error('[stripe-billing] erro interno:', error);
     return jsonResponse(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Erro interno no billing Stripe.',
-      },
+      { success: false, error: error instanceof Error ? error.message : 'Erro interno no billing Stripe.' },
       500,
     );
   }

@@ -29,9 +29,9 @@ function calcProximaExecucao(horaEnvio, ativo) {
 
 function HeaderPill({ label, value }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-soft">
+    <div className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-3 shadow-soft">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-950">{value}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-50">{value}</p>
     </div>
   );
 }
@@ -90,15 +90,15 @@ export default function AutomacoesScreen({
   return (
     <div className="space-y-6">
       {limitNotice ? <PlanLimitNotice {...limitNotice} /> : null}
-      <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft">
+      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
               <Sparkles size={13} />
               Automacoes
             </div>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">Automações</h2>
-            <p className="mt-1 text-sm text-slate-600">Motor de cobrança automática por empresa.</p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-50">Automações</h2>
+            <p className="mt-1 text-sm text-slate-300">Motor de cobrança automática por empresa.</p>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:min-w-[520px]">

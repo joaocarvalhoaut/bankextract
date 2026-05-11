@@ -14,7 +14,7 @@ const FILTERS = [
 ];
 
 const severityStyles = {
-  info: 'border-slate-200 bg-slate-50 text-slate-700',
+  info: 'border-slate-700 bg-slate-800/40 text-slate-200',
   success: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   warning: 'border-amber-200 bg-amber-50 text-amber-700',
   danger: 'border-red-200 bg-red-50 text-red-700',
@@ -92,9 +92,9 @@ export default function NotificationsScreen({ companyId, companyName, onToast })
 
   if (!companyId) {
     return (
-      <div className="rounded-[32px] border border-dashed border-slate-300 bg-white p-12 text-center shadow-soft">
+      <div className="rounded-[32px] border border-dashed border-slate-700 bg-slate-900/60 p-12 text-center shadow-soft">
         <BellRing className="mx-auto mb-4 text-slate-300" size={30} />
-        <h2 className="text-xl font-semibold text-slate-900">Selecione uma empresa para abrir as notificacoes</h2>
+        <h2 className="text-xl font-semibold text-slate-50">Selecione uma empresa para abrir as notificacoes</h2>
         <p className="mt-2 text-sm text-slate-500">O centro de notificacoes acompanha eventos comerciais e operacionais por company_id.</p>
       </div>
     );
@@ -102,24 +102,24 @@ export default function NotificationsScreen({ companyId, companyName, onToast })
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[30px] border border-slate-200 bg-white p-7 shadow-soft">
+      <section className="rounded-[30px] border border-slate-700 bg-slate-900/60 p-7 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Centro de notificacoes</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Eventos operacionais de {companyName || 'uma empresa ativa'}</h2>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-50">Eventos operacionais de {companyName || 'uma empresa ativa'}</h2>
             <p className="mt-2 text-sm text-slate-500">
               Acompanhe importacoes, cobrancas, automacoes, alertas de plano e sinais do trial em um so lugar.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            <div className="rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-300">
               {unreadCount} nao lida(s)
             </div>
             <button
               type="button"
               onClick={handleMarkAllRead}
               disabled={unreadCount === 0}
-              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
             >
               <CheckCheck size={15} />
               Marcar todas como lidas
@@ -128,9 +128,9 @@ export default function NotificationsScreen({ companyId, companyName, onToast })
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft">
+      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800/40 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
             <Filter size={13} />
             Filtros
           </div>
@@ -142,7 +142,7 @@ export default function NotificationsScreen({ companyId, companyName, onToast })
               className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
                 activeFilter === filter.id
                   ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-900/20'
-                  : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  : 'border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/40'
               }`}
             >
               {filter.label}
@@ -153,14 +153,14 @@ export default function NotificationsScreen({ companyId, companyName, onToast })
 
       <section className="space-y-3">
         {loading ? (
-          <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500 shadow-soft">
+          <div className="rounded-[28px] border border-slate-700 bg-slate-900/60 px-6 py-10 text-center text-sm text-slate-500 shadow-soft">
             Carregando notificacoes...
           </div>
         ) : filteredNotifications.length ? (
           filteredNotifications.map((item) => (
             <article
               key={item.id}
-              className={`rounded-[24px] border bg-white p-5 shadow-soft transition hover:-translate-y-0.5 ${
+              className={`rounded-[24px] border bg-slate-900/60 p-5 shadow-soft transition hover:-translate-y-0.5 ${
                 severityStyles[item.severity] || severityStyles.info
               }`}
             >
@@ -181,7 +181,7 @@ export default function NotificationsScreen({ companyId, companyName, onToast })
                   type="button"
                   onClick={() => handleReadOne(item)}
                   disabled={item.status === 'read'}
-                  className="rounded-2xl border border-current/20 px-4 py-2 text-sm font-semibold transition hover:bg-white/60 disabled:opacity-50"
+                  className="rounded-2xl border border-current/20 px-4 py-2 text-sm font-semibold transition hover:bg-slate-900/60/60 disabled:opacity-50"
                 >
                   {item.status === 'read' ? 'Lida' : 'Marcar como lida'}
                 </button>
@@ -189,9 +189,9 @@ export default function NotificationsScreen({ companyId, companyName, onToast })
             </article>
           ))
         ) : (
-          <div className="rounded-[28px] border border-dashed border-slate-300 bg-white px-6 py-14 text-center shadow-soft">
+          <div className="rounded-[28px] border border-dashed border-slate-700 bg-slate-900/60 px-6 py-14 text-center shadow-soft">
             <BellRing className="mx-auto mb-4 text-slate-300" size={30} />
-            <h3 className="text-lg font-semibold text-slate-900">Nenhuma notificacao encontrada</h3>
+            <h3 className="text-lg font-semibold text-slate-50">Nenhuma notificacao encontrada</h3>
             <p className="mt-2 text-sm text-slate-500">
               Quando importacoes, cobrancas, automacoes ou alertas de plano acontecerem, eles aparecerao aqui.
             </p>

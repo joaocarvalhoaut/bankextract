@@ -38,7 +38,7 @@ export default function ConfiguracaoJurosMulta({
   };
 
   return (
-    <div className="surface-light rounded-xl p-4">
+    <div className="surface-elevated rounded-xl p-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">

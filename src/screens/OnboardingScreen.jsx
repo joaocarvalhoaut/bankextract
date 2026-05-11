@@ -51,18 +51,18 @@ export default function OnboardingScreen({
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+      <section className="overflow-hidden rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-5">
             <div className="relative flex-shrink-0">
               <ProgressRing pct={progress} />
-              <span className="absolute inset-0 flex items-center justify-center text-base font-bold text-slate-900 rotate-90">
+              <span className="absolute inset-0 flex items-center justify-center text-base font-bold text-slate-50 rotate-90">
                 {progress}%
               </span>
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Progresso geral</p>
-              <p className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
+              <p className="mt-1 text-2xl font-bold tracking-tight text-slate-50">
                 {completed} de {total} etapas
               </p>
               <p className="mt-0.5 text-sm text-slate-500">
@@ -90,7 +90,7 @@ export default function OnboardingScreen({
           ) : null}
         </div>
 
-        <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-800/60">
           <div
             className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-700"
             style={{ width: `${progress}%` }}
@@ -110,8 +110,8 @@ export default function OnboardingScreen({
       />
 
       {plans.length > 0 ? (
-        <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
-          <h2 className="mb-1 text-lg font-semibold text-slate-900">Compare os planos disponiveis</h2>
+        <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+          <h2 className="mb-1 text-lg font-semibold text-slate-50">Compare os planos disponiveis</h2>
           <p className="mb-6 text-sm text-slate-500">Escolha o plano ideal para sua operacao.</p>
           <PlanComparisonTable plans={plans} activePlanId={onboarding?.planId} />
         </section>

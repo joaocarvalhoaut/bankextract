@@ -37,7 +37,7 @@ export default function AuditFilters({ filters, onChange, onClear, resultCount }
     filters.entity;
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+    <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-soft">
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr_0.8fr]">
         <div className="relative min-w-[220px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -46,7 +46,7 @@ export default function AuditFilters({ filters, onChange, onClear, resultCount }
             value={filters.search || ''}
             onChange={(e) => onChange({ search: e.target.value })}
             placeholder="Buscar por titulo, descricao ou usuario..."
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-8 pr-3 text-sm outline-none ring-emerald-500 placeholder:text-slate-400 focus:ring-2"
+            className="w-full rounded-xl border border-slate-700 bg-slate-800/40 py-2.5 pl-8 pr-3 text-sm outline-none ring-emerald-500 placeholder:text-slate-400 focus:ring-2"
           />
         </div>
 
@@ -55,7 +55,7 @@ export default function AuditFilters({ filters, onChange, onClear, resultCount }
           <select
             value={filters.group || 'todos'}
             onChange={(e) => onChange({ group: e.target.value })}
-            className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-8 pr-8 text-sm font-medium text-slate-700 outline-none ring-emerald-500 focus:ring-2"
+            className="w-full appearance-none rounded-xl border border-slate-700 bg-slate-800/40 py-2.5 pl-8 pr-8 text-sm font-medium text-slate-200 outline-none ring-emerald-500 focus:ring-2"
           >
             {GROUP_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -70,7 +70,7 @@ export default function AuditFilters({ filters, onChange, onClear, resultCount }
           <select
             value={filters.action || 'todos'}
             onChange={(e) => onChange({ action: e.target.value })}
-            className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-8 pr-8 text-sm font-medium text-slate-700 outline-none ring-emerald-500 focus:ring-2"
+            className="w-full appearance-none rounded-xl border border-slate-700 bg-slate-800/40 py-2.5 pl-8 pr-8 text-sm font-medium text-slate-200 outline-none ring-emerald-500 focus:ring-2"
           >
             {ACTION_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -87,7 +87,7 @@ export default function AuditFilters({ filters, onChange, onClear, resultCount }
             value={filters.userQuery || ''}
             onChange={(e) => onChange({ userQuery: e.target.value })}
             placeholder="Usuario"
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-8 pr-3 text-sm outline-none ring-emerald-500 placeholder:text-slate-400 focus:ring-2"
+            className="w-full rounded-xl border border-slate-700 bg-slate-800/40 py-2.5 pl-8 pr-3 text-sm outline-none ring-emerald-500 placeholder:text-slate-400 focus:ring-2"
           />
         </div>
 
@@ -98,7 +98,7 @@ export default function AuditFilters({ filters, onChange, onClear, resultCount }
             value={filters.entity || ''}
             onChange={(e) => onChange({ entity: e.target.value })}
             placeholder="Entidade"
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-8 pr-3 text-sm outline-none ring-emerald-500 placeholder:text-slate-400 focus:ring-2"
+            className="w-full rounded-xl border border-slate-700 bg-slate-800/40 py-2.5 pl-8 pr-3 text-sm outline-none ring-emerald-500 placeholder:text-slate-400 focus:ring-2"
           />
         </div>
       </div>
@@ -109,7 +109,7 @@ export default function AuditFilters({ filters, onChange, onClear, resultCount }
           <select
             value={filters.period || 'all'}
             onChange={(e) => onChange({ period: e.target.value })}
-            className="appearance-none rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-8 pr-8 text-sm font-medium text-slate-700 outline-none ring-emerald-500 focus:ring-2"
+            className="appearance-none rounded-xl border border-slate-700 bg-slate-800/40 py-2.5 pl-8 pr-8 text-sm font-medium text-slate-200 outline-none ring-emerald-500 focus:ring-2"
           >
             {PERIOD_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -125,14 +125,14 @@ export default function AuditFilters({ filters, onChange, onClear, resultCount }
               type="date"
               value={filters.dateStart || ''}
               onChange={(e) => onChange({ dateStart: e.target.value })}
-              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2"
+              className="rounded-xl border border-slate-700 bg-slate-800/40 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2"
             />
             <span className="text-sm text-slate-400">ate</span>
             <input
               type="date"
               value={filters.dateEnd || ''}
               onChange={(e) => onChange({ dateEnd: e.target.value })}
-              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2"
+              className="rounded-xl border border-slate-700 bg-slate-800/40 px-3 py-2.5 text-sm outline-none ring-emerald-500 focus:ring-2"
             />
           </>
         ) : null}

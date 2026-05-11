@@ -1,7 +1,7 @@
 const statusMap = {
-  pendente: 'bg-slate-100 text-slate-700 border-slate-200',
+  pendente: 'bg-slate-800/60 text-slate-200 border-slate-700',
   negociacao: 'bg-amber-50 text-amber-700 border-amber-200',
-  promessa: 'bg-blue-50 text-blue-700 border-blue-200',
+  promessa: 'bg-blue-900/20 text-blue-700 border-blue-700/40',
   liquidado: 'bg-emerald-50 text-emerald-700 border-emerald-200'
 };
 

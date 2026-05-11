@@ -25,16 +25,16 @@ export default function EmpresaModal({
         }
       }}
     >
-      <div className="card-hover w-full max-w-xl overflow-hidden rounded-[34px] border border-white/70 bg-white/95 shadow-[0_40px_120px_rgba(15,23,42,0.2)] backdrop-blur">
-        <div className="hero-mesh border-b border-slate-200/80 px-6 py-6">
+      <div className="card-hover w-full max-w-xl overflow-hidden rounded-[34px] border border-white/70 bg-slate-900/60/95 shadow-[0_40px_120px_rgba(15,23,42,0.2)] backdrop-blur">
+        <div className="hero-mesh border-b border-slate-700/50 px-6 py-6">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white/85 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-700">
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-slate-900/60/85 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-700">
                 <Sparkles size={12} />
                 Onboarding empresarial
               </div>
-              <h2 className="text-2xl font-semibold text-slate-950">Escolha sua empresa</h2>
-              <p className="max-w-xl text-sm leading-6 text-slate-600">
+              <h2 className="text-2xl font-semibold text-slate-50">Escolha sua empresa</h2>
+              <p className="max-w-xl text-sm leading-6 text-slate-300">
                 {allowCreate
                   ? 'Sua conta ainda nao possui uma empresa ativa. Crie uma nova empresa, entre por convite ou continue sem empresa para seguir explorando o sistema.'
                   : 'Sua conta ainda nao possui uma empresa ativa. Entre em uma empresa existente usando um codigo de convite.'}
@@ -44,7 +44,7 @@ export default function EmpresaModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-2xl border border-slate-200 bg-white/85 px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50"
+                className="rounded-2xl border border-slate-700 bg-slate-900/60/85 px-3 py-2 text-sm font-medium text-slate-300 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800/40"
               >
                 Fechar
               </button>
@@ -61,11 +61,11 @@ export default function EmpresaModal({
                 className={`rounded-[26px] border px-4 py-4 text-left transition hover:-translate-y-0.5 ${
                   mode === 'criar'
                     ? 'border-emerald-300 bg-emerald-50 text-emerald-700 shadow-sm'
-                    : 'border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50'
+                    : 'border-slate-700 bg-slate-900/60 text-slate-200 shadow-sm hover:bg-slate-800/40'
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  <div className={`mt-0.5 rounded-2xl p-2 ${mode === 'criar' ? 'bg-white/80' : 'bg-slate-100'}`}>
+                  <div className={`mt-0.5 rounded-2xl p-2 ${mode === 'criar' ? 'bg-slate-900/60' : 'bg-slate-800/60'}`}>
                     <PlusCircle size={18} />
                   </div>
                   <div>
@@ -82,11 +82,11 @@ export default function EmpresaModal({
               className={`rounded-[26px] border px-4 py-4 text-left transition hover:-translate-y-0.5 ${
                 mode === 'entrar'
                   ? 'border-emerald-300 bg-emerald-50 text-emerald-700 shadow-sm'
-                  : 'border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50'
+                  : 'border-slate-700 bg-slate-900/60 text-slate-200 shadow-sm hover:bg-slate-800/40'
               }`}
             >
               <div className="flex items-start gap-3">
-                <div className={`mt-0.5 rounded-2xl p-2 ${mode === 'entrar' ? 'bg-white/80' : 'bg-slate-100'}`}>
+                <div className={`mt-0.5 rounded-2xl p-2 ${mode === 'entrar' ? 'bg-slate-900/60' : 'bg-slate-800/60'}`}>
                   <KeyRound size={18} />
                 </div>
                 <div>
@@ -131,7 +131,7 @@ export default function EmpresaModal({
                 />
               </label>
 
-              <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 shadow-sm">
+              <div className="rounded-2xl border border-blue-700/40 bg-blue-900/20 px-4 py-3 text-sm text-blue-800 shadow-sm">
                 O codigo de convite e gerado automaticamente quando uma empresa e criada. Ao entrar, sua conta fica vinculada com as permissoes da empresa.
               </div>
             </div>
@@ -150,7 +150,7 @@ export default function EmpresaModal({
           ) : null}
         </div>
 
-        <div className="flex flex-col gap-4 border-t border-slate-200/80 bg-slate-50/70 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-4 border-t border-slate-700/50 bg-slate-800/40 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="inline-flex items-center gap-2 text-xs text-slate-500">
             <ShieldCheck size={14} />
             Empresa ativa obrigatoria para carregar a operacao financeira.
@@ -161,7 +161,7 @@ export default function EmpresaModal({
                 type="button"
                 onClick={onContinueWithoutCompany}
                 disabled={saving}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800/40 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Continuar sem empresa
               </button>

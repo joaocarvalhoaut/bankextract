@@ -22,7 +22,7 @@ import { formatCurrencyBRL, formatDateBR, formatDateTimeBR } from '../utils/form
 
 function HistoryCard({ label, value, tone = 'slate' }) {
   const palette = {
-    slate: 'from-slate-400 to-slate-500 text-slate-950',
+    slate: 'from-slate-400 to-slate-500 text-slate-50',
     emerald: 'from-emerald-400 to-emerald-600 text-emerald-700',
     blue: 'from-blue-400 to-blue-600 text-blue-700',
     amber: 'from-amber-400 to-orange-400 text-amber-700',
@@ -30,10 +30,10 @@ function HistoryCard({ label, value, tone = 'slate' }) {
   };
 
   return (
-    <article className="relative overflow-hidden rounded-[24px] border border-slate-200 bg-white p-5 shadow-soft">
+    <article className="relative overflow-hidden rounded-[24px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
       <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${palette[tone]?.split(' text-')[0] || 'from-slate-400 to-slate-500'} opacity-80`} />
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className={`mt-2 text-3xl font-semibold ${palette[tone]?.split(' ').pop() || 'text-slate-950'}`}>{value}</p>
+      <p className={`mt-2 text-3xl font-semibold ${palette[tone]?.split(' ').pop() || 'text-slate-50'}`}>{value}</p>
     </article>
   );
 }
@@ -52,7 +52,7 @@ function statusTone(status) {
   if (['sucesso', 'sucesso_simulado', 'simulado'].includes(normalized)) return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
   if (normalized === 'erro') return 'bg-red-50 text-red-700 ring-red-200';
   if (normalized === 'ignorado') return 'bg-amber-50 text-amber-700 ring-amber-200';
-  return 'bg-slate-100 text-slate-700 ring-slate-200';
+  return 'bg-slate-800/60 text-slate-200 ring-slate-700';
 }
 
 function getPayloadMessage(payload) {
@@ -283,7 +283,7 @@ export default function HistoricoCobrancaScreen({
     {
       key: 'cliente_nome',
       label: 'Cliente',
-      render: (row) => <span className="font-medium text-slate-900">{row.cliente_nome || '-'}</span>,
+      render: (row) => <span className="font-medium text-slate-50">{row.cliente_nome || '-'}</span>,
     },
     {
       key: 'documento',
@@ -298,7 +298,7 @@ export default function HistoricoCobrancaScreen({
     {
       key: 'valor',
       label: 'Valor',
-      render: (row) => <span className="font-semibold text-slate-900">{formatCurrencyBRL(row.valor || 0)}</span>,
+      render: (row) => <span className="font-semibold text-slate-50">{formatCurrencyBRL(row.valor || 0)}</span>,
     },
     {
       key: 'tipo_cobranca',
@@ -337,7 +337,7 @@ export default function HistoricoCobrancaScreen({
           <button
             type="button"
             onClick={() => setDetailsRow(row)}
-            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+            className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-800/40"
           >
             <Search size={12} />
             Ver mensagem/payload
@@ -346,7 +346,7 @@ export default function HistoricoCobrancaScreen({
             type="button"
             disabled={!canManageCharges || Boolean(runningAction)}
             onClick={() => handleRepeatSimulation(row)}
-            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
           >
             {runningAction === `simulate-${row.id}` ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
             Repetir simulacao
@@ -354,7 +354,7 @@ export default function HistoricoCobrancaScreen({
           <button
             type="button"
             onClick={() => handleOpenBoleto(row)}
-            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+            className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-800/40"
           >
             <ExternalLink size={12} />
             Abrir boleto
@@ -362,7 +362,7 @@ export default function HistoricoCobrancaScreen({
           <button
             type="button"
             onClick={() => handleExportRow(row)}
-            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+            className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-800/40"
           >
             <FileSpreadsheet size={12} />
             Exportar linha CSV
@@ -393,16 +393,16 @@ export default function HistoricoCobrancaScreen({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
+            <div className="inline-flex items-center gap-2 rounded-full border border-blue-700/40 bg-blue-900/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
               <FileSpreadsheet size={13} />
               Historico de cobrancas
             </div>
-            <h3 className="mt-4 text-2xl font-semibold text-slate-950">Auditoria operacional da regua</h3>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
-              Visao completa das simulacoes e eventos registrados para a empresa <span className="font-semibold text-slate-900">{companyName}</span>.
+            <h3 className="mt-4 text-2xl font-semibold text-slate-50">Auditoria operacional da regua</h3>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-300">
+              Visao completa das simulacoes e eventos registrados para a empresa <span className="font-semibold text-slate-50">{companyName}</span>.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -410,7 +410,7 @@ export default function HistoricoCobrancaScreen({
               type="button"
               onClick={() => loadHistory(pagination.page, appliedFilters)}
               disabled={loading}
-              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-soft transition hover:bg-slate-50 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition hover:bg-slate-800/40 disabled:opacity-50"
             >
               {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCcw size={15} />}
               Atualizar historico
@@ -439,22 +439,22 @@ export default function HistoricoCobrancaScreen({
         <HistoryCard label="Resolvidos" value={cards.resolvidos || 0} tone="slate" />
       </section>
 
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <FilterField label="Data inicial">
-            <input type="date" value={filters.date_from} onChange={(e) => setFilters((prev) => ({ ...prev, date_from: e.target.value }))} className="input-premium w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" />
+            <input type="date" value={filters.date_from} onChange={(e) => setFilters((prev) => ({ ...prev, date_from: e.target.value }))} className="input-premium w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-50 outline-none focus:ring-2 focus:ring-emerald-500" />
           </FilterField>
           <FilterField label="Data final">
-            <input type="date" value={filters.date_to} onChange={(e) => setFilters((prev) => ({ ...prev, date_to: e.target.value }))} className="input-premium w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" />
+            <input type="date" value={filters.date_to} onChange={(e) => setFilters((prev) => ({ ...prev, date_to: e.target.value }))} className="input-premium w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-50 outline-none focus:ring-2 focus:ring-emerald-500" />
           </FilterField>
           <FilterField label="Cliente">
-            <input type="text" value={filters.cliente} onChange={(e) => setFilters((prev) => ({ ...prev, cliente: e.target.value }))} placeholder="Nome do cliente" className="input-premium w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" />
+            <input type="text" value={filters.cliente} onChange={(e) => setFilters((prev) => ({ ...prev, cliente: e.target.value }))} placeholder="Nome do cliente" className="input-premium w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-50 outline-none focus:ring-2 focus:ring-emerald-500" />
           </FilterField>
           <FilterField label="Numero boleto">
-            <input type="text" value={filters.numero_boleto} onChange={(e) => setFilters((prev) => ({ ...prev, numero_boleto: e.target.value }))} placeholder="Ex: 3001-2" className="input-premium w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" />
+            <input type="text" value={filters.numero_boleto} onChange={(e) => setFilters((prev) => ({ ...prev, numero_boleto: e.target.value }))} placeholder="Ex: 3001-2" className="input-premium w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-50 outline-none focus:ring-2 focus:ring-emerald-500" />
           </FilterField>
           <FilterField label="Tipo cobranca">
-            <select value={filters.tipo_cobranca} onChange={(e) => setFilters((prev) => ({ ...prev, tipo_cobranca: e.target.value }))} className="input-premium w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500">
+            <select value={filters.tipo_cobranca} onChange={(e) => setFilters((prev) => ({ ...prev, tipo_cobranca: e.target.value }))} className="input-premium w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-50 outline-none focus:ring-2 focus:ring-emerald-500">
               <option value="">Todos</option>
               <option value="preventiva">Preventiva</option>
               <option value="vencimento">Vencimento</option>
@@ -462,7 +462,7 @@ export default function HistoricoCobrancaScreen({
             </select>
           </FilterField>
           <FilterField label="Status envio">
-            <select value={filters.status_envio} onChange={(e) => setFilters((prev) => ({ ...prev, status_envio: e.target.value }))} className="input-premium w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500">
+            <select value={filters.status_envio} onChange={(e) => setFilters((prev) => ({ ...prev, status_envio: e.target.value }))} className="input-premium w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-50 outline-none focus:ring-2 focus:ring-emerald-500">
               <option value="">Todos</option>
               <option value="sucesso">Sucesso</option>
               <option value="sucesso_simulado">Sucesso simulado</option>
@@ -472,7 +472,7 @@ export default function HistoricoCobrancaScreen({
             </select>
           </FilterField>
           <FilterField label="Boleto encontrado">
-            <select value={filters.arquivo_encontrado} onChange={(e) => setFilters((prev) => ({ ...prev, arquivo_encontrado: e.target.value }))} className="input-premium w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500">
+            <select value={filters.arquivo_encontrado} onChange={(e) => setFilters((prev) => ({ ...prev, arquivo_encontrado: e.target.value }))} className="input-premium w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-50 outline-none focus:ring-2 focus:ring-emerald-500">
               <option value="">Todos</option>
               <option value="true">Sim</option>
               <option value="false">Não</option>
@@ -483,14 +483,14 @@ export default function HistoricoCobrancaScreen({
               <Search size={15} />
               Aplicar filtros
             </button>
-            <button type="button" onClick={handleClearFilters} className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+            <button type="button" onClick={handleClearFilters} className="inline-flex items-center justify-center rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-800/40">
               Limpar
             </button>
           </div>
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <DataTable
           columns={columns}
           rows={items}
@@ -506,7 +506,7 @@ export default function HistoricoCobrancaScreen({
               type="button"
               disabled={loading || pagination.page <= 1}
               onClick={() => loadHistory(Math.max(1, pagination.page - 1), appliedFilters)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              className="rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
             >
               Anterior
             </button>
@@ -517,7 +517,7 @@ export default function HistoricoCobrancaScreen({
               type="button"
               disabled={loading || pagination.page >= totalPages}
               onClick={() => loadHistory(pagination.page + 1, appliedFilters)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              className="rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
             >
               Proxima
             </button>
@@ -527,19 +527,19 @@ export default function HistoricoCobrancaScreen({
 
       {detailsRow ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-[32px] border border-slate-700 bg-slate-900/60 shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Detalhes do log</p>
-                <h3 className="mt-2 text-2xl font-semibold text-slate-950">{detailsRow.cliente_nome || 'Cliente'}</h3>
+                <h3 className="mt-2 text-2xl font-semibold text-slate-50">{detailsRow.cliente_nome || 'Cliente'}</h3>
                 <p className="mt-1 text-sm text-slate-500">Simulacao e payload registrados para auditoria operacional.</p>
               </div>
-              <button type="button" onClick={() => setDetailsRow(null)} className="rounded-2xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900">
+              <button type="button" onClick={() => setDetailsRow(null)} className="rounded-2xl border border-slate-700 bg-slate-900/60 p-2 text-slate-500 transition hover:bg-slate-800/40 hover:text-slate-50">
                 <X size={18} />
               </button>
             </div>
             <div className="grid gap-6 px-6 py-6 lg:grid-cols-[1.1fr_1.2fr]">
-              <div className="space-y-3 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
+              <div className="space-y-3 rounded-[24px] border border-slate-700 bg-slate-800/40 p-5">
                 {[
                   ['Cliente', detailsRow.cliente_nome || '-'],
                   ['Telefone', detailsRow.telefone || '-'],
@@ -554,9 +554,9 @@ export default function HistoricoCobrancaScreen({
                   ['Arquivo encontrado', detailsRow.arquivo_encontrado ? 'Sim' : 'Não'],
                   ['Erro', detailsRow.erro || '-'],
                 ].map(([label, value]) => (
-                  <div key={label} className="flex items-start justify-between gap-3 border-b border-slate-200/70 pb-2 text-sm last:border-b-0 last:pb-0">
+                  <div key={label} className="flex items-start justify-between gap-3 border-b border-slate-700/40 pb-2 text-sm last:border-b-0 last:pb-0">
                     <span className="font-medium text-slate-500">{label}</span>
-                    <span className="text-right font-semibold text-slate-900">{value}</span>
+                    <span className="text-right font-semibold text-slate-50">{value}</span>
                   </div>
                 ))}
               </div>
@@ -577,9 +577,9 @@ export default function HistoricoCobrancaScreen({
                     </div>
                   </div>
                 )}
-                <div className="rounded-[24px] border border-slate-200 bg-white p-5">
+                <div className="rounded-[24px] border border-slate-700 bg-slate-900/60 p-5">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Payload formatado</p>
-                  <pre className="mt-3 max-h-[360px] overflow-auto rounded-2xl border border-slate-200 bg-slate-950 p-4 text-xs leading-relaxed text-slate-100">
+                  <pre className="mt-3 max-h-[360px] overflow-auto rounded-2xl border border-slate-700 bg-slate-950 p-4 text-xs leading-relaxed text-slate-100">
                     {detailsRow.payload ? JSON.stringify(detailsRow.payload, null, 2) : 'Nenhum payload registrado para este log.'}
                   </pre>
                 </div>
@@ -600,7 +600,7 @@ export default function HistoricoCobrancaScreen({
                     onToast?.('erro', 'Nao foi possivel copiar a mensagem.');
                   }
                 }}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-800/40"
               >
                 <Copy size={15} />
                 Copiar mensagem

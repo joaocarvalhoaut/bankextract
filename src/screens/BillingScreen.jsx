@@ -24,7 +24,7 @@ const STATUS_META = {
   },
   active: {
     label: 'Assinatura ativa',
-    badge: 'border-blue-500/30 bg-blue-500/10 text-blue-100',
+    badge: 'border-blue-500/30 bg-blue-900/200/10 text-blue-100',
     description: 'Checkout e portal Stripe estao prontos para upgrade, downgrade e autoatendimento.',
   },
   past_due: {

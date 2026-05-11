@@ -25,16 +25,16 @@ export default function MessagePreviewModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm"
       onClick={(event) => (sending ? null : event.target === event.currentTarget ? onClose() : null)}
     >
-      <div className="w-full max-w-5xl overflow-hidden rounded-[32px] border border-white/70 bg-white shadow-[0_40px_120px_rgba(15,23,42,0.2)]">
-        <div className="hero-mesh border-b border-slate-200 px-6 py-5">
+      <div className="w-full max-w-5xl overflow-hidden rounded-[32px] border border-white/70 bg-slate-900/60 shadow-[0_40px_120px_rgba(15,23,42,0.2)]">
+        <div className="hero-mesh border-b border-slate-700 px-6 py-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
                 <MessageSquare size={18} />
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-slate-950">Previa da mensagem</h3>
-                <p className="mt-1 text-sm text-slate-600">
+                <h3 className="text-xl font-semibold text-slate-50">Previa da mensagem</h3>
+                <p className="mt-1 text-sm text-slate-300">
                   Revise, ajuste o tom e edite a cobranca antes de enviar pelo WhatsApp.
                 </p>
               </div>
@@ -44,7 +44,7 @@ export default function MessagePreviewModal({
               type="button"
               onClick={sending ? undefined : onClose}
               disabled={sending}
-              className="rounded-2xl border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-50"
+              className="rounded-2xl border border-slate-700 bg-slate-900/60 p-2 text-slate-500 hover:bg-slate-800/40"
             >
               <X size={16} />
             </button>
@@ -53,25 +53,25 @@ export default function MessagePreviewModal({
 
         <div className="grid grid-cols-1 gap-5 px-6 py-6 lg:grid-cols-[0.75fr_1.25fr]">
           <div className="space-y-3">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="rounded-2xl border border-slate-700 bg-slate-800/40 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Cliente</p>
-              <p className="mt-2 text-sm font-semibold text-slate-950">{row.cliente}</p>
+              <p className="mt-2 text-sm font-semibold text-slate-50">{row.cliente}</p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="rounded-2xl border border-slate-700 bg-slate-800/40 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Documento</p>
-              <p className="mt-2 text-sm font-semibold text-slate-950">{row.documento}</p>
+              <p className="mt-2 text-sm font-semibold text-slate-50">{row.documento}</p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="rounded-2xl border border-slate-700 bg-slate-800/40 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Vencimento</p>
-              <p className="mt-2 text-sm font-semibold text-slate-950">{formatDateBR(row.vencimento)}</p>
+              <p className="mt-2 text-sm font-semibold text-slate-50">{formatDateBR(row.vencimento)}</p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="rounded-2xl border border-slate-700 bg-slate-800/40 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Valor</p>
-              <p className="mt-2 text-sm font-semibold text-slate-950">{formatCurrencyBRL(row.valor)}</p>
+              <p className="mt-2 text-sm font-semibold text-slate-50">{formatCurrencyBRL(row.valor)}</p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="rounded-2xl border border-slate-700 bg-slate-800/40 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Telefone</p>
-              <p className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-slate-950">
+              <p className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-slate-50">
                 <Phone size={14} className="text-slate-500" />
                 {row.telefone || 'Sem telefone'}
               </p>
@@ -104,7 +104,7 @@ export default function MessagePreviewModal({
               <button
                 type="button"
                 onClick={onCopy}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-800/40"
               >
                 <Copy size={14} />
                 Copiar mensagem

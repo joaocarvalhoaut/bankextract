@@ -9,20 +9,20 @@ import {
 
 function AdminCard({ label, value, icon: Icon, tone = 'slate' }) {
   const toneClass = {
-    slate: 'bg-slate-50 text-slate-700',
+    slate: 'bg-slate-800/40 text-slate-200',
     emerald: 'bg-emerald-50 text-emerald-700',
-    blue: 'bg-blue-50 text-blue-700',
+    blue: 'bg-blue-900/20 text-blue-700',
     amber: 'bg-amber-50 text-amber-700',
     red: 'bg-red-50 text-red-700',
   };
 
   return (
-    <article className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-soft">
+    <article className="rounded-[24px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
       <div className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl ${toneClass[tone] || toneClass.slate}`}>
         <Icon size={18} />
       </div>
       <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className="mt-2 text-3xl font-bold text-slate-950">{value}</p>
+      <p className="mt-2 text-3xl font-bold text-slate-50">{value}</p>
     </article>
   );
 }
@@ -73,9 +73,9 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
 
   if (!isSystemAdminUser) {
     return (
-      <div className="rounded-[32px] border border-red-200 bg-white p-12 text-center shadow-soft">
+      <div className="rounded-[32px] border border-red-200 bg-slate-900/60 p-12 text-center shadow-soft">
         <AlertTriangle className="mx-auto mb-4 text-red-500" size={30} />
-        <h2 className="text-xl font-semibold text-slate-900">Acesso restrito</h2>
+        <h2 className="text-xl font-semibold text-slate-50">Acesso restrito</h2>
         <p className="mt-2 text-sm text-slate-500">
           O painel Admin SaaS fica disponivel apenas para administradores globais do sistema.
         </p>
@@ -85,17 +85,17 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[30px] border border-slate-200 bg-white p-7 shadow-soft">
+      <section className="rounded-[30px] border border-slate-700 bg-slate-900/60 p-7 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Admin SaaS</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Operacao central do NC Finance</h2>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-50">Operacao central do NC Finance</h2>
             <p className="mt-2 text-sm text-slate-500">
               Visao consolidada de empresas, assinaturas, uso e auditoria interna.
             </p>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            Logado como <span className="font-semibold text-slate-900">{user?.email || 'admin'}</span>
+          <div className="rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-300">
+            Logado como <span className="font-semibold text-slate-50">{user?.email || 'admin'}</span>
           </div>
         </div>
       </section>
@@ -108,9 +108,9 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-        <article className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+        <article className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
           <div className="mb-5">
-            <h3 className="text-lg font-semibold text-slate-900">Empresas SaaS</h3>
+            <h3 className="text-lg font-semibold text-slate-50">Empresas SaaS</h3>
             <p className="text-sm text-slate-500">Altere status de trial e assinatura sem gateway de pagamento nesta fase.</p>
           </div>
 
@@ -130,18 +130,18 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
                 {companies.map((company) => (
                   <tr key={company.id}>
                     <td className="py-3">
-                      <p className="font-semibold text-slate-900">{company.nome}</p>
+                      <p className="font-semibold text-slate-50">{company.nome}</p>
                       <p className="text-xs text-slate-500">{company.cnpj || 'CNPJ nao informado'}</p>
                     </td>
-                    <td className="py-3 capitalize text-slate-700">{company.plan_code}</td>
+                    <td className="py-3 capitalize text-slate-200">{company.plan_code}</td>
                     <td className="py-3">
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                      <span className="rounded-full border border-slate-700 bg-slate-800/40 px-2.5 py-1 text-xs font-semibold text-slate-300">
                         {company.status}
                       </span>
                     </td>
-                    <td className="py-3 text-slate-700">{company.users_count}</td>
+                    <td className="py-3 text-slate-200">{company.users_count}</td>
                     <td className="py-3">
-                      <div className="space-y-1 text-xs text-slate-600">
+                      <div className="space-y-1 text-xs text-slate-300">
                         <p>Cobrancas: {company.usage_summary?.metrics?.charges_month?.used || 0}/{company.usage_summary?.metrics?.charges_month?.limit || 0}</p>
                         <p>Importacoes: {company.usage_summary?.metrics?.imports_month?.used || 0}/{company.usage_summary?.metrics?.imports_month?.limit || 0}</p>
                       </div>
@@ -154,7 +154,7 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
                             type="button"
                             disabled={updatingCompanyId === company.id}
                             onClick={() => handleStatusChange(company.id, status)}
-                            className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                            className="rounded-xl border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-60"
                           >
                             {status}
                           </button>
@@ -168,34 +168,34 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
           </div>
         </article>
 
-        <article className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+        <article className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
           <div className="mb-5">
-            <h3 className="text-lg font-semibold text-slate-900">Leitura operacional</h3>
+            <h3 className="text-lg font-semibold text-slate-50">Leitura operacional</h3>
             <p className="text-sm text-slate-500">Atalhos para acompanhar volume, auditoria e validacoes internas.</p>
           </div>
 
           <div className="space-y-3">
-            <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="rounded-2xl bg-slate-800/40 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Importacoes</p>
-              <p className="mt-2 text-2xl font-bold text-slate-900">{overview?.importations || 0}</p>
+              <p className="mt-2 text-2xl font-bold text-slate-50">{overview?.importations || 0}</p>
             </div>
-            <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="rounded-2xl bg-slate-800/40 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Cobrancas geradas</p>
               <p className="mt-2 text-2xl font-bold text-emerald-700">{overview?.generatedCharges || 0}</p>
             </div>
-            <div className="rounded-2xl bg-slate-50 p-4">
+            <div className="rounded-2xl bg-slate-800/40 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Automacoes executadas</p>
               <p className="mt-2 text-2xl font-bold text-blue-700">{overview?.automationsExecuted || 0}</p>
             </div>
             <button
               type="button"
               onClick={() => onNavigate?.('production-checklist')}
-              className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:bg-slate-100"
+              className="flex w-full items-center justify-between rounded-2xl border border-slate-700 bg-slate-800/40 p-4 text-left transition hover:bg-slate-800/60"
             >
               <span className="flex items-center gap-3">
                 <ClipboardList size={16} className="text-slate-500" />
                 <span>
-                  <span className="block text-sm font-semibold text-slate-900">Checklist de Implantacao</span>
+                  <span className="block text-sm font-semibold text-slate-50">Checklist de Implantacao</span>
                   <span className="block text-xs text-slate-500">Acesso interno ao checklist de producao.</span>
                 </span>
               </span>
@@ -203,12 +203,12 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
             <button
               type="button"
               onClick={() => onNavigate?.('status-sistema')}
-              className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:bg-slate-100"
+              className="flex w-full items-center justify-between rounded-2xl border border-slate-700 bg-slate-800/40 p-4 text-left transition hover:bg-slate-800/60"
             >
               <span className="flex items-center gap-3">
                 <ShieldPlus size={16} className="text-slate-500" />
                 <span>
-                  <span className="block text-sm font-semibold text-slate-900">Status Tecnico</span>
+                  <span className="block text-sm font-semibold text-slate-50">Status Tecnico</span>
                   <span className="block text-xs text-slate-500">Saude operacional e prontidao do ambiente.</span>
                 </span>
               </span>
@@ -217,20 +217,20 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
         </article>
       </section>
 
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="mb-5 flex items-center gap-2">
           <FileClock size={18} className="text-slate-500" />
           <div>
-            <h3 className="text-lg font-semibold text-slate-900">Logs recentes</h3>
+            <h3 className="text-lg font-semibold text-slate-50">Logs recentes</h3>
             <p className="text-sm text-slate-500">{loading ? 'Atualizando auditoria...' : 'Eventos mais recentes da operacao SaaS.'}</p>
           </div>
         </div>
 
         <div className="space-y-3">
           {(logs || []).map((log) => (
-            <div key={log.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div key={log.id} className="rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3">
               <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm font-semibold text-slate-900">
+                <p className="text-sm font-semibold text-slate-50">
                   {log.company_name} <span className="font-normal text-slate-500">• {log.action}</span>
                 </p>
                 <p className="text-xs text-slate-500">{new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(log.created_at))}</p>
@@ -239,7 +239,7 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
             </div>
           ))}
           {!logs?.length ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400">
+            <div className="rounded-2xl border border-dashed border-slate-700 py-8 text-center text-sm text-slate-400">
               Nenhum log recente encontrado.
             </div>
           ) : null}

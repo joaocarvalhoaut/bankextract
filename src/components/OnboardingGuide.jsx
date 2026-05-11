@@ -11,7 +11,7 @@ const STEP_ARTICLE_MAP = {
 function statusTone(done, skipped) {
   if (done) return 'border-emerald-200 bg-emerald-50/70';
   if (skipped) return 'border-amber-200 bg-amber-50/70';
-  return 'border-slate-200 bg-white';
+  return 'border-slate-700 bg-slate-900/60';
 }
 
 export default function OnboardingGuide({
@@ -27,10 +27,10 @@ export default function OnboardingGuide({
   const canMark = Boolean(companyId);
 
   return (
-    <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+    <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
       <div className="mb-5 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Primeiros passos guiados</h2>
+          <h2 className="text-lg font-semibold text-slate-50">Primeiros passos guiados</h2>
           <p className="mt-1 text-sm text-slate-500">
             Complete o basico para importar carteira, configurar cobranca e validar a operacao.
           </p>
@@ -50,20 +50,20 @@ export default function OnboardingGuide({
           return (
             <article key={step.id} className={`rounded-[24px] border p-4 shadow-soft transition ${statusTone(done, skipped)}`}>
               <div className="flex items-start gap-4">
-                <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl ${done ? 'bg-emerald-500 text-white' : skipped ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl ${done ? 'bg-emerald-500 text-white' : skipped ? 'bg-amber-500 text-white' : 'bg-slate-800/60 text-slate-500'}`}>
                   {done ? <CheckCircle2 size={18} /> : <CircleDashed size={18} />}
                 </div>
 
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-semibold text-slate-950">{step.title}</h3>
+                    <h3 className="text-sm font-semibold text-slate-50">{step.title}</h3>
                     {done ? (
                       <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">Concluido</span>
                     ) : skipped ? (
                       <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">Pulada</span>
                     ) : null}
                     {step.actionTab ? (
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                      <span className="rounded-full border border-slate-700 bg-slate-800/40 px-2 py-0.5 text-[11px] font-medium text-slate-500">
                         {step.actionTab}
                       </span>
                     ) : null}
@@ -75,7 +75,7 @@ export default function OnboardingGuide({
                     <button
                       type="button"
                       onClick={() => onOpenStep?.(step)}
-                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                      className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800/40"
                     >
                       Ir para etapa
                       <ArrowRight size={14} />
@@ -85,7 +85,7 @@ export default function OnboardingGuide({
                       <button
                         type="button"
                         onClick={() => onOpenArticle?.(article.id)}
-                        className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                        className="inline-flex items-center gap-2 rounded-xl border border-blue-700/40 bg-blue-900/20 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
                       >
                         <Eye size={14} />
                         Ver guia
@@ -100,7 +100,7 @@ export default function OnboardingGuide({
                         done
                           ? 'cursor-default border border-emerald-200 bg-emerald-50 text-emerald-700'
                           : !canMark
-                            ? 'cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400'
+                            ? 'cursor-not-allowed border border-slate-700 bg-slate-800/60 text-slate-400'
                             : 'border border-emerald-200 bg-emerald-600 text-white hover:bg-emerald-700'
                       }`}
                     >

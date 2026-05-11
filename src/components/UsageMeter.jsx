@@ -3,7 +3,7 @@ export default function UsageMeter({ label, used = 0, limit = 0, percentage = 0,
     ok: { bar: 'bg-gradient-to-r from-blue-500 to-cyan-400', badge: 'border border-cyan-500/20 bg-cyan-500/10 text-cyan-200' },
     warning: { bar: 'bg-amber-500', badge: 'border border-amber-500/20 bg-amber-500/10 text-amber-200' },
     danger: { bar: 'bg-red-500', badge: 'border border-red-500/20 bg-red-500/10 text-red-200' },
-  }[status] || { bar: 'bg-slate-500', badge: 'border border-slate-600 bg-slate-800 text-slate-200' };
+  }[status] || { bar: 'bg-slate-800/400', badge: 'border border-slate-600 bg-slate-800 text-slate-200' };
 
   return (
     <article className="surface-elevated rounded-2xl border border-cyan-500/10 p-4">

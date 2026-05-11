@@ -9,12 +9,12 @@ function SectionHeader({ title, subtitle, badge, action }) {
   return (
     <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h3 className="text-lg font-bold tracking-tight text-slate-900">{title}</h3>
+        <h3 className="text-lg font-bold tracking-tight text-slate-50">{title}</h3>
         {subtitle ? <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p> : null}
       </div>
       <div className="flex items-center gap-2">
         {badge ? (
-          <span className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+          <span className="inline-flex w-fit items-center rounded-full border border-slate-700 bg-slate-800/40 px-3 py-1 text-xs font-semibold text-slate-300">
             {badge}
           </span>
         ) : null}
@@ -34,10 +34,10 @@ function MiniBars({ items = [] }) {
         return (
           <div key={item.label}>
             <div className="mb-2 flex items-center justify-between text-xs">
-              <span className="font-semibold text-slate-800">{item.label}</span>
-              <span className="font-semibold text-slate-900">{formatCurrencyBRL(item.value || 0)}</span>
+              <span className="font-semibold text-slate-100">{item.label}</span>
+              <span className="font-semibold text-slate-50">{formatCurrencyBRL(item.value || 0)}</span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-2 overflow-hidden rounded-full bg-slate-800/60">
               <div
                 className="h-full rounded-full transition-all duration-700"
                 style={{ width: `${pct}%`, backgroundColor: item.color }}
@@ -55,15 +55,15 @@ function StatusPill({ active, label, tone = 'blue' }) {
     tone === 'amber'
       ? 'border-amber-200 bg-amber-50 text-amber-700'
       : tone === 'blue'
-        ? 'border-blue-200 bg-blue-50 text-blue-700'
-        : 'border-blue-200 bg-blue-50 text-blue-700';
+        ? 'border-blue-700/40 bg-blue-900/20 text-blue-700'
+        : 'border-blue-700/40 bg-blue-900/20 text-blue-700';
 
-  const dotClass = tone === 'amber' ? 'bg-amber-500' : tone === 'blue' ? 'bg-blue-500' : 'bg-cyan-500';
+  const dotClass = tone === 'amber' ? 'bg-amber-500' : tone === 'blue' ? 'bg-blue-900/200' : 'bg-cyan-500';
 
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${
-        active ? toneClass : 'border-slate-200 bg-slate-50 text-slate-500'
+        active ? toneClass : 'border-slate-700 bg-slate-800/40 text-slate-500'
       }`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${active ? dotClass : 'bg-slate-300'}`} />
@@ -114,7 +114,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
   if (isEmpty) {
     return (
       <div className="surface-card flex flex-col items-center justify-center rounded-[32px] border border-dashed border-slate-700 p-16 text-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-800/60">
           <Activity size={28} className="text-slate-400" />
         </div>
         <h3 className="text-xl font-bold tracking-tight text-slate-50">Sem dados financeiros</h3>
@@ -122,7 +122,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
           Importe uma carteira para popular o dashboard executivo com metricas reais da empresa ativa.
         </p>
         {onRetry ? (
-          <button type="button" onClick={onRetry} className="mt-5 rounded-2xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+          <button type="button" onClick={onRetry} className="mt-5 rounded-2xl border border-slate-700 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800/40">
             Tentar novamente
           </button>
         ) : null}
@@ -132,7 +132,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
 
   return (
     <div className="space-y-6">
-      <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-200 bg-white p-7 shadow-lifted lg:p-9">
+      <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-700 bg-slate-900/60 p-7 shadow-lifted lg:p-9">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <div>
             <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -140,10 +140,10 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
               {operational.autoChargeActive ? <StatusPill active label="Cobranca automatica" tone="blue" /> : null}
               {operational.whatsappMockMode ? <StatusPill active label="Modo teste WhatsApp" tone="amber" /> : null}
             </div>
-            <h2 className="max-w-2xl text-3xl font-bold tracking-tight text-slate-950 lg:text-4xl">
+            <h2 className="max-w-2xl text-3xl font-bold tracking-tight text-slate-50 lg:text-4xl">
               Operacao financeira organizada para escalar cobrancas com seguranca.
             </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 lg:text-base">
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-300 lg:text-base">
               O NC Finance consolida carteira, lotes importados, automacoes e sinais operacionais em uma leitura
               executiva pronta para venda e para a rotina do financeiro.
             </p>
@@ -156,9 +156,9 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
               { label: 'Audit log recente', value: operational.recentAuditAction || 'Sem atividade' },
               { label: 'Ambiente', value: operational.whatsappMockMode ? 'Modo teste' : 'Pronto para real' },
             ].map((item) => (
-              <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+              <div key={item.label} className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-soft">
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
-                <p className="mt-1.5 text-sm font-semibold text-slate-900">{item.value}</p>
+                <p className="mt-1.5 text-sm font-semibold text-slate-50">{item.value}</p>
               </div>
             ))}
           </div>
@@ -184,14 +184,14 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
           {(metrics.charts?.importacoes || []).length ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {metrics.charts.importacoes.map((item) => (
-                <div key={item.label} className="rounded-2xl bg-slate-50 p-4">
+                <div key={item.label} className="rounded-2xl bg-slate-800/40 p-4">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
-                  <p className="mt-2 text-2xl font-bold text-slate-900">{item.value}</p>
+                  <p className="mt-2 text-2xl font-bold text-slate-50">{item.value}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-200 py-10 text-sm text-slate-400">
+            <div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-700 py-10 text-sm text-slate-400">
               Nenhuma importacao registrada ainda.
             </div>
           )}
@@ -204,14 +204,14 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
           {(metrics.nextDueRows || []).length ? (
             <div className="space-y-3">
               {metrics.nextDueRows.map((row) => (
-                <div key={row.id} className="rounded-2xl bg-slate-50 px-4 py-3">
+                <div key={row.id} className="rounded-2xl bg-slate-800/40 px-4 py-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">{row.cliente || 'Cliente'}</p>
+                      <p className="text-sm font-semibold text-slate-50">{row.cliente || 'Cliente'}</p>
                       <p className="text-xs text-slate-500">{row.numero_boleto || row.documento || 'Sem documento'}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-semibold text-slate-900">{formatCurrencyBRL(row.valor || 0)}</p>
+                      <p className="text-sm font-semibold text-slate-50">{formatCurrencyBRL(row.valor || 0)}</p>
                       <p className="text-xs text-slate-500">{row.vencimento || 'Sem vencimento'}</p>
                     </div>
                   </div>
@@ -219,7 +219,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
               ))}
             </div>
           ) : (
-            <div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-200 py-10 text-sm text-slate-400">
+            <div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-700 py-10 text-sm text-slate-400">
               Nenhum proximo vencimento encontrado.
             </div>
           )}
@@ -230,14 +230,14 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
           {(metrics.biggestOpenRows || []).length ? (
             <div className="space-y-3">
               {metrics.biggestOpenRows.map((row) => (
-                <div key={row.id} className="rounded-2xl bg-slate-50 px-4 py-3">
+                <div key={row.id} className="rounded-2xl bg-slate-800/40 px-4 py-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">{row.cliente || 'Cliente'}</p>
+                      <p className="text-sm font-semibold text-slate-50">{row.cliente || 'Cliente'}</p>
                       <p className="text-xs text-slate-500">{row.status || 'pendente'}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-semibold text-slate-900">{formatCurrencyBRL(row.valor || 0)}</p>
+                      <p className="text-sm font-semibold text-slate-50">{formatCurrencyBRL(row.valor || 0)}</p>
                       <p className="text-xs text-slate-500">{row.vencimento || 'Sem vencimento'}</p>
                     </div>
                   </div>
@@ -245,7 +245,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
               ))}
             </div>
           ) : (
-            <div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-200 py-10 text-sm text-slate-400">
+            <div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-700 py-10 text-sm text-slate-400">
               Nenhum valor em aberto encontrado.
             </div>
           )}
@@ -262,7 +262,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
               onNavigate ? (
                 <button
                   onClick={() => onNavigate('onboarding')}
-                  className="flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+                  className="flex items-center gap-1.5 rounded-xl border border-blue-700/40 bg-blue-900/20 px-3 py-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100"
                 >
                   Abrir onboarding <ArrowRight size={12} />
                 </button>
@@ -272,13 +272,13 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
           {(onboarding?.steps || []).length ? (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {(onboarding.steps || []).slice(0, 4).map((step) => (
-                <div key={step.id} className={`rounded-2xl border p-4 ${step.done ? 'border-emerald-200 bg-emerald-50/70' : 'border-slate-200 bg-slate-50'}`}>
+                <div key={step.id} className={`rounded-2xl border p-4 ${step.done ? 'border-emerald-200 bg-emerald-50/70' : 'border-slate-700 bg-slate-800/40'}`}>
                   <div className="flex items-start gap-3">
-                    <div className={`flex h-9 w-9 items-center justify-center rounded-2xl ${step.done ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                    <div className={`flex h-9 w-9 items-center justify-center rounded-2xl ${step.done ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-300'}`}>
                       <ListChecks size={16} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-slate-900">{step.title}</p>
+                      <p className="text-sm font-semibold text-slate-50">{step.title}</p>
                       <p className="mt-1 text-xs leading-relaxed text-slate-500">{step.description}</p>
                     </div>
                   </div>
@@ -286,7 +286,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
               ))}
             </div>
           ) : (
-            <div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-200 py-10 text-sm text-slate-400">
+            <div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-700 py-10 text-sm text-slate-400">
               Nenhum passo inicial disponivel.
             </div>
           )}
@@ -304,7 +304,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
                 key={item.label}
                 type="button"
                 onClick={() => onNavigate?.(item.target)}
-                className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                className="flex w-full items-center justify-between rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3 text-left text-sm font-semibold text-slate-200 transition hover:bg-slate-800/60"
               >
                 <span className="flex items-center gap-2">
                   <BookOpenText size={16} className="text-blue-600" />
@@ -353,7 +353,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
               ))}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 py-10 text-center">
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700 py-10 text-center">
               <ClipboardList size={22} className="text-slate-300" />
               <p className="mt-2 text-sm text-slate-400">Nenhuma atividade registrada ainda.</p>
             </div>
@@ -365,10 +365,10 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
           <div className="space-y-3">
             {[
               { label: 'Status', value: operational.autoChargeActive ? 'Ativo' : 'Inativo', cls: operational.autoChargeActive ? 'text-blue-700' : 'text-slate-500' },
-              { label: 'Ultima execucao', value: operational.lastAutoExecution || 'Nunca executada', cls: 'text-slate-900' },
-              { label: 'Proxima janela', value: operational.nextRunHint || 'Automacao inativa', cls: 'text-slate-900' },
+              { label: 'Ultima execucao', value: operational.lastAutoExecution || 'Nunca executada', cls: 'text-slate-50' },
+              { label: 'Proxima janela', value: operational.nextRunHint || 'Automacao inativa', cls: 'text-slate-50' },
             ].map((row) => (
-              <div key={row.label} className="rounded-2xl bg-slate-50 px-4 py-3">
+              <div key={row.label} className="rounded-2xl bg-slate-800/40 px-4 py-3">
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{row.label}</p>
                 <p className={`mt-1.5 text-sm font-semibold ${row.cls}`}>{row.value}</p>
               </div>
@@ -382,15 +382,15 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
           <SectionHeader title="Leituras operacionais" subtitle="Sinais rapidos para operacao e venda do SaaS." badge={operational.recentAuditAction || 'Sem atividade recente'} />
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             {[
-              { label: 'Cobertura de contato', desc: 'Use a taxa com telefone para medir a prontidao real da carteira para cobranca.', icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-50' },
-              { label: 'Modo teste', desc: operational.whatsappMockMode ? 'WhatsApp em mock ativo para validar o fluxo sem custo real.' : 'Ambiente preparado para ativar o provedor real depois.', icon: Zap, color: operational.whatsappMockMode ? 'text-amber-600' : 'text-slate-500', bg: operational.whatsappMockMode ? 'bg-amber-50' : 'bg-slate-50' },
-              { label: 'Leitura multiempresa', desc: 'Voce esta em modo global com visao consolidada de todas as empresas, ou no escopo isolado de uma.', icon: BarChart3, color: 'text-blue-600', bg: 'bg-blue-50' },
+              { label: 'Cobertura de contato', desc: 'Use a taxa com telefone para medir a prontidao real da carteira para cobranca.', icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-900/20' },
+              { label: 'Modo teste', desc: operational.whatsappMockMode ? 'WhatsApp em mock ativo para validar o fluxo sem custo real.' : 'Ambiente preparado para ativar o provedor real depois.', icon: Zap, color: operational.whatsappMockMode ? 'text-amber-600' : 'text-slate-500', bg: operational.whatsappMockMode ? 'bg-amber-50' : 'bg-slate-800/40' },
+              { label: 'Leitura multiempresa', desc: 'Voce esta em modo global com visao consolidada de todas as empresas, ou no escopo isolado de uma.', icon: BarChart3, color: 'text-blue-600', bg: 'bg-blue-900/20' },
             ].map(({ label, desc, icon: Icon, color, bg }) => (
-              <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div key={label} className="rounded-2xl border border-slate-700 bg-slate-800/40 p-4">
                 <div className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl ${bg}`}>
                   <Icon size={18} className={color} />
                 </div>
-                <p className="text-sm font-semibold text-slate-900">{label}</p>
+                <p className="text-sm font-semibold text-slate-50">{label}</p>
                 <p className="mt-1 text-xs leading-relaxed text-slate-500">{desc}</p>
               </div>
             ))}

@@ -11,7 +11,7 @@ function getStatusTone(status) {
     return 'border-red-200 bg-red-50 text-red-700';
   }
   if (normalized === 'aberto') {
-    return 'border-blue-200 bg-blue-50 text-blue-700';
+    return 'border-blue-700/40 bg-blue-900/20 text-blue-700';
   }
   return 'border-amber-200 bg-amber-50 text-amber-700';
 }
@@ -44,7 +44,7 @@ export default function PreviewImportTable({
             type="checkbox"
             checked={allSelected}
             onChange={onToggleAll}
-            className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+            className="h-4 w-4 rounded border-slate-700 text-emerald-600 focus:ring-emerald-500"
           />
         </label>
       ),
@@ -54,7 +54,7 @@ export default function PreviewImportTable({
             type="checkbox"
             checked={row.selected !== false}
             onChange={() => onToggleRow(row.id)}
-            className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+            className="h-4 w-4 rounded border-slate-700 text-emerald-600 focus:ring-emerald-500"
           />
         </label>
       ),
@@ -67,7 +67,7 @@ export default function PreviewImportTable({
         <input
           value={row.nome}
           onChange={(event) => onFieldChange(row.id, 'nome', event.target.value)}
-          className="input-premium w-full border-transparent bg-transparent px-2 py-1 font-medium text-slate-900 shadow-none"
+          className="input-premium w-full border-transparent bg-transparent px-2 py-1 font-medium text-slate-50 shadow-none"
         />
       ),
     },
@@ -151,24 +151,24 @@ export default function PreviewImportTable({
   ];
 
   return (
-    <section className="card-hover overflow-hidden rounded-[32px] border border-white/70 bg-white/90 shadow-[0_28px_90px_rgba(15,23,42,0.08)] backdrop-blur">
-      <div className="hero-mesh border-b border-slate-200/80 px-5 py-5 sm:px-6">
+    <section className="card-hover overflow-hidden rounded-[32px] border border-white/70 bg-slate-900/70 shadow-[0_28px_90px_rgba(15,23,42,0.08)] backdrop-blur">
+      <div className="hero-mesh border-b border-slate-700/50 px-5 py-5 sm:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/80 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-700 shadow-sm">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/80 bg-slate-900/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-700 shadow-sm">
               <Sparkles size={12} />
               OCR em revisao
             </div>
             <div>
-              <h3 className="text-xl font-semibold text-slate-950">Previa da importacao</h3>
-              <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
+              <h3 className="text-xl font-semibold text-slate-50">Previa da importacao</h3>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-300">
                 Revise, ajuste e selecione apenas as linhas que devem seguir para a carteira financeira.
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300 shadow-sm">
               <Pencil size={14} />
               Linhas editaveis
             </div>
@@ -180,11 +180,11 @@ export default function PreviewImportTable({
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
-          <div className="rounded-3xl border border-slate-200/80 bg-white/85 px-4 py-4 shadow-sm">
+          <div className="rounded-3xl border border-slate-700/50 bg-slate-900/60/85 px-4 py-4 shadow-sm">
             <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Registros totais</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-950">{rows.length}</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-50">{rows.length}</p>
           </div>
-          <div className="rounded-3xl border border-blue-200/80 bg-blue-50/90 px-4 py-4 shadow-sm">
+          <div className="rounded-3xl border border-blue-700/40/80 bg-blue-900/20/90 px-4 py-4 shadow-sm">
             <p className="text-[11px] uppercase tracking-[0.2em] text-blue-700">Valor total</p>
             <p className="mt-2 text-2xl font-semibold text-blue-950">{formatCurrencyBRL(totalValue)}</p>
           </div>
@@ -208,13 +208,13 @@ export default function PreviewImportTable({
         />
       </div>
 
-      <div className="border-t border-slate-200/80 bg-slate-50/70 px-5 py-4 sm:px-6">
+      <div className="border-t border-slate-700/50 bg-slate-800/40 px-5 py-4 sm:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-1">
-            <p className="text-sm font-semibold text-slate-900">{selectedRows.length} linha(s) pronta(s) para importacao</p>
+            <p className="text-sm font-semibold text-slate-50">{selectedRows.length} linha(s) pronta(s) para importacao</p>
             <p className="text-xs text-slate-500">
               Proximo vencimento da selecao:{' '}
-              <span className="font-medium text-slate-700">
+              <span className="font-medium text-slate-200">
                 {selectedRows[0]?.data_vencimento ? formatDateBR(selectedRows[0].data_vencimento) : 'aguardando selecao'}
               </span>
             </p>
@@ -224,7 +224,7 @@ export default function PreviewImportTable({
             <button
               type="button"
               onClick={onDiscard}
-              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:-translate-y-0.5 hover:bg-slate-100"
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:-translate-y-0.5 hover:bg-slate-800/60"
             >
               <XCircle size={14} />
               Descartar previa

@@ -1,7 +1,7 @@
 import { AlertTriangle, ArrowRight, Info, ShieldAlert } from 'lucide-react';
 
 const toneMap = {
-  info: { wrapper: 'border-blue-500/30 bg-blue-500/10', title: 'text-blue-100', text: 'text-slate-300', icon: Info },
+  info: { wrapper: 'border-blue-500/30 bg-blue-900/200/10', title: 'text-blue-100', text: 'text-slate-300', icon: Info },
   warning: { wrapper: 'border-amber-500/30 bg-amber-500/10', title: 'text-amber-100', text: 'text-slate-300', icon: AlertTriangle },
   danger: { wrapper: 'border-red-500/30 bg-red-500/10', title: 'text-red-100', text: 'text-slate-300', icon: ShieldAlert },
 };

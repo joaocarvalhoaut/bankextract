@@ -5,20 +5,20 @@ import { formatCurrencyBRL } from '../utils/format';
 import { canUserPerformAction } from '../security/permissions';
 
 const statusTone = {
-  pendente: 'bg-slate-100 text-slate-700 ring-slate-200',
+  pendente: 'bg-slate-800/60 text-slate-200 ring-slate-700',
   queued: 'bg-amber-50 text-amber-700 ring-amber-200',
-  sent: 'bg-blue-50 text-blue-700 ring-blue-200',
+  sent: 'bg-blue-900/20 text-blue-700 ring-blue-200',
   delivered: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
   read: 'bg-violet-50 text-violet-700 ring-violet-200',
   failed: 'bg-red-50 text-red-700 ring-red-200',
-  simulated: 'bg-slate-100 text-slate-700 ring-slate-200',
+  simulated: 'bg-slate-800/60 text-slate-200 ring-slate-700',
   'sem telefone': 'bg-amber-50 text-amber-700 ring-amber-200',
 };
 
 const statusMeta = {
   pendente: { label: 'Pendente', dot: 'bg-slate-400' },
   queued: { label: '🟡 fila', dot: 'bg-amber-400' },
-  sent: { label: '🔵 enviada', dot: 'bg-blue-500' },
+  sent: { label: '🔵 enviada', dot: 'bg-blue-900/200' },
   delivered: { label: '🟢 entregue', dot: 'bg-emerald-500' },
   read: { label: '👁 lida', dot: 'bg-violet-500' },
   failed: { label: '🔴 falhou', dot: 'bg-red-500' },
@@ -100,13 +100,13 @@ export default function CobrancasScreen({
     {
       key: 'cliente',
       label: 'Cliente',
-      render: (row) => <span className="font-medium text-slate-900">{row.cliente}</span>,
+      render: (row) => <span className="font-medium text-slate-50">{row.cliente}</span>,
     },
     { key: 'documento', label: 'Documento', render: (row) => row.documento },
     {
       key: 'valor',
       label: 'Valor',
-      render: (row) => <span className="font-semibold text-slate-900">{formatCurrencyBRL(row.valor)}</span>,
+      render: (row) => <span className="font-semibold text-slate-50">{formatCurrencyBRL(row.valor)}</span>,
     },
     {
       key: 'telefone',
@@ -120,7 +120,7 @@ export default function CobrancasScreen({
         <span
           title={buildStatusTooltip(row)}
           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
-            statusTone[row.status] || 'bg-slate-100 text-slate-700 ring-slate-200'
+            statusTone[row.status] || 'bg-slate-800/60 text-slate-200 ring-slate-700'
           }`}
         >
           <span
@@ -146,7 +146,7 @@ export default function CobrancasScreen({
               disabled={!canManageCharges}
               onClick={() => onGenerateMessage(row)}
               title={!canManageCharges ? 'Seu perfil nao pode gerar mensagens.' : ''}
-              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-800/40 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <MessageCircleMore size={12} />
               Gerar mensagem
@@ -180,7 +180,7 @@ export default function CobrancasScreen({
   ], [canManageCharges, companyId, handleSendSingleCharge, onGenerateMessage, sendingChargeIds]);
 
   const stats = [
-    { label: 'Cobrancas pendentes', value: pending, color: 'text-slate-900', bar: 'from-slate-400 to-slate-500', Icon: PhoneOff },
+    { label: 'Cobrancas pendentes', value: pending, color: 'text-slate-50', bar: 'from-slate-400 to-slate-500', Icon: PhoneOff },
     { label: 'Com telefone', value: rows.length - withoutPhone, color: 'text-emerald-700', bar: 'from-emerald-400 to-emerald-600', Icon: PhoneCall },
     { label: 'Sem telefone', value: withoutPhone, color: 'text-amber-700', bar: 'from-amber-400 to-orange-400', Icon: PhoneOff },
     { label: 'Mensagens enviadas', value: sent, color: 'text-blue-700', bar: 'from-blue-400 to-blue-600', Icon: Eye },
@@ -192,10 +192,10 @@ export default function CobrancasScreen({
         {stats.map(({ label, value, color, bar, Icon }) => (
           <article
             key={label}
-            className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card"
+            className="relative overflow-hidden rounded-[28px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card"
           >
             <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${bar} opacity-70`} />
-            <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 text-slate-500">
+            <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-slate-800/40 text-slate-500">
               <Icon size={16} />
             </div>
             <p className="text-xs font-medium text-slate-500">{label}</p>
@@ -204,14 +204,14 @@ export default function CobrancasScreen({
         ))}
       </section>
 
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-700">
               <PhoneOff size={22} />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">Fila de cobrancas WhatsApp</h3>
+              <h3 className="text-lg font-semibold text-slate-50">Fila de cobrancas WhatsApp</h3>
               <p className="text-sm text-slate-500">
                 Pendencias operacionais prontas para mensagem manual ou automatica.
               </p>
@@ -219,7 +219,7 @@ export default function CobrancasScreen({
           </div>
 
           <div className="flex flex-col items-start gap-3">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 shadow-soft">
+            <div className="rounded-2xl border border-slate-700 bg-slate-800/40 p-2 shadow-soft">
               <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                 <ShieldCheck size={12} />
                 Modo de envio
@@ -231,7 +231,7 @@ export default function CobrancasScreen({
                   className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
                     simulationMode
                       ? 'bg-amber-500 text-white shadow-soft'
-                      : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                      : 'border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/40'
                   }`}
                 >
                   Simulacao
@@ -241,7 +241,7 @@ export default function CobrancasScreen({
                   onClick={() => onBillingExecutionModeChange?.('real')}
                   className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
                     simulationMode
-                      ? 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                      ? 'border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/40'
                       : 'bg-emerald-600 text-white shadow-soft'
                   }`}
                 >

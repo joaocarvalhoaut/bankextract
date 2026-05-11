@@ -9,7 +9,7 @@ import {
 const STATUS_META = {
   pendente: {
     label: 'Pendente',
-    tone: 'border-slate-200 bg-slate-50 text-slate-600',
+    tone: 'border-slate-700 bg-slate-800/40 text-slate-300',
   },
   em_andamento: {
     label: 'Em andamento',
@@ -28,9 +28,9 @@ const formatDateTime = (value) =>
 
 const summaryCards = (summary) => [
   { key: 'progress', label: 'Progresso', value: `${summary?.progress || 0}%`, tone: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
-  { key: 'completed', label: 'Concluidos', value: summary?.completed || 0, tone: 'text-blue-700 bg-blue-50 border-blue-200' },
+  { key: 'completed', label: 'Concluidos', value: summary?.completed || 0, tone: 'text-blue-700 bg-blue-900/20 border-blue-700/40' },
   { key: 'inProgress', label: 'Em andamento', value: summary?.inProgress || 0, tone: 'text-amber-700 bg-amber-50 border-amber-200' },
-  { key: 'pending', label: 'Pendentes', value: summary?.pending || 0, tone: 'text-slate-700 bg-slate-50 border-slate-200' },
+  { key: 'pending', label: 'Pendentes', value: summary?.pending || 0, tone: 'text-slate-200 bg-slate-800/40 border-slate-700' },
   { key: 'evidenceFound', label: 'Com evidencia', value: summary?.evidenceFound || 0, tone: 'text-violet-700 bg-violet-50 border-violet-200' },
 ];
 
@@ -265,9 +265,9 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
 
   if (!companyId) {
     return (
-      <div className="rounded-[32px] border border-dashed border-slate-300 bg-white p-12 text-center shadow-soft">
+      <div className="rounded-[32px] border border-dashed border-slate-700 bg-slate-900/60 p-12 text-center shadow-soft">
         <ClipboardCheck className="mx-auto mb-4 text-slate-300" size={30} />
-        <h2 className="text-xl font-semibold text-slate-900">Selecione uma empresa para validar o piloto</h2>
+        <h2 className="text-xl font-semibold text-slate-50">Selecione uma empresa para validar o piloto</h2>
         <p className="mt-2 text-sm text-slate-500">
           O checklist de producao e persistido por empresa para garantir que o ambiente esta pronto para cliente piloto.
         </p>
@@ -277,14 +277,14 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
 
   return (
     <div className="space-y-6">
-      <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-200/80 bg-white/90 px-6 py-7 shadow-soft">
+      <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-700/50 bg-slate-900/70 px-6 py-7 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
               <ShieldCheck size={14} />
               Piloto e producao assistida
             </div>
-            <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">Checklist de prontidao para cliente piloto</h2>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-50">Checklist de prontidao para cliente piloto</h2>
             <p className="mt-2 max-w-3xl text-sm text-slate-500">
               Valide migracoes, fluxo operacional, billing interno, notificacoes e auditoria antes de liberar o NC Finance para {companyName || 'a empresa ativa'}.
             </p>
@@ -294,7 +294,7 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
             type="button"
             onClick={loadChecklist}
             disabled={loading}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-60"
           >
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
             Atualizar checklist
@@ -311,19 +311,19 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
         ))}
       </section>
 
-      <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-soft">
+      <section className="rounded-[30px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="mb-5 flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-semibold text-slate-900">Itens de validacao</h3>
+            <h3 className="text-lg font-semibold text-slate-50">Itens de validacao</h3>
             <p className="text-sm text-slate-500">Cada item pode ser salvo em andamento e fechado quando o teste estiver concluido.</p>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <div className="rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-300">
             {filteredItems.length} de {checklist.summary.total || 0} itens
           </div>
         </div>
 
         <div className="mb-5 flex flex-wrap items-center gap-3">
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800/40 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
             <Filter size={13} />
             Filtros
           </div>
@@ -335,7 +335,7 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
               className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
                 activeFilter === option.id
                   ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-900/20'
-                  : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  : 'border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/40'
               }`}
             >
               {option.label}
@@ -346,7 +346,7 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3, 4].map((item) => (
-              <div key={item} className="rounded-[24px] border border-slate-200 p-5">
+              <div key={item} className="rounded-[24px] border border-slate-700 p-5">
                 <div className="skeleton h-5 w-56 rounded-full" />
                 <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                   <div className="skeleton h-12 rounded-2xl" />
@@ -370,15 +370,15 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
               const hasEvidence = Boolean(item.evidence?.found);
 
               return (
-                <article key={item.item_key} className="rounded-[26px] border border-slate-200 bg-slate-50/70 p-5">
+                <article key={item.item_key} className="rounded-[26px] border border-slate-700 bg-slate-800/40 p-5">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h4 className="text-base font-semibold text-slate-900">{item.title}</h4>
+                        <h4 className="text-base font-semibold text-slate-50">{item.title}</h4>
                         <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusMeta.tone}`}>
                           {statusMeta.label}
                         </span>
-                        <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                        <span className="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                           {item.category}
                         </span>
                         {hasEvidence ? (
@@ -397,7 +397,7 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
                               <button
                                 type="button"
                                 onClick={() => handleOpenEvidenceOrigin(item)}
-                                className="inline-flex items-center gap-2 self-start rounded-xl border border-violet-200 bg-white px-3 py-2 text-xs font-semibold text-violet-700 transition hover:bg-violet-100"
+                                className="inline-flex items-center gap-2 self-start rounded-xl border border-violet-200 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-violet-700 transition hover:bg-violet-100"
                               >
                                 <ExternalLink size={13} />
                                 Abrir origem
@@ -413,7 +413,7 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
                         type="button"
                         onClick={() => handleSave(item)}
                         disabled={isSaving}
-                        className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                        className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-60"
                       >
                         {isSaving ? 'Salvando...' : 'Salvar'}
                       </button>
@@ -446,7 +446,7 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
                       <select
                         value={draft.status || 'pendente'}
                         onChange={(event) => updateDraft(item.item_key, { status: event.target.value })}
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none ring-emerald-500 focus:ring-2"
+                        className="w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm text-slate-200 outline-none ring-emerald-500 focus:ring-2"
                       >
                         <option value="pendente">Pendente</option>
                         <option value="em_andamento">Em andamento</option>
@@ -461,13 +461,13 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
                         value={draft.owner_name || ''}
                         onChange={(event) => updateDraft(item.item_key, { owner_name: event.target.value })}
                         placeholder="Nome ou e-mail do responsavel"
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none ring-emerald-500 placeholder:text-slate-400 focus:ring-2"
+                        className="w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm text-slate-200 outline-none ring-emerald-500 placeholder:text-slate-400 focus:ring-2"
                       />
                     </label>
 
-                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                    <div className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-3">
                       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Conclusao</p>
-                      <p className="mt-2 text-sm font-medium text-slate-700">{formatDateTime(item.completed_at)}</p>
+                      <p className="mt-2 text-sm font-medium text-slate-200">{formatDateTime(item.completed_at)}</p>
                     </div>
                   </div>
 
@@ -478,7 +478,7 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
                       value={draft.notes || ''}
                       onChange={(event) => updateDraft(item.item_key, { notes: event.target.value })}
                       placeholder="Anote evidencias, bloqueios ou links internos deste teste."
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none ring-emerald-500 placeholder:text-slate-400 focus:ring-2"
+                      className="w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm text-slate-200 outline-none ring-emerald-500 placeholder:text-slate-400 focus:ring-2"
                     />
                   </label>
                 </article>
@@ -489,9 +489,9 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
       </section>
 
       {!loading && filteredItems.length === 0 ? (
-        <section className="rounded-[30px] border border-dashed border-slate-300 bg-white p-12 text-center shadow-soft">
+        <section className="rounded-[30px] border border-dashed border-slate-700 bg-slate-900/60 p-12 text-center shadow-soft">
           <CircleDashed className="mx-auto mb-4 text-slate-300" size={30} />
-          <h3 className="text-lg font-semibold text-slate-900">Nenhum item encontrado</h3>
+          <h3 className="text-lg font-semibold text-slate-50">Nenhum item encontrado</h3>
           <p className="mt-2 text-sm text-slate-500">
             Ajuste o filtro atual ou aguarde novas evidencias e atualizacoes do checklist.
           </p>

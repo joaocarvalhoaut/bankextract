@@ -9,7 +9,7 @@ import {
 } from '../services/notificationService';
 
 const toneClass = {
-  info: 'border-slate-200 bg-slate-50 text-slate-700',
+  info: 'border-slate-700 bg-slate-800/40 text-slate-200',
   success: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   warning: 'border-amber-200 bg-amber-50 text-amber-700',
   danger: 'border-red-200 bg-red-50 text-red-700',
@@ -141,7 +141,7 @@ export default function NotificationBell({ companyId, onOpenNotifications, onNav
         ref={buttonRef}
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="micro-bounce relative inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white p-2.5 text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
+        className="micro-bounce relative inline-flex items-center justify-center rounded-xl border border-slate-700 bg-slate-900/60 p-2.5 text-slate-500 transition hover:bg-slate-800/40 hover:text-slate-200"
       >
         <Bell size={16} />
         {unreadCount > 0 ? (
@@ -154,19 +154,19 @@ export default function NotificationBell({ companyId, onOpenNotifications, onNav
       {open ? (
         <div
           ref={menuRef}
-          className="fixed z-[99999] w-[360px] max-w-[calc(100vw-32px)] rounded-3xl border border-slate-200 bg-white p-3 shadow-xl"
+          className="fixed z-[99999] w-[360px] max-w-[calc(100vw-32px)] rounded-3xl border border-slate-700 bg-slate-900/60 p-3 shadow-xl"
           style={{ top: `${position.top}px`, right: `${position.right}px` }}
         >
           <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-2 pb-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Notificacoes</p>
-              <p className="mt-1 text-sm font-medium text-slate-700">{unreadCount} nao lida(s)</p>
+              <p className="mt-1 text-sm font-medium text-slate-200">{unreadCount} nao lida(s)</p>
             </div>
             <button
               type="button"
               onClick={handleMarkAll}
               disabled={!companyId || unreadCount === 0}
-              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800/40 disabled:opacity-50"
             >
               <CheckCheck size={14} />
               Marcar tudo
@@ -175,7 +175,7 @@ export default function NotificationBell({ companyId, onOpenNotifications, onNav
 
           <div className="mt-3 max-h-[360px] space-y-2 overflow-y-auto px-1">
             {loading ? (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              <div className="rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-8 text-center text-sm text-slate-500">
                 Carregando notificacoes...
               </div>
             ) : latestItems.length ? (
@@ -200,7 +200,7 @@ export default function NotificationBell({ companyId, onOpenNotifications, onNav
                 </button>
               ))
             ) : (
-              <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400">
+              <div className="rounded-2xl border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-400">
                 Nenhuma notificacao recente para esta empresa.
               </div>
             )}

@@ -5,10 +5,10 @@ export default function PlanComparisonTable({ plans = [], title = 'Comparativo d
   const rows = getComparisonRows();
 
   return (
-    <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+    <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
       <div className="mb-5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Comparativo</p>
-        <h3 className="mt-1 text-xl font-semibold text-slate-950">{title}</h3>
+        <h3 className="mt-1 text-xl font-semibold text-slate-50">{title}</h3>
       </div>
 
       <div className="overflow-x-auto">
@@ -26,7 +26,7 @@ export default function PlanComparisonTable({ plans = [], title = 'Comparativo d
           <tbody>
             {rows.map((row) => (
               <tr key={row.key}>
-                <td className="rounded-l-2xl border border-r-0 border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+                <td className="rounded-l-2xl border border-r-0 border-slate-700 bg-slate-800/40 px-4 py-3 text-sm font-medium text-slate-200">
                   {row.label}
                 </td>
                 {plans.map((plan, index) => {
@@ -35,13 +35,13 @@ export default function PlanComparisonTable({ plans = [], title = 'Comparativo d
                     typeof rawValue === 'boolean' ? (
                       rawValue ? <CheckCircle2 size={16} className="text-emerald-600" /> : <MinusCircle size={16} className="text-slate-300" />
                     ) : (
-                      <span className="text-sm font-semibold text-slate-900">{rawValue}</span>
+                      <span className="text-sm font-semibold text-slate-50">{rawValue}</span>
                     );
 
                   return (
                     <td
                       key={`${plan.id}-${row.key}`}
-                      className={`border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 ${index === plans.length - 1 ? 'rounded-r-2xl' : ''}`}
+                      className={`border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm text-slate-200 ${index === plans.length - 1 ? 'rounded-r-2xl' : ''}`}
                     >
                       <div className="flex items-center gap-2">{content}</div>
                     </td>

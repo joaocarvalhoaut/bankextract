@@ -85,20 +85,20 @@ export default function FinanceTable({
   };
 
   const statusClasses = (status) => {
-    if (status === 'liquidado') return 'border-blue-500/20 bg-blue-500/10 text-cyan-200';
+    if (status === 'liquidado') return 'border-blue-500/20 bg-blue-900/200/10 text-cyan-200';
     if (status === 'negociacao') return 'border-amber-200 bg-amber-50 text-amber-700';
-    if (status === 'promessa') return 'border-blue-200 bg-blue-50 text-blue-700';
+    if (status === 'promessa') return 'border-blue-700/40 bg-blue-900/20 text-blue-700';
     if (status === 'vencido') return 'border-red-200 bg-red-50 text-red-700';
     if (status === 'aberto') return 'border-sky-200 bg-sky-50 text-sky-700';
-    return 'border-slate-200 bg-slate-100 text-slate-700';
+    return 'border-slate-700 bg-slate-800/60 text-slate-200';
   };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-slate-900">Visão Geral</h2>
-          <p className="text-sm text-slate-600">
+          <h2 className="text-xl font-semibold text-slate-50">Visão Geral</h2>
+          <p className="text-sm text-slate-300">
             {allRows.length} registros totais · {representatives.length} representantes cadastrados
           </p>
           {globalMode ? (
@@ -142,7 +142,7 @@ export default function FinanceTable({
           {showPrimaryActions && canExport ? (
             <button
               onClick={() => exportRows('csv')}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm hover:bg-slate-800/40"
             >
               <Download size={14} /> CSV
             </button>
@@ -151,7 +151,7 @@ export default function FinanceTable({
           {showPrimaryActions && canExport ? (
             <button
               onClick={() => exportRows('xls')}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm hover:bg-slate-800/40"
             >
               <FileSpreadsheet size={14} /> Excel
             </button>
@@ -160,7 +160,7 @@ export default function FinanceTable({
           {showPrimaryActions && canClearView ? (
             <button
               onClick={clearOverview}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-slate-900/60 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
             >
               <Trash2 size={14} /> Limpar visão
             </button>
@@ -183,7 +183,7 @@ export default function FinanceTable({
             />
           </div>
           {hasFilters ? (
-            <button onClick={clearFilters} className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-100">
+            <button onClick={clearFilters} className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-slate-800/60">
               <X size={14} /> Limpar filtros
             </button>
           ) : null}
@@ -195,20 +195,20 @@ export default function FinanceTable({
           <table className="w-full text-sm">
             <thead className="bg-[#10213B]">
               <tr>
-                <th className="w-10 border-r border-slate-200 px-3 py-2">
+                <th className="w-10 border-r border-slate-700 px-3 py-2">
                   <input
                     type="checkbox"
                     checked={rows.length > 0 && selectedRows.size === rows.length}
                     onChange={toggleAllPageRows}
                   />
                 </th>
-                <th className="w-12 border-r border-slate-200 px-2 py-2 text-center text-xs font-medium text-slate-500">
+                <th className="w-12 border-r border-slate-700 px-2 py-2 text-center text-xs font-medium text-slate-500">
                   #
                 </th>
                 {columns.map((column) => (
                   <th
                     key={column.campo}
-                    className={`${column.width} relative border-r border-slate-200 px-3 py-2 text-left text-xs font-medium text-slate-700`}
+                    className={`${column.width} relative border-r border-slate-700 px-3 py-2 text-left text-xs font-medium text-slate-200`}
                     data-filter-dropdown
                   >
                     <div className="flex items-center gap-1">
@@ -227,23 +227,23 @@ export default function FinanceTable({
                     </div>
 
                     {openFilterDropdown === column.campo ? (
-                      <div className="absolute left-0 top-full z-20 mt-1 max-h-72 min-w-[220px] overflow-auto rounded-xl border border-slate-200 bg-white p-2 shadow-soft">
+                      <div className="absolute left-0 top-full z-20 mt-1 max-h-72 min-w-[220px] overflow-auto rounded-xl border border-slate-700 bg-slate-900/60 p-2 shadow-soft">
                         <div className="mb-2 px-2 text-xs font-medium text-slate-500">Filtrar {column.label}</div>
                         {getUniqueColumnValues(column.campo).map((value) => (
-                          <label key={value} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-slate-50">
+                          <label key={value} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-slate-800/40">
                             <input
                               type="checkbox"
                               checked={filters[column.campo]?.includes(value) || false}
                               onChange={() => toggleFilter(column.campo, value)}
                             />
-                            <span className="truncate text-xs text-slate-700">{value || '(vazio)'}</span>
+                            <span className="truncate text-xs text-slate-200">{value || '(vazio)'}</span>
                           </label>
                         ))}
                       </div>
                     ) : null}
                   </th>
                 ))}
-                <th className="w-[70px] px-3 py-2 text-left text-xs font-medium text-slate-700">Ações</th>
+                <th className="w-[70px] px-3 py-2 text-left text-xs font-medium text-slate-200">Ações</th>
               </tr>
             </thead>
 
@@ -262,7 +262,7 @@ export default function FinanceTable({
                   return (
                     <tr
                       key={row.id}
-                      className={`border-t border-slate-800 ${selectedRows.has(row.id) ? 'bg-blue-500/10' : 'hover:bg-slate-900/40'}`}
+                      className={`border-t border-slate-800 ${selectedRows.has(row.id) ? 'bg-blue-900/200/10' : 'hover:bg-slate-900/40'}`}
                     >
                       <td className="border-r border-slate-100 px-3 py-2">
                         <input type="checkbox" checked={selectedRows.has(row.id)} onChange={() => toggleRowSelection(row.id)} />
@@ -348,7 +348,7 @@ export default function FinanceTable({
                                 </select>
                               ) : (
                                 <button className="w-full text-left" onDoubleClick={() => (canEdit ? startCellEdit(row.id, 'tipo', row.tipo || 'vencidos') : null)}>
-                                  <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700">
+                                  <span className="inline-flex rounded-full border border-slate-700 bg-slate-800/40 px-2 py-0.5 text-xs font-medium text-slate-200">
                                     {row.tipo === 'liquidacao' ? 'Liquidação' : 'Vencidos'}
                                   </span>
                                 </button>
@@ -440,7 +440,7 @@ export default function FinanceTable({
                               />
                             ) : (
                               <button
-                                className={`w-full text-left ${column.campo === 'nome' ? 'font-medium text-slate-900' : ''}`}
+                                className={`w-full text-left ${column.campo === 'nome' ? 'font-medium text-slate-50' : ''}`}
                                 onDoubleClick={() => (canEdit ? startCellEdit(row.id, column.campo, row[column.campo]) : null)}
                               >
                                 {row[column.campo] || <span className="italic text-slate-400">vazio</span>}
@@ -472,18 +472,18 @@ export default function FinanceTable({
             </tbody>
 
             {rows.length ? (
-              <tfoot className="border-t-2 border-slate-200 bg-slate-50">
+              <tfoot className="border-t-2 border-slate-700 bg-slate-800/40">
                 <tr>
-                  <td colSpan={showCompanyColumn ? 7 : 6} className="border-r border-slate-200 px-3 py-2 text-xs font-medium text-slate-600">
+                  <td colSpan={showCompanyColumn ? 7 : 6} className="border-r border-slate-700 px-3 py-2 text-xs font-medium text-slate-300">
                     Total da pagina ({rows.length} registros)
                   </td>
-                  <td className="border-r border-slate-200 px-3 py-2 text-right font-medium">
+                  <td className="border-r border-slate-700 px-3 py-2 text-right font-medium">
                     {formatCurrencyBRL(rows.reduce((sum, row) => sum + Number(row.juros || 0), 0))}
                   </td>
-                  <td className="border-r border-slate-200 px-3 py-2 text-right font-medium">
+                  <td className="border-r border-slate-700 px-3 py-2 text-right font-medium">
                     {formatCurrencyBRL(rows.reduce((sum, row) => sum + Number(row.multa || 0), 0))}
                   </td>
-                  <td className="border-r border-slate-200 px-3 py-2 text-right font-medium">
+                  <td className="border-r border-slate-700 px-3 py-2 text-right font-medium">
                     {formatCurrencyBRL(rows.reduce((sum, row) => sum + Number(row.valorAtualizado || 0), 0))}
                   </td>
                   <td colSpan={6} className="px-3 py-2 text-xs text-slate-500">
@@ -496,21 +496,21 @@ export default function FinanceTable({
         </div>
 
         {totalPages > 1 ? (
-          <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="flex items-center justify-between border-t border-slate-700 bg-slate-800/40 px-4 py-3">
             <p className="text-xs text-slate-500">
               Pagina {page} de {totalPages} · {allRows.length} registros
             </p>
             <div className="flex items-center gap-1">
-              <button onClick={() => setPage(1)} disabled={page === 1} className="rounded border border-slate-200 px-2 py-1 text-xs disabled:opacity-40">
+              <button onClick={() => setPage(1)} disabled={page === 1} className="rounded border border-slate-700 px-2 py-1 text-xs disabled:opacity-40">
                 {'<<'}
               </button>
-              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="rounded border border-slate-200 px-2 py-1 text-xs disabled:opacity-40">
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="rounded border border-slate-700 px-2 py-1 text-xs disabled:opacity-40">
                 {'<'}
               </button>
-              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="rounded border border-slate-200 px-2 py-1 text-xs disabled:opacity-40">
+              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="rounded border border-slate-700 px-2 py-1 text-xs disabled:opacity-40">
                 {'>'}
               </button>
-              <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="rounded border border-slate-200 px-2 py-1 text-xs disabled:opacity-40">
+              <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="rounded border border-slate-700 px-2 py-1 text-xs disabled:opacity-40">
                 {'>>'}
               </button>
             </div>

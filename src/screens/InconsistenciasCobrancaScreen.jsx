@@ -23,7 +23,7 @@ const IGNORED_PREFIX = 'bankextract_ignored_inconsistencies_';
 
 function InconsistencyCard({ label, value, tone = 'slate' }) {
   const palette = {
-    slate: 'from-slate-400 to-slate-500 text-slate-950',
+    slate: 'from-slate-400 to-slate-500 text-slate-50',
     emerald: 'from-emerald-400 to-emerald-600 text-emerald-700',
     blue: 'from-blue-400 to-blue-600 text-blue-700',
     amber: 'from-amber-400 to-orange-400 text-amber-700',
@@ -31,10 +31,10 @@ function InconsistencyCard({ label, value, tone = 'slate' }) {
   };
 
   return (
-    <article className="relative overflow-hidden rounded-[24px] border border-slate-200 bg-white p-5 shadow-soft">
+    <article className="relative overflow-hidden rounded-[24px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
       <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${palette[tone]?.split(' text-')[0] || 'from-slate-400 to-slate-500'} opacity-80`} />
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className={`mt-2 text-3xl font-semibold ${palette[tone]?.split(' ').pop() || 'text-slate-950'}`}>{value}</p>
+      <p className={`mt-2 text-3xl font-semibold ${palette[tone]?.split(' ').pop() || 'text-slate-50'}`}>{value}</p>
     </article>
   );
 }
@@ -51,7 +51,7 @@ function FilterField({ label, children }) {
 function severityTone(level) {
   if (level === 'alta') return 'bg-red-50 text-red-700 ring-red-200';
   if (level === 'media') return 'bg-amber-50 text-amber-700 ring-amber-200';
-  return 'bg-slate-100 text-slate-700 ring-slate-200';
+  return 'bg-slate-800/60 text-slate-200 ring-slate-700';
 }
 
 function readIgnored(companyId) {
@@ -224,7 +224,7 @@ export default function InconsistenciasCobrancaScreen({
     {
       key: 'nome',
       label: 'Cliente',
-      render: (row) => <span className="font-medium text-slate-900">{row.nome || '-'}</span>,
+      render: (row) => <span className="font-medium text-slate-50">{row.nome || '-'}</span>,
     },
     {
       key: 'numero_boleto',
@@ -239,7 +239,7 @@ export default function InconsistenciasCobrancaScreen({
     {
       key: 'valor',
       label: 'Valor',
-      render: (row) => <span className="font-semibold text-slate-900">{formatCurrencyBRL(row.valor || 0)}</span>,
+      render: (row) => <span className="font-semibold text-slate-50">{formatCurrencyBRL(row.valor || 0)}</span>,
     },
     {
       key: 'telefone',
@@ -280,7 +280,7 @@ export default function InconsistenciasCobrancaScreen({
               setPhoneModal(row);
               setPhoneValue(String(row.telefone || ''));
             }}
-            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
           >
             <Phone size={12} />
             Editar telefone
@@ -288,7 +288,7 @@ export default function InconsistenciasCobrancaScreen({
           <button
             type="button"
             onClick={() => onToast?.('aviso', 'Reprocessamento individual de boleto ainda nao esta disponivel nesta tela.')}
-            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+            className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-800/40"
           >
             <RefreshCcw size={12} />
             Reprocessar boleto
@@ -314,7 +314,7 @@ export default function InconsistenciasCobrancaScreen({
           <button
             type="button"
             onClick={() => handleIgnore(row)}
-            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+            className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-800/40"
           >
             Ignorar inconsistência
           </button>
@@ -341,23 +341,23 @@ export default function InconsistenciasCobrancaScreen({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-red-700">
               <AlertCircle size={13} />
               Inconsistencias de cobranca
             </div>
-            <h3 className="mt-4 text-2xl font-semibold text-slate-950">Painel preventivo da regua</h3>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
-              Problemas que podem impedir ou prejudicar a cobranca automatica da empresa <span className="font-semibold text-slate-900">{companyName}</span>.
+            <h3 className="mt-4 text-2xl font-semibold text-slate-50">Painel preventivo da regua</h3>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-300">
+              Problemas que podem impedir ou prejudicar a cobranca automatica da empresa <span className="font-semibold text-slate-50">{companyName}</span>.
             </p>
           </div>
           <button
             type="button"
             onClick={() => loadInconsistencies(appliedFilters)}
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-soft transition hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition hover:bg-slate-800/40 disabled:opacity-50"
           >
             {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCcw size={15} />}
             Atualizar inconsistencias
@@ -376,7 +376,7 @@ export default function InconsistenciasCobrancaScreen({
         <InconsistencyCard label="Suspensos" value={cards.suspensos || 0} tone="slate" />
       </section>
 
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
           <FilterField label="Cliente">
             <input
@@ -384,14 +384,14 @@ export default function InconsistenciasCobrancaScreen({
               value={filters.cliente}
               onChange={(e) => setFilters((prev) => ({ ...prev, cliente: e.target.value }))}
               placeholder="Nome do cliente"
-              className="input-premium w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500"
+              className="input-premium w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-50 outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </FilterField>
           <FilterField label="Tipo de problema">
             <select
               value={filters.tipo_problema}
               onChange={(e) => setFilters((prev) => ({ ...prev, tipo_problema: e.target.value }))}
-              className="input-premium w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500"
+              className="input-premium w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-50 outline-none focus:ring-2 focus:ring-emerald-500"
             >
               <option value="">Todos</option>
               <option value="sem_telefone">Sem telefone</option>
@@ -408,7 +408,7 @@ export default function InconsistenciasCobrancaScreen({
             <select
               value={filters.severidade}
               onChange={(e) => setFilters((prev) => ({ ...prev, severidade: e.target.value }))}
-              className="input-premium w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500"
+              className="input-premium w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-50 outline-none focus:ring-2 focus:ring-emerald-500"
             >
               <option value="">Todas</option>
               <option value="alta">Alta</option>
@@ -420,7 +420,7 @@ export default function InconsistenciasCobrancaScreen({
             <select
               value={filters.status}
               onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-              className="input-premium w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500"
+              className="input-premium w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-50 outline-none focus:ring-2 focus:ring-emerald-500"
             >
               <option value="">Todos</option>
               <option value="pendente">Pendente</option>
@@ -435,7 +435,7 @@ export default function InconsistenciasCobrancaScreen({
             <select
               value={filters.mostrar_ignoradas}
               onChange={(e) => setFilters((prev) => ({ ...prev, mostrar_ignoradas: e.target.value }))}
-              className="input-premium w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500"
+              className="input-premium w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-50 outline-none focus:ring-2 focus:ring-emerald-500"
             >
               <option value="nao">Não</option>
               <option value="sim">Sim</option>
@@ -454,14 +454,14 @@ export default function InconsistenciasCobrancaScreen({
           <button
             type="button"
             onClick={handleClearFilters}
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-800/40"
           >
             Limpar filtros
           </button>
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-soft">
+      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <DataTable
           columns={columns}
           rows={items}
@@ -472,17 +472,17 @@ export default function InconsistenciasCobrancaScreen({
 
       {phoneModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
-          <div className="w-full max-w-lg overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-2xl">
+          <div className="w-full max-w-lg overflow-hidden rounded-[32px] border border-slate-700 bg-slate-900/60 shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Editar telefone</p>
-                <h3 className="mt-2 text-2xl font-semibold text-slate-950">{phoneModal.nome || 'Cliente'}</h3>
+                <h3 className="mt-2 text-2xl font-semibold text-slate-50">{phoneModal.nome || 'Cliente'}</h3>
                 <p className="mt-1 text-sm text-slate-500">Atualize o telefone para corrigir a inconsistência deste título.</p>
               </div>
               <button
                 type="button"
                 onClick={() => (phoneSaving ? null : setPhoneModal(null))}
-                className="rounded-2xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+                className="rounded-2xl border border-slate-700 bg-slate-900/60 p-2 text-slate-500 transition hover:bg-slate-800/40 hover:text-slate-50"
               >
                 <X size={18} />
               </button>
@@ -494,10 +494,10 @@ export default function InconsistenciasCobrancaScreen({
                   value={phoneValue}
                   onChange={(e) => setPhoneValue(e.target.value)}
                   placeholder="Somente numeros ou telefone formatado"
-                  className="input-premium w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="input-premium w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-50 outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </FilterField>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              <div className="rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-300">
                 O telefone será salvo no registro financeiro da empresa ativa respeitando o company_id atual.
               </div>
             </div>
@@ -506,7 +506,7 @@ export default function InconsistenciasCobrancaScreen({
                 type="button"
                 onClick={() => setPhoneModal(null)}
                 disabled={phoneSaving}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
               >
                 Cancelar
               </button>

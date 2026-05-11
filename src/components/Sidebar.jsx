@@ -117,7 +117,7 @@ export default function Sidebar({
   });
 
   return (
-    <aside className="w-full border-r border-slate-200 bg-white lg:min-h-screen lg:w-[286px] lg:px-3 lg:py-5">
+    <aside className="w-full border-r border-slate-700 bg-slate-900/60 lg:min-h-screen lg:w-[286px] lg:px-3 lg:py-5">
       <div className="space-y-4 lg:sticky lg:top-0">
         {/* ── Brand header ── */}
         <div
@@ -129,7 +129,7 @@ export default function Sidebar({
 
             <div className={`mt-3 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] ${
               billingExecutionMode === 'real'
-                ? 'border-blue-500/30 bg-blue-500/10 text-blue-300'
+                ? 'border-blue-500/30 bg-blue-900/200/10 text-blue-300'
                 : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
             }`}>
               <Shield size={11} className={billingExecutionMode === 'real' ? 'text-blue-300' : 'text-amber-400'} />
@@ -233,7 +233,7 @@ export default function Sidebar({
                     className={`flex w-full items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-medium transition-colors ${
                       isActive
                         ? 'nav-active-brand'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                        : 'text-slate-300 hover:bg-slate-800/60 hover:text-slate-50'
                     }`}
                   >
                     <Icon size={16} className={isActive ? 'text-blue-600' : 'text-slate-400'} />

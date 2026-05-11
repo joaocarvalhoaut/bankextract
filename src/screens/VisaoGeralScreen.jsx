@@ -579,7 +579,7 @@ export default function VisaoGeralScreen({
       <section className="hero-mesh border-brand overflow-hidden rounded-[32px] border p-6 shadow-lifted lg:p-8">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-700/40 bg-blue-900/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
               <WalletCards size={13} />
               Carteira financeira
             </div>
@@ -593,17 +593,17 @@ export default function VisaoGeralScreen({
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            <div className="surface-light rounded-2xl p-4 shadow-soft">
+            <div className="surface-elevated rounded-2xl p-4 shadow-soft">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Escopo atual</p>
               <p className="text-on-light mt-2 text-sm font-semibold">
                 {globalMode ? 'Todas as empresas' : activeCompanyName || 'Nenhuma empresa ativa'}
               </p>
             </div>
-            <div className="surface-light rounded-2xl p-4 shadow-soft">
+            <div className="surface-elevated rounded-2xl p-4 shadow-soft">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Registros visiveis</p>
               <p className="text-on-light mt-2 text-2xl font-semibold">{rows.length}</p>
             </div>
-            <div className="surface-light rounded-2xl p-4 shadow-soft">
+            <div className="surface-elevated rounded-2xl p-4 shadow-soft">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Acoes destrutivas</p>
               <p className="text-on-light mt-2 text-sm font-semibold">
                 {globalMode ? 'Bloqueadas no modo global' : canClearView ? 'Controladas por role' : 'Restritas'}
@@ -627,7 +627,7 @@ export default function VisaoGeralScreen({
       <section className="accent-bar surface-card rounded-[28px] p-5">
         <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-slate-900">Carteira financeira</h3>
+            <h3 className="text-lg font-semibold text-slate-50">Carteira financeira</h3>
             <p className="text-sm text-slate-500">Visao principal dos registros importados por empresa e lote.</p>
             {!canExport || !canClearView ? (
               <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -641,7 +641,7 @@ export default function VisaoGeralScreen({
               <button
                 type="button"
                 onClick={onExportCsv}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-soft hover:bg-slate-50"
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm font-medium text-slate-200 shadow-soft hover:bg-slate-800/40"
               >
                 <Download size={14} />
                 Exportar CSV
@@ -651,7 +651,7 @@ export default function VisaoGeralScreen({
               <button
                 type="button"
                 onClick={onExportExcel}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-soft hover:bg-slate-50"
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm font-medium text-slate-200 shadow-soft hover:bg-slate-800/40"
               >
                 <FileSpreadsheet size={14} />
                 Exportar Excel
@@ -671,7 +671,7 @@ export default function VisaoGeralScreen({
         </div>
 
         <div className="mb-5 grid grid-cols-1 gap-3 xl:grid-cols-6">
-          <label className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-soft">
+          <label className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-3 shadow-soft">
             <span className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
               <SlidersHorizontal size={13} />
               Empresa
@@ -699,18 +699,18 @@ export default function VisaoGeralScreen({
             type="date"
             value={filters.dateStart}
             onChange={(event) => setFilters((prev) => ({ ...prev, dateStart: event.target.value }))}
-            className="input-premium rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none ring-emerald-500 focus:ring-2"
+            className="input-premium rounded-2xl border border-slate-700 px-4 py-3 text-sm outline-none ring-emerald-500 focus:ring-2"
           />
           <input
             type="date"
             value={filters.dateEnd}
             onChange={(event) => setFilters((prev) => ({ ...prev, dateEnd: event.target.value }))}
-            className="input-premium rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none ring-emerald-500 focus:ring-2"
+            className="input-premium rounded-2xl border border-slate-700 px-4 py-3 text-sm outline-none ring-emerald-500 focus:ring-2"
           />
           <select
             value={filters.status}
             onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}
-            className="input-premium rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none ring-emerald-500 focus:ring-2"
+            className="input-premium rounded-2xl border border-slate-700 px-4 py-3 text-sm outline-none ring-emerald-500 focus:ring-2"
           >
             <option value="todos">Todos os status</option>
             <option value="pendente">Pendente</option>
@@ -722,13 +722,13 @@ export default function VisaoGeralScreen({
           <select
             value={filters.tipo}
             onChange={(event) => setFilters((prev) => ({ ...prev, tipo: event.target.value }))}
-            className="input-premium rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none ring-emerald-500 focus:ring-2"
+            className="input-premium rounded-2xl border border-slate-700 px-4 py-3 text-sm outline-none ring-emerald-500 focus:ring-2"
           >
             <option value="todos">Todos os tipos</option>
             <option value="vencidos">Vencidos</option>
             <option value="liquidacao">Liquidacao</option>
           </select>
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 shadow-soft">
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-700 px-4 py-3 shadow-soft">
             <Search size={14} className="text-slate-400" />
             <input
               value={filters.search}

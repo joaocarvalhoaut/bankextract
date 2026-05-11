@@ -125,9 +125,9 @@ export default function AuditTimelineScreen({ companyId, companyName, onToast, a
 
   if (!companyId && !allCompanies) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-[32px] border border-dashed border-slate-300 bg-white p-12 text-center shadow-soft">
+      <div className="flex flex-col items-center justify-center rounded-[32px] border border-dashed border-slate-700 bg-slate-900/60 p-12 text-center shadow-soft">
         <ClipboardList className="mb-4 text-slate-300" size={30} />
-        <h2 className="text-xl font-semibold text-slate-900">Selecione uma empresa para abrir a auditoria</h2>
+        <h2 className="text-xl font-semibold text-slate-50">Selecione uma empresa para abrir a auditoria</h2>
         <p className="mt-2 text-sm text-slate-500">Os eventos operacionais e comerciais sao exibidos por company_id.</p>
       </div>
     );
@@ -135,14 +135,14 @@ export default function AuditTimelineScreen({ companyId, companyName, onToast, a
 
   return (
     <div className="space-y-6">
-      <div className="hero-mesh overflow-hidden rounded-[32px] border border-slate-200/80 bg-white/90 px-6 py-7 shadow-soft">
+      <div className="hero-mesh overflow-hidden rounded-[32px] border border-slate-700/50 bg-slate-900/70 px-6 py-7 shadow-soft">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-violet-700 shadow-lg shadow-violet-900/25">
               <ShieldCheck size={22} className="text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-slate-900">Historico Operacional</h1>
+              <h1 className="text-xl font-bold text-slate-50">Historico Operacional</h1>
               <p className="mt-0.5 text-sm text-slate-500">
                 {allCompanies ? 'Modo global' : companyName || 'Empresa'} · Auditoria visual completa
               </p>
@@ -154,7 +154,7 @@ export default function AuditTimelineScreen({ companyId, companyName, onToast, a
               type="button"
               onClick={() => exportToCsv(events)}
               disabled={!events.length}
-              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-40"
+              className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm font-medium text-slate-200 shadow-sm transition-colors hover:bg-slate-800/40 disabled:opacity-40"
             >
               <Download size={14} />
               CSV
@@ -163,7 +163,7 @@ export default function AuditTimelineScreen({ companyId, companyName, onToast, a
               type="button"
               onClick={() => exportToExcel(events)}
               disabled={!events.length}
-              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-40"
+              className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm font-medium text-slate-200 shadow-sm transition-colors hover:bg-slate-800/40 disabled:opacity-40"
             >
               <FileSpreadsheet size={14} />
               Excel
@@ -182,8 +182,8 @@ export default function AuditTimelineScreen({ companyId, companyName, onToast, a
 
         <div className="mt-5 flex flex-wrap gap-3">
           {[
-            { label: 'Total', value: totalEvents, color: 'bg-slate-100 text-slate-700' },
-            { label: 'Financeiro', value: byGroup.financeiro || 0, color: 'bg-blue-50 text-blue-700' },
+            { label: 'Total', value: totalEvents, color: 'bg-slate-800/60 text-slate-200' },
+            { label: 'Financeiro', value: byGroup.financeiro || 0, color: 'bg-blue-900/20 text-blue-700' },
             { label: 'Cobranca', value: byGroup.cobranca || 0, color: 'bg-green-50 text-green-700' },
             { label: 'Automacoes', value: byGroup.automacao || 0, color: 'bg-violet-50 text-violet-700' },
             { label: 'Sistema', value: byGroup.sistema || 0, color: 'bg-orange-50 text-orange-700' },
@@ -213,11 +213,11 @@ export default function AuditTimelineScreen({ companyId, companyName, onToast, a
           ))}
         </div>
       ) : grouped.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-[32px] border border-dashed border-slate-200 bg-white py-20 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100">
+        <div className="flex flex-col items-center justify-center rounded-[32px] border border-dashed border-slate-700 bg-slate-900/60 py-20 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-800/60">
             <ClipboardList size={28} className="text-slate-400" />
           </div>
-          <h3 className="mt-4 text-base font-semibold text-slate-700">Nenhum evento encontrado</h3>
+          <h3 className="mt-4 text-base font-semibold text-slate-200">Nenhum evento encontrado</h3>
           <p className="mt-1.5 text-sm text-slate-400">Ajuste os filtros ou aguarde novas acoes registradas.</p>
         </div>
       ) : (
@@ -225,14 +225,14 @@ export default function AuditTimelineScreen({ companyId, companyName, onToast, a
           {grouped.map((group) => (
             <div key={group.date}>
               <div className="mb-4 flex items-center gap-3">
-                <div className="h-px flex-1 bg-slate-100" />
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500 shadow-sm">
+                <div className="h-px flex-1 bg-slate-800/60" />
+                <span className="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-xs font-semibold text-slate-500 shadow-sm">
                   {group.label}
                   <span className="ml-2 text-slate-400">
                     ({group.events.length} evento{group.events.length !== 1 ? 's' : ''})
                   </span>
                 </span>
-                <div className="h-px flex-1 bg-slate-100" />
+                <div className="h-px flex-1 bg-slate-800/60" />
               </div>
 
               <div>

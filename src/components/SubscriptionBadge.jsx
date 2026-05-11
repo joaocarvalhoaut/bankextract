@@ -4,7 +4,7 @@ const DAY_IN_MS = 86400000;
 
 const statusTone = {
   active: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  trialing: 'border-blue-200 bg-blue-50 text-blue-700',
+  trialing: 'border-blue-700/40 bg-blue-900/20 text-blue-700',
   past_due: 'border-amber-200 bg-amber-50 text-amber-700',
   canceled: 'border-red-200 bg-red-50 text-red-700',
 };
@@ -23,7 +23,7 @@ export default function SubscriptionBadge({ subscription, onOpenPlans, compact =
   const status = String(subscription.status || 'trialing').toLowerCase();
 
   return (
-    <div className={`rounded-2xl border border-slate-200 bg-white/92 ${compact ? 'p-3' : 'p-4'} shadow-soft`}>
+    <div className={`rounded-2xl border border-slate-700 bg-slate-900/60/92 ${compact ? 'p-3' : 'p-4'} shadow-soft`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Plano atual</p>
@@ -32,7 +32,7 @@ export default function SubscriptionBadge({ subscription, onOpenPlans, compact =
               <Gem size={15} />
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-slate-950">{plan.name}</p>
+              <p className="truncate text-sm font-bold text-slate-50">{plan.name}</p>
               <p className="text-xs text-slate-500">{plan.subtitle}</p>
             </div>
           </div>
@@ -43,20 +43,20 @@ export default function SubscriptionBadge({ subscription, onOpenPlans, compact =
         </span>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
-        <div className="rounded-xl bg-slate-50 px-3 py-2">
-          <p className="font-semibold text-slate-900">{Number(plan.monthly_send_limit || 0).toLocaleString('pt-BR')}</p>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-300">
+        <div className="rounded-xl bg-slate-800/40 px-3 py-2">
+          <p className="font-semibold text-slate-50">{Number(plan.monthly_send_limit || 0).toLocaleString('pt-BR')}</p>
           <p>cobrancas/mes</p>
         </div>
-        <div className="rounded-xl bg-slate-50 px-3 py-2">
-          <p className="font-semibold text-slate-900">{subscription.remainingRealSends ?? 0}</p>
+        <div className="rounded-xl bg-slate-800/40 px-3 py-2">
+          <p className="font-semibold text-slate-50">{subscription.remainingRealSends ?? 0}</p>
           <p>restantes</p>
         </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {daysLeft !== null ? (
-          <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-medium text-slate-600">
+          <span className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-800/40 px-2.5 py-1 text-[10px] font-medium text-slate-300">
             <ShieldCheck size={12} />
             {daysLeft} dia(s) de trial
           </span>

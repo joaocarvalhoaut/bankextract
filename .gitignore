@@ -37,3 +37,6 @@ supabase/.temp/
 *.zip
 *.dmp
 vite.config.js.timestamp-*.mjs
+
+.vercel
+.env*.local
