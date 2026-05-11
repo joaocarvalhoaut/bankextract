@@ -500,27 +500,27 @@ export default function GoogleSheetsConfig({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="surface-elevated rounded-2xl bg-slate-900/70 px-4 py-4 shadow-sm ring-1 ring-slate-700/40">
-                <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Status</p>
-                <p className="text-slate-50 mt-2 text-sm font-semibold">{resolvedStatus.label}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="surface-elevated rounded-2xl bg-slate-900/70 px-3 py-3 shadow-sm ring-1 ring-slate-700/40">
+                <p className="text-slate-400 text-[9px] font-semibold uppercase tracking-[0.14em]">Status</p>
+                <p className="text-slate-50 mt-1.5 truncate text-xs font-semibold">{resolvedStatus.label}</p>
               </div>
-              <div className="surface-elevated rounded-2xl bg-slate-900/70 px-4 py-4 shadow-sm ring-1 ring-slate-700/40">
-                <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Email Google conectado</p>
+              <div className="surface-elevated rounded-2xl bg-slate-900/70 px-3 py-3 shadow-sm ring-1 ring-slate-700/40 min-w-0">
+                <p className="text-slate-400 text-[9px] font-semibold uppercase tracking-[0.14em]">Email Google</p>
                 <p
-                  title={resolvedGoogleEmail || 'Credencial tecnica do ambiente'}
-                  className="text-slate-50 mt-2 max-w-full truncate text-xs font-semibold"
+                  title={resolvedGoogleEmail || 'Credencial tecnica'}
+                  className="text-slate-50 mt-1.5 truncate text-xs font-semibold"
                 >
-                  {resolvedGoogleEmail || 'Credencial tecnica do ambiente'}
+                  {resolvedGoogleEmail || 'Credencial tecnica'}
                 </p>
               </div>
-              <div className="surface-elevated rounded-2xl bg-slate-900/70 px-4 py-4 shadow-sm ring-1 ring-slate-700/40">
-                <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Planilha selecionada</p>
-                <p className="text-slate-50 mt-2 truncate text-xs font-semibold">{resolvedSpreadsheetName}</p>
+              <div className="surface-elevated rounded-2xl bg-slate-900/70 px-3 py-3 shadow-sm ring-1 ring-slate-700/40 min-w-0">
+                <p className="text-slate-400 text-[9px] font-semibold uppercase tracking-[0.14em]">Planilha</p>
+                <p className="text-slate-50 mt-1.5 truncate text-xs font-semibold">{resolvedSpreadsheetName}</p>
               </div>
-              <div className="surface-elevated rounded-2xl bg-slate-900/70 px-4 py-4 shadow-sm ring-1 ring-slate-700/40">
-                <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Aba selecionada</p>
-                <p className="text-slate-50 mt-2 text-sm font-semibold">{resolvedSheetName}</p>
+              <div className="surface-elevated rounded-2xl bg-slate-900/70 px-3 py-3 shadow-sm ring-1 ring-slate-700/40 min-w-0">
+                <p className="text-slate-400 text-[9px] font-semibold uppercase tracking-[0.14em]">Aba</p>
+                <p className="text-slate-50 mt-1.5 truncate text-xs font-semibold">{resolvedSheetName}</p>
               </div>
             </div>
           </div>
@@ -536,48 +536,30 @@ export default function GoogleSheetsConfig({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className={`rounded-2xl px-4 py-4 shadow-sm ring-1 ring-inset ${syncToneClass}`}>
-                <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Ultima sincronizacao</p>
-                <p className="mt-2 text-sm font-semibold">{`${effectiveSyncHealthMeta.icon} ${syncMeta.label}`}</p>
-                <p className="mt-1 text-xs opacity-80">{formatDateTime(effectiveLastSync)}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className={`rounded-2xl px-3 py-3 shadow-sm ring-1 ring-inset ${syncToneClass}`}>
+                <p className="text-[9px] font-semibold uppercase tracking-[0.14em] opacity-70">Ultima sinc.</p>
+                <p className="mt-1.5 text-xs font-bold">{`${effectiveSyncHealthMeta.icon} ${syncMeta.label}`}</p>
+                <p className="mt-1 truncate text-[10px] opacity-60">{formatDateTime(effectiveLastSync)}</p>
               </div>
 
-              <div className="surface-elevated rounded-2xl bg-slate-900/70 px-4 py-4 shadow-sm ring-1 ring-slate-700/40">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-800/60 text-slate-200">
-                    <Database size={16} />
-                  </div>
-                  <div>
-                    <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Registros hoje</p>
-                    <p className="text-slate-50 mt-1 text-sm font-semibold leading-snug">{statusSnapshot?.records_today ?? googleMeta?.records_today ?? 0} registros</p>
-                  </div>
-                </div>
+              <div className="surface-elevated rounded-2xl bg-slate-900/70 px-3 py-3 shadow-sm ring-1 ring-slate-700/40">
+                <p className="text-slate-400 text-[9px] font-semibold uppercase tracking-[0.14em]">Registros hoje</p>
+                <p className="text-slate-50 mt-1.5 text-xs font-bold">
+                  {statusSnapshot?.records_today ?? googleMeta?.records_today ?? 0}
+                  <span className="ml-1 text-[10px] font-normal text-slate-400">registros</span>
+                </p>
               </div>
 
-              <div className="surface-elevated rounded-2xl bg-slate-900/70 px-4 py-4 shadow-sm ring-1 ring-slate-700/40">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-900/20 text-blue-700">
-                    <Clock3 size={16} />
-                  </div>
-                  <div>
-                    <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Ultima importacao</p>
-                    <p className="text-slate-50 mt-1 text-sm font-semibold leading-snug">{`${importMeta.icon} ${importMeta.label}`}</p>
-                    <p className="text-slate-400 mt-1 text-xs">{statusSnapshot?.last_import_file || 'Nenhuma importacao recente'}</p>
-                  </div>
-                </div>
+              <div className="surface-elevated rounded-2xl bg-slate-900/70 px-3 py-3 shadow-sm ring-1 ring-slate-700/40 min-w-0">
+                <p className="text-slate-400 text-[9px] font-semibold uppercase tracking-[0.14em]">Ultima import.</p>
+                <p className="text-slate-50 mt-1.5 text-xs font-bold">{`${importMeta.icon} ${importMeta.label}`}</p>
+                <p className="text-slate-400 mt-1 truncate text-[10px]">{statusSnapshot?.last_import_file || '—'}</p>
               </div>
 
-              <div className="surface-elevated rounded-2xl bg-slate-900/70 px-4 py-4 shadow-sm ring-1 ring-slate-700/40">
-                <div className="flex items-center gap-3">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${effectiveSyncHealthMeta.tone === 'success' ? 'bg-emerald-50 text-emerald-700' : effectiveSyncHealthMeta.tone === 'warning' ? 'bg-amber-50 text-amber-700' : effectiveSyncHealthMeta.tone === 'danger' ? 'bg-red-50 text-red-700' : 'bg-slate-800/60 text-slate-200'}`}>
-                    <Activity size={16} />
-                  </div>
-                  <div>
-                    <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Saude conexao</p>
-                    <p className="text-slate-50 mt-1 text-sm font-semibold leading-snug">{effectiveSyncHealthMeta.health}</p>
-                  </div>
-                </div>
+              <div className="surface-elevated rounded-2xl bg-slate-900/70 px-3 py-3 shadow-sm ring-1 ring-slate-700/40 min-w-0">
+                <p className="text-slate-400 text-[9px] font-semibold uppercase tracking-[0.14em]">Saude conexao</p>
+                <p className="text-slate-50 mt-1.5 truncate text-xs font-bold">{effectiveSyncHealthMeta.health}</p>
               </div>
             </div>
           </div>
