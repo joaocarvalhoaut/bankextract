@@ -11,12 +11,7 @@ export default function LoginScreen({ onSignIn, onSignUp, loading, error, onBack
   const handleSubmit = async (event) => {
     event.preventDefault();
     setLocalError('');
-
-    if (!email.trim() || !password.trim()) {
-      setLocalError('Informe e-mail e senha.');
-      return;
-    }
-
+    if (!email.trim() || !password.trim()) { setLocalError('Informe e-mail e senha.'); return; }
     try {
       if (mode === 'signin') {
         if (!onSignIn) throw new Error('Fluxo de login indisponivel no momento.');
@@ -26,20 +21,13 @@ export default function LoginScreen({ onSignIn, onSignUp, loading, error, onBack
         await onSignUp({ email: email.trim(), password });
       }
     } catch (submitError) {
-      if (import.meta.env.DEV) {
-        console.error('Erro ao enviar formulario de autenticacao:', submitError);
-      }
-      if (!error) {
-        setLocalError(submitError?.message || 'Erro ao entrar. Tente novamente.');
-      }
+      if (import.meta.env.DEV) console.error('Erro ao enviar formulario de autenticacao:', submitError);
+      if (!error) setLocalError(submitError?.message || 'Erro ao entrar. Tente novamente.');
     }
   };
 
   return (
-    <div
-      className="flex min-h-screen items-center justify-center px-4 py-10"
-      style={{ background: 'linear-gradient(160deg, #071120 0%, #0D1B2E 50%, #071120 100%)', position: 'relative', overflow: 'hidden' }}
-    >
+    <div className="flex min-h-screen items-center justify-center px-4 py-10" style={{ background: 'linear-gradient(160deg, #071120 0%, #0D1B2E 50%, #071120 100%)', position: 'relative', overflow: 'hidden' }}>
       <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" style={{ opacity: 0.045 }} xmlns="http://www.w3.org/2000/svg">
         <defs>
           <pattern id="lp-grid" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -64,49 +52,32 @@ export default function LoginScreen({ onSignIn, onSignUp, loading, error, onBack
           </div>
 
           <div className="mb-6 flex rounded-xl p-1" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <button type="button" onClick={() => setMode('signin')} className="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition" style={mode === 'signin' ? { background: 'linear-gradient(135deg, #005DFF, #0040CC)', color: '#fff', boxShadow: '0 2px 12px rgba(0,93,255,0.4)' } : { color: '#94A3B8' }}>
-              Entrar
-            </button>
-            <button type="button" onClick={() => setMode('signup')} className="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition" style={mode === 'signup' ? { background: 'linear-gradient(135deg, #005DFF, #0040CC)', color: '#fff', boxShadow: '0 2px 12px rgba(0,93,255,0.4)' } : { color: '#94A3B8' }}>
-              Criar conta
-            </button>
+            <button type="button" onClick={() => setMode('signin')} className="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition" style={mode === 'signin' ? { background: 'linear-gradient(135deg, #005DFF, #0040CC)', color: '#fff', boxShadow: '0 2px 12px rgba(0,93,255,0.4)' } : { color: '#94A3B8' }}>Entrar</button>
+            <button type="button" onClick={() => setMode('signup')} className="flex-1 rounded-lg px-3 py-2 text-sm font-medium transition" style={mode === 'signup' ? { background: 'linear-gradient(135deg, #005DFF, #0040CC)', color: '#fff', boxShadow: '0 2px 12px rgba(0,93,255,0.4)' } : { color: '#94A3B8' }}>Criar conta</button>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <label className="block">
-              <span className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-300">
-                <Mail size={14} className="text-blue-400" /> E-mail
-              </span>
+              <span className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-300"><Mail size={14} className="text-blue-400" /> E-mail</span>
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-xl px-4 py-3 text-sm text-white outline-none" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', colorScheme: 'dark' }} placeholder="voce@empresa.com" />
             </label>
-
             <label className="block">
-              <span className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-300">
-                <LockKeyhole size={14} className="text-blue-400" /> Senha
-              </span>
+              <span className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-300"><LockKeyhole size={14} className="text-blue-400" /> Senha</span>
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-xl px-4 py-3 text-sm text-white outline-none" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', colorScheme: 'dark' }} placeholder="Digite sua senha" />
             </label>
-
-            {localError ? (
-              <div className="rounded-xl px-4 py-3 text-sm text-red-300" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}>
-                {localError}
-              </div>
-            ) : null}
-
-            {error ? (
-              <div className="rounded-xl px-4 py-3 text-sm text-red-300" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}>
-                {error}
-              </div>
-            ) : null}
-
+            {localError ? <div className="rounded-xl px-4 py-3 text-sm text-red-300" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}>{localError}</div> : null}
+            {error ? <div className="rounded-xl px-4 py-3 text-sm text-red-300" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}>{error}</div> : null}
             <button type="submit" disabled={loading} className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50" style={{ background: loading ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg, #005DFF 0%, #14D8FF 100%)', boxShadow: loading ? 'none' : '0 4px 24px rgba(0,93,255,0.4)' }}>
               {loading ? (mode === 'signin' ? 'Entrando...' : 'Criando conta...') : mode === 'signin' ? 'Entrar na plataforma' : 'Criar conta'}
             </button>
           </form>
 
-          <p className="mt-6 text-center text-[11px] text-slate-500">
-            NC Finance by NC HUB &middot; Gestao Financeira Inteligente
-          </p>
+          <p className="mt-6 text-center text-[11px] text-slate-500">NC Finance by NC HUB &middot; Gestao Financeira Inteligente</p>
+          <div className="mt-3 flex items-center justify-center gap-3 text-[11px] text-slate-500">
+            <a href="/privacidade" className="hover:text-cyan-300">Privacidade</a>
+            <span>&middot;</span>
+            <a href="/termos" className="hover:text-cyan-300">Termos</a>
+          </div>
         </div>
       </div>
     </div>

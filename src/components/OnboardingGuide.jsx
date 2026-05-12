@@ -2,15 +2,16 @@ import { ArrowRight, CheckCircle2, CircleDashed, Eye, SkipForward, Sparkles } fr
 import { HELP_ARTICLE_MAP } from '../constants/helpArticles';
 
 const STEP_ARTICLE_MAP = {
-  company_created: 'importar-carteira',
-  first_import: 'importar-carteira',
-  billing_configured: 'preparar-cobranca',
-  first_automation: 'executar-simulacao',
+  connect_whatsapp: 'integracoes-zapi',
+  import_clients: 'importar-carteira',
+  create_first_automation: 'preparar-cobranca',
+  send_first_charge: 'executar-simulacao',
+  configure_billing: 'planos-billing',
 };
 
 function statusTone(done, skipped) {
-  if (done) return 'border-emerald-200 bg-emerald-50/70';
-  if (skipped) return 'border-amber-200 bg-amber-50/70';
+  if (done) return 'border-cyan-500/20 bg-cyan-500/10';
+  if (skipped) return 'border-amber-500/20 bg-amber-500/10';
   return 'border-slate-700 bg-slate-900/60';
 }
 
@@ -35,7 +36,7 @@ export default function OnboardingGuide({
             Complete o basico para importar carteira, configurar cobranca e validar a operacao.
           </p>
         </div>
-        <span className="inline-flex items-center gap-2 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-violet-700">
+        <span className="inline-flex items-center gap-2 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300">
           <Sparkles size={14} />
           Onboarding rico
         </span>
@@ -50,7 +51,7 @@ export default function OnboardingGuide({
           return (
             <article key={step.id} className={`rounded-[24px] border p-4 shadow-soft transition ${statusTone(done, skipped)}`}>
               <div className="flex items-start gap-4">
-                <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl ${done ? 'bg-emerald-500 text-white' : skipped ? 'bg-amber-500 text-white' : 'bg-slate-800/60 text-slate-500'}`}>
+                <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl ${done ? 'bg-gradient-to-r from-blue-500 to-cyan-400 text-white' : skipped ? 'bg-amber-500 text-white' : 'bg-slate-800/60 text-slate-500'}`}>
                   {done ? <CheckCircle2 size={18} /> : <CircleDashed size={18} />}
                 </div>
 
@@ -58,9 +59,9 @@ export default function OnboardingGuide({
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-sm font-semibold text-slate-50">{step.title}</h3>
                     {done ? (
-                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">Concluido</span>
+                      <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[11px] font-semibold text-cyan-200">Concluido</span>
                     ) : skipped ? (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">Pulada</span>
+                      <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-200">Pulada</span>
                     ) : null}
                     {step.actionTab ? (
                       <span className="rounded-full border border-slate-700 bg-slate-800/40 px-2 py-0.5 text-[11px] font-medium text-slate-500">
@@ -85,7 +86,7 @@ export default function OnboardingGuide({
                       <button
                         type="button"
                         onClick={() => onOpenArticle?.(article.id)}
-                        className="inline-flex items-center gap-2 rounded-xl border border-blue-700/40 bg-blue-900/20 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                        className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-500/15"
                       >
                         <Eye size={14} />
                         Ver guia
@@ -98,10 +99,10 @@ export default function OnboardingGuide({
                       disabled={!canMark || done || markingStepId === step.id}
                       className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition ${
                         done
-                          ? 'cursor-default border border-emerald-200 bg-emerald-50 text-emerald-700'
+                          ? 'cursor-default border border-cyan-500/20 bg-cyan-500/10 text-cyan-200'
                           : !canMark
                             ? 'cursor-not-allowed border border-slate-700 bg-slate-800/60 text-slate-400'
-                            : 'border border-emerald-200 bg-emerald-600 text-white hover:bg-emerald-700'
+                            : 'btn-brand border border-cyan-500/20 text-white'
                       }`}
                     >
                       {done ? 'Concluido' : markingStepId === step.id ? 'Marcando...' : 'Marcar como concluido'}
@@ -111,7 +112,7 @@ export default function OnboardingGuide({
                       <button
                         type="button"
                         onClick={() => onSkipStep?.(step)}
-                        className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+                        className="inline-flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-200 transition hover:bg-amber-500/15"
                       >
                         <SkipForward size={14} />
                         Pular etapa

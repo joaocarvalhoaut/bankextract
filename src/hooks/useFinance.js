@@ -580,7 +580,8 @@ Total Geral: 24.479,32`;
       } else {
         const importTimestamp = historyDate();
         const batchId = makeUuid();
-        const existingBoletos = new Set(activeRecords.map((row) => row.numeroBoleto));
+        // existingBoletos: apenas valores nao-vazios para evitar falsos positivos de deduplicacao.
+        const existingBoletos = new Set(activeRecords.map((row) => row.numeroBoleto).filter(Boolean));
         const historyEntry = {
           id: makeUuid(),
           company_id: activeCompanyId,
@@ -591,14 +592,20 @@ Total Geral: 24.479,32`;
           status: 'vencidos'
         };
         const newRows = selectedPreviewRows
-          .filter((row) => !row.numeroBoleto || !existingBoletos.has(row.numeroBoleto))
+          .filter((row) => {
+            // XLSX/CSV imports retornam snake_case (numero_boleto); PDF/OCR retornam camelCase (numeroBoleto).
+            // Aceita ambos para deduplicacao correta.
+            const boleto = row.numeroBoleto || row.numero_boleto || '';
+            return !boleto || !existingBoletos.has(boleto);
+          })
           .map((row) => ({
             ...row,
             id: makeUuid(),
             company_id: activeCompanyId,
             user_id: currentUserId,
             batchId,
-            numeroBoleto: row.numeroBoleto || `SN-${Date.now()}`,
+            // CORRECAO: row.numeroBoleto e undefined em imports XLSX/CSV — campo vem como numero_boleto (snake_case).
+            numeroBoleto: row.numeroBoleto || row.numero_boleto || row.documento || `SN-${Date.now()}`,
             importadoEm: importTimestamp
           }));
 
@@ -1244,6 +1251,11 @@ Total Geral: 24.479,32`;
         resultsMap[r.registro_id] = { ok: r.ok, error: r.error, mocked: r.mocked || false };
       });
       setWhatsappModal((prev) => (prev ? { ...prev, sending: false, results: resultsMap, mocked: data.mocked || false } : null));
+      if ((data.summary?.failed || 0) > 0 && (data.summary?.sent || 0) > 0) {
+        showMessage('aviso', `${data.summary.failed} cobranca(s) falharam no lote. Revise os erros por linha no modal.`);
+      } else if ((data.summary?.failed || 0) > 0 && (data.summary?.sent || 0) === 0) {
+        showMessage('erro', 'Nenhuma cobranca foi enviada. Revise os erros retornados no modal.');
+      }
       if ((data.summary?.sent || 0) > 0) {
         await incrementUsage(activeCompanyId, 'charges_month', data.summary.sent);
         try {

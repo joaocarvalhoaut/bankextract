@@ -1,54 +1,21 @@
-import { useEffect, useState } from 'react';
-import { Activity, BarChart3, Building2, Receipt, Users } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Activity, BarChart3 } from 'lucide-react';
 import PlanLimitNotice from '../components/PlanLimitNotice';
+import AnalyticsFiltersBar from '../components/analytics/AnalyticsFiltersBar';
+import AnalyticsMetricGrid from '../components/analytics/AnalyticsMetricGrid';
+import AnalyticsTimelineChart from '../components/analytics/AnalyticsTimelineChart';
+import OperationalAiPanel from '../components/analytics/OperationalAiPanel';
 import { checkFeatureAccess } from '../services/subscriptionService';
-import { getCompanyAnalytics } from '../services/analyticsService';
+import { getCompanyAnalytics, getOperationalAnalytics } from '../services/analyticsService';
 import { getUsageSummary } from '../services/usageService';
+import { getOperationalInsights } from '../services/aiOperationalService';
 import { formatCurrencyBRL } from '../utils/format';
 
-function MetricCard({ label, value, tone = 'slate', suffix = '' }) {
-  const palette = {
-    slate: 'text-slate-50 bg-slate-800/40',
-    emerald: 'text-emerald-700 bg-emerald-50',
-    blue: 'text-blue-700 bg-blue-900/20',
-    red: 'text-red-700 bg-red-50',
-  };
-
+function SummaryPill({ label, value }) {
   return (
-    <article className="rounded-[24px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <div className={`mt-3 inline-flex rounded-2xl px-4 py-3 ${palette[tone] || palette.slate}`}>
-        <p className="text-2xl font-bold">
-          {typeof value === 'number' ? formatCurrencyBRL(value) : value}
-          {suffix}
-        </p>
-      </div>
-    </article>
-  );
-}
-
-function AgingBars({ items = [] }) {
-  const max = Math.max(...items.map((item) => Number(item.value || 0)), 1);
-
-  return (
-    <div className="space-y-4">
-      {items.map((item) => (
-        <div key={item.label}>
-          <div className="mb-2 flex items-center justify-between text-xs">
-            <span className="font-semibold text-slate-200">{item.label}</span>
-            <span className="font-semibold text-slate-50">{formatCurrencyBRL(item.value || 0)}</span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-800/60">
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{
-                width: `${Math.max((Number(item.value || 0) / max) * 100, 4)}%`,
-                backgroundColor: item.color || '#10b981',
-              }}
-            />
-          </div>
-        </div>
-      ))}
+    <div className="rounded-2xl border border-slate-700 bg-slate-900/50 px-4 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</p>
+      <p className="mt-2 text-xl font-semibold text-slate-50">{value}</p>
     </div>
   );
 }
@@ -56,61 +23,87 @@ function AgingBars({ items = [] }) {
 export default function AnalyticsScreen({ companyId, companyName, onToast }) {
   const [loading, setLoading] = useState(false);
   const [analytics, setAnalytics] = useState(null);
+  const [operational, setOperational] = useState(null);
   const [advancedLocked, setAdvancedLocked] = useState(false);
   const [usageSummary, setUsageSummary] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiInsights, setAiInsights] = useState({ insights: [], risk_score: '', suggested_tones: [] });
+  const [filters, setFilters] = useState(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    const end = now.toISOString().slice(0, 10);
+    return { startDate: start, endDate: end };
+  });
 
-  const usageCards = [
-    usageSummary?.metrics?.charges_month,
-    usageSummary?.metrics?.imports_month,
-    usageSummary?.metrics?.automations_month,
-    usageSummary?.metrics?.users_count,
-  ].filter(Boolean);
+  const usageCards = useMemo(
+    () =>
+      [
+        usageSummary?.metrics?.charges_month,
+        usageSummary?.metrics?.imports_month,
+        usageSummary?.metrics?.automations_month,
+        usageSummary?.metrics?.users_count,
+        usageSummary?.metrics?.integrations_count,
+      ].filter(Boolean),
+    [usageSummary]
+  );
 
-  useEffect(() => {
-    let alive = true;
+  const load = useCallback(async () => {
+    if (!companyId) {
+      setAnalytics(null);
+      setOperational(null);
+      setUsageSummary(null);
+      setAiInsights({ insights: [], risk_score: '', suggested_tones: [] });
+      return;
+    }
 
-    const load = async () => {
-      if (!companyId) {
-        if (alive) setAnalytics(null);
-        return;
-      }
+    setLoading(true);
+    try {
+      const [analyticsResponse, usageResponse, operationalResponse] = await Promise.all([
+        getCompanyAnalytics(companyId),
+        getUsageSummary(companyId),
+        getOperationalAnalytics(companyId, filters),
+      ]);
 
-      setLoading(true);
+      setAnalytics(analyticsResponse);
+      setUsageSummary(usageResponse);
+      setOperational(operationalResponse);
+
+      setAiLoading(true);
       try {
-        const [analyticsResponse, usageResponse] = await Promise.all([
-          getCompanyAnalytics(companyId),
-          getUsageSummary(companyId),
-        ]);
-        if (alive) {
-          setAnalytics(analyticsResponse);
-          setUsageSummary(usageResponse);
-        }
+        const aiResponse = await getOperationalInsights(companyId, {
+          summary: operationalResponse?.summary || {},
+          aiContext: operationalResponse?.aiContext || {},
+          usageByCompany: operationalResponse?.usageByCompany || [],
+          timeline: operationalResponse?.timeline || [],
+        });
+        setAiInsights(aiResponse || { insights: [], risk_score: '', suggested_tones: [] });
       } catch (error) {
-        if (alive) {
-          setAnalytics(null);
-          setUsageSummary(null);
-        }
-        onToast?.('erro', error.message || 'Falha ao carregar analytics.');
+        setAiInsights({ insights: [], risk_score: '', suggested_tones: [] });
+        onToast?.('aviso', error.message || 'Nao foi possivel gerar insights de IA agora.');
       } finally {
-        if (alive) setLoading(false);
+        setAiLoading(false);
       }
-    };
+    } catch (error) {
+      setAnalytics(null);
+      setOperational(null);
+      setUsageSummary(null);
+      onToast?.('erro', error.message || 'Falha ao carregar analytics.');
+    } finally {
+      setLoading(false);
+    }
+  }, [companyId, filters, onToast]);
 
+  useEffect(() => {
     load();
-    return () => {
-      alive = false;
-    };
-  }, [companyId, onToast]);
+  }, [load]);
 
   useEffect(() => {
     let alive = true;
-
     const loadAccess = async () => {
       if (!companyId) {
         if (alive) setAdvancedLocked(false);
         return;
       }
-
       try {
         const access = await checkFeatureAccess(companyId, 'analytics');
         if (alive) setAdvancedLocked(!access.allowed);
@@ -118,7 +111,6 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
         if (alive) setAdvancedLocked(false);
       }
     };
-
     loadAccess();
     return () => {
       alive = false;
@@ -130,7 +122,7 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
       <div className="rounded-[32px] border border-dashed border-slate-700 bg-slate-900/60 p-12 text-center shadow-soft">
         <BarChart3 className="mx-auto mb-4 text-slate-300" size={30} />
         <h2 className="text-xl font-semibold text-slate-50">Selecione uma empresa para abrir o analytics</h2>
-        <p className="mt-2 text-sm text-slate-500">As metricas financeiras e operacionais sao calculadas por company_id.</p>
+        <p className="mt-2 text-sm text-slate-500">As leituras operacionais e comerciais sao calculadas por company_id.</p>
       </div>
     );
   }
@@ -141,9 +133,10 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
         <PlanLimitNotice
           type="info"
           title="Analytics avancado disponivel nos planos Pro e Business"
-          message="Voce continua vendo as metricas basicas da carteira. Recursos executivos e comparativos mais profundos ficam liberados nos planos superiores."
+          message="Voce continua vendo metricas essenciais. Leituras executivas mais profundas podem ser liberadas conforme o plano."
         />
       ) : null}
+
       {usageSummary?.highestAlert ? (
         <PlanLimitNotice
           type={usageSummary.highestAlert.level === 'warning' ? 'warning' : 'danger'}
@@ -151,37 +144,58 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
           message={usageSummary.highestAlert.message}
         />
       ) : null}
-      <section className="rounded-[30px] border border-slate-700 bg-slate-900/60 p-7 shadow-soft">
+
+      <section className="surface-card rounded-[30px] p-7 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Analytics interno</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-50">Leituras operacionais de {companyName || 'uma empresa ativa'}</h2>
-            <p className="mt-2 text-sm text-slate-500">
-              Acompanhe importacoes, recebiveis, simulacoes e sinais de cobranca sem depender de integracoes pagas.
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Analytics operacional e comercial</p>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-50">Leituras executivas de {companyName || 'uma empresa ativa'}</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Recovery rate, inadimplencia, uso por empresa, performance de automacoes e tracking real do WhatsApp.
             </p>
           </div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700">
+          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-4 py-2 text-xs font-semibold text-cyan-200">
             <Activity size={14} />
-            {loading ? 'Atualizando metricas...' : 'Atualizado com fallback seguro'}
+            {loading ? 'Atualizando leitura operacional...' : operational?.health?.message || 'Analytics pronto'}
           </div>
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {(analytics?.cards || []).map((card) => (
-          <MetricCard key={card.id} label={card.label} value={card.value} tone={card.tone} />
-        ))}
+      <AnalyticsFiltersBar filters={filters} onChange={setFilters} onRefresh={load} loading={loading} />
+
+      <AnalyticsMetricGrid cards={operational?.cards || []} />
+
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+        <article className="surface-card rounded-[28px] p-6 shadow-soft">
+          <div className="mb-5">
+            <h3 className="text-lg font-semibold text-slate-50">Evolucao mensal</h3>
+            <p className="text-sm text-slate-400">Linha do tempo de importacoes, envios e atividade financeira da empresa.</p>
+          </div>
+          <AnalyticsTimelineChart items={operational?.timeline || []} />
+        </article>
+
+        <article className="surface-card rounded-[28px] p-6 shadow-soft">
+          <div className="mb-5">
+            <h3 className="text-lg font-semibold text-slate-50">Saude operacional</h3>
+            <p className="text-sm text-slate-400">KPIs rapidos para acompanhar execucao real, leitura e risco operacional.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-3">
+            <SummaryPill label="Valor recuperado" value={formatCurrencyBRL(operational?.summary?.totalRecoveredValue || 0)} />
+            <SummaryPill label="Valor vencido" value={formatCurrencyBRL(operational?.summary?.overdueValue || 0)} />
+            <SummaryPill label="Taxa de leitura" value={`${operational?.summary?.totalWhatsapp ? Math.round(((operational.summary.readCount || 0) / Math.max(operational.summary.totalWhatsapp, 1)) * 100) : 0}%`} />
+            <SummaryPill label="Tempo medio ate leitura" value={`${operational?.summary?.avgReadMinutes || 0} min`} />
+          </div>
+        </article>
       </section>
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="surface-card rounded-[28px] p-6 shadow-soft">
         <div className="mb-5">
           <h3 className="text-lg font-semibold text-slate-50">Uso do plano no ciclo atual</h3>
-          <p className="text-sm text-slate-500">Medicao real por empresa para importacoes, cobrancas, automacoes e usuarios.</p>
+          <p className="text-sm text-slate-400">Medição multi-tenant por empresa para importações, cobranças, automações, usuários e integrações.</p>
         </div>
-
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           {usageCards.map((metric) => (
-            <article key={metric.key} className="rounded-2xl border border-slate-700 bg-slate-800/40 p-4">
+            <article key={metric.key} className="rounded-2xl border border-slate-700 bg-slate-900/50 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{metric.label}</p>
@@ -189,15 +203,15 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
                     {metric.used} / {metric.limit || 'sem limite'}
                   </p>
                 </div>
-                <div className="rounded-2xl bg-slate-900/60 px-3 py-2 text-right shadow-soft">
+                <div className="rounded-2xl bg-slate-950/60 px-3 py-2 text-right shadow-soft">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">% consumido</p>
                   <p className="mt-1 text-lg font-semibold text-slate-50">{metric.percent}%</p>
                 </div>
               </div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-800">
                 <div
                   className={`h-full rounded-full transition-all ${
-                    metric.percent >= 100 ? 'bg-red-500' : metric.percent >= 95 ? 'bg-orange-500' : metric.percent >= 80 ? 'bg-amber-500' : 'bg-emerald-500'
+                    metric.percent >= 100 ? 'bg-red-500' : metric.percent >= 95 ? 'bg-orange-500' : metric.percent >= 80 ? 'bg-amber-500' : 'bg-gradient-to-r from-blue-500 to-cyan-400'
                   }`}
                   style={{ width: `${Math.min(metric.percent, 100)}%` }}
                 />
@@ -211,43 +225,37 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-        <article className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <OperationalAiPanel
+        loading={aiLoading}
+        insights={aiInsights?.insights || []}
+        riskScore={aiInsights?.risk_score || ''}
+        tones={aiInsights?.suggested_tones || []}
+      />
+
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <article className="surface-card rounded-[28px] p-6 shadow-soft">
           <div className="mb-5">
-            <h3 className="text-lg font-semibold text-slate-50">Aging da carteira</h3>
-            <p className="text-sm text-slate-500">Visual rapido dos recebiveis por faixa de atraso.</p>
+            <h3 className="text-lg font-semibold text-slate-50">Resumo financeiro consolidado</h3>
+            <p className="text-sm text-slate-400">Leitura executiva da carteira e da recuperação no período.</p>
           </div>
-          <AgingBars items={analytics?.aging || []} />
+          <div className="grid grid-cols-2 gap-3">
+            <SummaryPill label="Em aberto" value={formatCurrencyBRL(analytics?.summary?.totalOpen || 0)} />
+            <SummaryPill label="Vencido" value={formatCurrencyBRL(analytics?.summary?.totalOverdue || 0)} />
+            <SummaryPill label="Recebido" value={formatCurrencyBRL(analytics?.summary?.totalReceived || 0)} />
+            <SummaryPill label="Importado no mes" value={formatCurrencyBRL(analytics?.summary?.totalImportedMonth || 0)} />
+          </div>
         </article>
 
-        <article className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+        <article className="surface-card rounded-[28px] p-6 shadow-soft">
           <div className="mb-5">
-            <h3 className="text-lg font-semibold text-slate-50">Indicadores SaaS</h3>
-            <p className="text-sm text-slate-500">Base interna para acompanhamento comercial e operacional.</p>
+            <h3 className="text-lg font-semibold text-slate-50">Base operacional</h3>
+            <p className="text-sm text-slate-400">Volume ativo de empresas, usuários e envios com leitura comercial.</p>
           </div>
-
-          <div className="grid grid-cols-1 gap-3">
-            <div className="rounded-2xl bg-slate-800/40 p-4">
-              <div className="flex items-center gap-2 text-slate-500">
-                <Building2 size={16} />
-                <span className="text-xs font-semibold uppercase tracking-[0.16em]">Empresas ativas</span>
-              </div>
-              <p className="mt-2 text-2xl font-bold text-slate-50">{analytics?.activeCompanies || 0}</p>
-            </div>
-            <div className="rounded-2xl bg-slate-800/40 p-4">
-              <div className="flex items-center gap-2 text-slate-500">
-                <Users size={16} />
-                <span className="text-xs font-semibold uppercase tracking-[0.16em]">Usuarios ativos</span>
-              </div>
-              <p className="mt-2 text-2xl font-bold text-slate-50">{analytics?.activeUsers || 0}</p>
-            </div>
-            <div className="rounded-2xl bg-slate-800/40 p-4">
-              <div className="flex items-center gap-2 text-slate-500">
-                <Receipt size={16} />
-                <span className="text-xs font-semibold uppercase tracking-[0.16em]">Cobrancas simuladas</span>
-              </div>
-              <p className="mt-2 text-2xl font-bold text-emerald-700">{analytics?.billing?.simulatedCharges || 0}</p>
-            </div>
+          <div className="grid grid-cols-2 gap-3">
+            <SummaryPill label="Empresas ativas" value={analytics?.activeCompanies || 0} />
+            <SummaryPill label="Usuarios ativos" value={analytics?.activeUsers || 0} />
+            <SummaryPill label="Cobrancas enviadas" value={analytics?.billing?.sentCharges || 0} />
+            <SummaryPill label="Falhas operacionais" value={analytics?.billing?.errors || 0} />
           </div>
         </article>
       </section>

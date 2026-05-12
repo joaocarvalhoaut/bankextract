@@ -1,28 +1,17 @@
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import {
+  buildAdminClient,
+  createRequestContext,
+  errorResponse,
+  jsonResponse,
+  logRuntime,
+  requireEnv,
+  successResponse,
+} from '../_shared/runtime.ts';
 
-type AdminClient = ReturnType<typeof createClient>;
-
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-}
+type AdminClient = ReturnType<typeof buildAdminClient>;
 
 function getEnv(name: string) {
   return String(Deno.env.get(name) || '').trim();
-}
-
-function requireEnv(name: string) {
-  const value = getEnv(name);
-  if (!value) throw new Error(`${name} nao configurado.`);
-  return value;
-}
-
-function buildAdminClient(): AdminClient {
-  return createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'));
 }
 
 function timingSafeEqual(a: string, b: string) {
@@ -76,10 +65,12 @@ async function verifyStripeSignature(rawBody: string, header: string | null) {
 
 function mapStripeStatus(value: string) {
   const normalized = String(value || '').toLowerCase();
-  if (normalized === 'trialing') return 'trialing';
+  if (normalized === 'trialing' || normalized === 'trial') return 'trialing';
   if (normalized === 'active') return 'active';
   if (normalized === 'past_due' || normalized === 'unpaid') return 'past_due';
-  if (normalized === 'canceled' || normalized === 'incomplete_expired') return 'canceled';
+  if (normalized === 'canceled') return 'canceled';
+  if (normalized === 'incomplete_expired' || normalized === 'expired') return 'expired';
+  if (normalized === 'blocked') return 'blocked';
   return 'trialing';
 }
 
@@ -93,6 +84,55 @@ async function findPlanByPriceId(admin: AdminClient, priceId: string | null) {
     .maybeSingle();
 
   return data || null;
+}
+
+async function upsertBillingEvent(
+  admin: AdminClient,
+  payload: {
+    companyId?: string | null;
+    subscriptionId?: string | null;
+    eventType: string;
+    status: 'pending' | 'processed' | 'failed' | 'duplicate' | 'retrying';
+    externalReference?: string | null;
+    source?: string;
+    metadata?: Record<string, unknown>;
+    rawPayload?: Record<string, unknown>;
+  },
+) {
+  try {
+    const { error } = await admin.from('billing_events').upsert({
+      company_id: payload.companyId || null,
+      subscription_id: payload.subscriptionId || null,
+      event_type: payload.eventType,
+      status: payload.status,
+      source: payload.source || 'stripe',
+      external_reference: payload.externalReference || null,
+      metadata: payload.metadata || {},
+      payload: payload.rawPayload || {},
+    }, {
+      onConflict: 'source,external_reference',
+    });
+
+    if (error) throw error;
+  } catch (error) {
+    console.warn('[stripe-webhook] billing_events unavailable', error instanceof Error ? error.message : error);
+  }
+}
+
+async function isDuplicateEvent(admin: AdminClient, eventId: string) {
+  try {
+    const { data } = await admin
+      .from('billing_events')
+      .select('id, status')
+      .eq('source', 'stripe')
+      .eq('external_reference', eventId)
+      .in('status', ['processed', 'duplicate'])
+      .maybeSingle();
+
+    return Boolean(data?.id);
+  } catch {
+    return false;
+  }
 }
 
 async function upsertSubscriptionFromStripe(admin: AdminClient, payload: {
@@ -178,17 +218,40 @@ async function upsertSubscriptionFromStripe(admin: AdminClient, payload: {
 }
 
 Deno.serve(async (req) => {
+  const ctx = createRequestContext(req, { module: 'stripe-webhook', action: 'webhook' });
+
   try {
     const rawBody = await req.text();
     await verifyStripeSignature(rawBody, req.headers.get('Stripe-Signature'));
-    const event = JSON.parse(rawBody);
-    const admin = buildAdminClient();
 
-    console.log('[STRIPE WEBHOOK]', event?.type);
+    const event = JSON.parse(rawBody || '{}');
+    const admin = buildAdminClient();
+    const eventId = String(event?.id || '').trim();
+    const eventType = String(event?.type || 'unknown');
+
+    ctx.action = eventType;
+
+    if (eventId && await isDuplicateEvent(admin, eventId)) {
+      await upsertBillingEvent(admin, {
+        eventType,
+        status: 'duplicate',
+        externalReference: eventId,
+        rawPayload: event,
+      });
+      logRuntime(ctx, { status: 'warning', metadata: { duplicate: true, event_id: eventId } });
+      return successResponse(ctx, { duplicate: true, event_id: eventId });
+    }
+
+    await upsertBillingEvent(admin, {
+      eventType,
+      status: 'pending',
+      externalReference: eventId,
+      rawPayload: event,
+    });
 
     if (event?.type === 'checkout.session.completed') {
       const session = event?.data?.object || {};
-      await upsertSubscriptionFromStripe(admin, {
+      const synced = await upsertSubscriptionFromStripe(admin, {
         companyId: session?.metadata?.company_id || null,
         stripeCustomerId: session?.customer || null,
         stripeCheckoutSessionId: session?.id || null,
@@ -197,6 +260,16 @@ Deno.serve(async (req) => {
         metadata: {
           checkout_completed: true,
         },
+      });
+
+      await upsertBillingEvent(admin, {
+        companyId: session?.metadata?.company_id || null,
+        subscriptionId: synced?.id || null,
+        eventType,
+        status: 'processed',
+        externalReference: eventId,
+        metadata: { phase: 'checkout_completed' },
+        rawPayload: event,
       });
     }
 
@@ -208,7 +281,7 @@ Deno.serve(async (req) => {
       const subscription = event?.data?.object || {};
       const priceId = subscription?.items?.data?.[0]?.price?.id || null;
       const plan = await findPlanByPriceId(admin, priceId);
-      await upsertSubscriptionFromStripe(admin, {
+      const synced = await upsertSubscriptionFromStripe(admin, {
         companyId: subscription?.metadata?.company_id || null,
         stripeCustomerId: subscription?.customer || null,
         stripeSubscriptionId: subscription?.id || null,
@@ -223,11 +296,21 @@ Deno.serve(async (req) => {
           stripe_event_type: event?.type,
         },
       });
+
+      await upsertBillingEvent(admin, {
+        companyId: subscription?.metadata?.company_id || null,
+        subscriptionId: synced?.id || null,
+        eventType,
+        status: 'processed',
+        externalReference: eventId,
+        metadata: { phase: 'subscription_sync' },
+        rawPayload: event,
+      });
     }
 
     if (event?.type === 'invoice.payment_failed') {
       const invoice = event?.data?.object || {};
-      await upsertSubscriptionFromStripe(admin, {
+      const synced = await upsertSubscriptionFromStripe(admin, {
         companyId: invoice?.metadata?.company_id || null,
         stripeCustomerId: invoice?.customer || null,
         stripeSubscriptionId: invoice?.subscription || null,
@@ -236,11 +319,21 @@ Deno.serve(async (req) => {
           invoice_payment_failed: true,
         },
       });
+
+      await upsertBillingEvent(admin, {
+        companyId: invoice?.metadata?.company_id || null,
+        subscriptionId: synced?.id || null,
+        eventType,
+        status: 'processed',
+        externalReference: eventId,
+        metadata: { phase: 'payment_failed' },
+        rawPayload: event,
+      });
     }
 
     if (event?.type === 'invoice.paid') {
       const invoice = event?.data?.object || {};
-      await upsertSubscriptionFromStripe(admin, {
+      const synced = await upsertSubscriptionFromStripe(admin, {
         companyId: invoice?.metadata?.company_id || null,
         stripeCustomerId: invoice?.customer || null,
         stripeSubscriptionId: invoice?.subscription || null,
@@ -249,17 +342,24 @@ Deno.serve(async (req) => {
           invoice_paid: true,
         },
       });
+
+      await upsertBillingEvent(admin, {
+        companyId: invoice?.metadata?.company_id || null,
+        subscriptionId: synced?.id || null,
+        eventType,
+        status: 'processed',
+        externalReference: eventId,
+        metadata: { phase: 'invoice_paid' },
+        rawPayload: event,
+      });
     }
 
-    return jsonResponse({ ok: true });
+    logRuntime(ctx, { metadata: { event_id: eventId, event_type: eventType } });
+    return successResponse(ctx, { event_id: eventId, event_type: eventType });
   } catch (error) {
-    console.error('[stripe-webhook] erro', error);
-    return jsonResponse(
-      {
-        ok: false,
-        error: error instanceof Error ? error.message : 'Erro interno no webhook Stripe.',
-      },
-      400,
-    );
+    return errorResponse(ctx, error, {
+      status: 400,
+      code: 'STRIPE_WEBHOOK_FAILED',
+    });
   }
 });

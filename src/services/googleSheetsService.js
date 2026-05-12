@@ -1,5 +1,5 @@
 /**
- * BankExtract Pro - Google Sheets Service (Frontend)
+ * NC Finance - Google Sheets Service (Frontend)
  *
  * IMPORTANTE: Este servico nunca armazena ou expoe credenciais do Google.
  * Toda autenticacao com o Google continua acontecendo nas Edge Functions.

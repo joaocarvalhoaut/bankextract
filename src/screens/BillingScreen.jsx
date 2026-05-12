@@ -17,6 +17,11 @@ const toNoticeType = (level) => (level === 'warning' ? 'warning' : 'danger');
 const toMeterStatus = (percent) => (percent >= 95 ? 'danger' : percent >= 80 ? 'warning' : 'ok');
 
 const STATUS_META = {
+  trial: {
+    label: 'Trial ativo',
+    badge: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200',
+    description: 'A empresa esta operando em periodo de trial com 7 dias de uso comercial.',
+  },
   trialing: {
     label: 'Trial ativo',
     badge: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200',
@@ -36,6 +41,16 @@ const STATUS_META = {
     label: 'Assinatura cancelada',
     badge: 'border-red-500/30 bg-red-500/10 text-red-100',
     description: 'A assinatura foi cancelada e pode exigir reativacao para continuar usando limites pagos.',
+  },
+  expired: {
+    label: 'Assinatura expirada',
+    badge: 'border-red-500/30 bg-red-500/10 text-red-100',
+    description: 'O periodo contratado expirou. Reative a assinatura para recuperar acesso completo.',
+  },
+  blocked: {
+    label: 'Conta bloqueada',
+    badge: 'border-red-500/30 bg-red-500/10 text-red-100',
+    description: 'A conta esta bloqueada para novos envios ate regularizacao comercial.',
   },
 };
 
@@ -131,7 +146,7 @@ export default function BillingScreen({
     {
       label: 'Status comercial',
       value: statusMeta.label,
-      sub: billing?.status === 'trialing' ? `${trialDays} dia(s) restantes` : 'Stripe sincronizado com Supabase',
+      sub: ['trialing', 'trial'].includes(billing?.status) ? `${trialDays} dia(s) restantes` : 'Stripe sincronizado com Supabase',
       tone: 'text-blue-100',
       icon: ShieldCheck,
     },
@@ -315,7 +330,7 @@ export default function BillingScreen({
                   Trial e periodo faturado
                 </div>
                 <p className="mt-2 text-sm text-slate-300">
-                  Trial restante: {billing?.status === 'trialing' ? `${trialDays} dia(s)` : 'Nao aplicavel'}
+                  Trial restante: {['trialing', 'trial'].includes(billing?.status) ? `${trialDays} dia(s)` : 'Nao aplicavel'}
                 </p>
                 <p className="mt-1 text-xs text-slate-400">
                   Periodo atual ate {formatDateTime(billing?.currentPeriodEnd)}

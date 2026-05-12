@@ -1,33 +1,59 @@
+import { createScopedLogger } from './loggerService';
 import { hasSupabaseConfig, supabase } from './supabaseClient';
 
 const STORAGE_KEY = 'bankextract.onboarding.progress';
+const logger = createScopedLogger('onboarding');
 
 const defaultSteps = [
   {
-    id: 'company_created',
-    title: 'Criar ou selecionar empresa',
-    description: 'Defina a empresa que vai operar a carteira financeira dentro do NC Finance.',
-    actionTab: 'configuracoes',
+    id: 'connect_whatsapp',
+    title: 'Conectar WhatsApp',
+    description: 'Ative a integracao Z-API para permitir envio real, QR Code e tracking da cobranca.',
+    actionTab: 'integracoes',
+    helpArticleId: 'integracoes-zapi',
+    metricLabel: 'WhatsApp pronto',
   },
   {
-    id: 'first_import',
-    title: 'Importar primeiro arquivo',
-    description: 'Envie a primeira planilha ou documento para popular a carteira e o historico.',
+    id: 'import_clients',
+    title: 'Importar clientes',
+    description: 'Traga a primeira carteira para habilitar analytics, cobranca e governanca comercial.',
     actionTab: 'importacao',
+    helpArticleId: 'importar-carteira',
+    metricLabel: 'Carteira importada',
   },
   {
-    id: 'billing_configured',
-    title: 'Configurar cobranca',
-    description: 'Revise regras, templates, integracoes e parametros da cobranca automatica.',
+    id: 'create_first_automation',
+    title: 'Criar primeira automacao',
+    description: 'Configure a base da regua para escalar cobranca com menos operacao manual.',
     actionTab: 'automacoes',
+    helpArticleId: 'preparar-cobranca',
+    metricLabel: 'Regua configurada',
   },
   {
-    id: 'first_automation',
-    title: 'Executar primeira automacao ou simulacao',
-    description: 'Rode a primeira simulacao assistida para validar o fluxo sem envio real.',
-    actionTab: 'central-cobranca',
+    id: 'send_first_charge',
+    title: 'Enviar primeira cobranca',
+    description: 'Execute o primeiro envio ou simulacao para validar o fluxo ponta a ponta.',
+    actionTab: 'cobrancas',
+    helpArticleId: 'executar-simulacao',
+    metricLabel: 'Primeiro envio',
+  },
+  {
+    id: 'configure_billing',
+    title: 'Configurar billing',
+    description: 'Valide trial, assinatura e limite comercial para colocar a empresa em operacao real.',
+    actionTab: 'billing',
+    helpArticleId: 'planos-billing',
+    metricLabel: 'Billing validado',
   },
 ];
+
+const LEGACY_STEP_KEYS = {
+  connect_whatsapp: ['connect_whatsapp'],
+  import_clients: ['first_import', 'import_clients', 'primeiro-arquivo'],
+  create_first_automation: ['billing_configured', 'create_first_automation', 'configurar-cobranca'],
+  send_first_charge: ['first_automation', 'send_first_charge', 'primeira-simulacao'],
+  configure_billing: ['configure_billing'],
+};
 
 const readMockStore = () => {
   if (typeof window === 'undefined') return {};
@@ -50,7 +76,7 @@ const getMockProgressMap = (companyId) => {
   return readMockStore()[companyId] || {};
 };
 
-const buildProgressResponse = (steps = []) => {
+const buildProgressResponse = (steps = [], derived = {}) => {
   const completed = steps.filter((step) => step.done).length;
   const total = steps.length || 1;
   const progress = Math.round((completed / total) * 100);
@@ -61,6 +87,26 @@ const buildProgressResponse = (steps = []) => {
     total,
     nextStep: steps.find((step) => !step.done) || null,
     steps,
+    insights: [
+      {
+        id: 'onboarding-health',
+        label: 'Ativacao',
+        value: `${progress}%`,
+        tone: progress === 100 ? 'success' : progress >= 60 ? 'info' : 'warning',
+      },
+      {
+        id: 'whatsapp-status',
+        label: 'WhatsApp',
+        value: derived.hasWhatsapp ? 'Conectado' : 'Pendente',
+        tone: derived.hasWhatsapp ? 'success' : 'warning',
+      },
+      {
+        id: 'billing-status',
+        label: 'Billing',
+        value: derived.hasBilling ? 'Ativo' : 'Pendente',
+        tone: derived.hasBilling ? 'success' : 'warning',
+      },
+    ],
   };
 };
 
@@ -70,9 +116,12 @@ async function fetchDerivedStatus(companyId) {
   if (!companyId) {
     return {
       hasCompany: false,
+      hasWhatsapp: false,
       hasImport: false,
-      hasBillingConfig: false,
-      hasSimulation: false,
+      hasAutomation: false,
+      hasChargeSent: false,
+      hasBilling: false,
+      explicitMap: new Map(),
     };
   }
 
@@ -80,17 +129,24 @@ async function fetchDerivedStatus(companyId) {
     const mock = getMockProgressMap(companyId);
     return {
       hasCompany: true,
-      hasImport: safeBoolean(mock.first_import),
-      hasBillingConfig: safeBoolean(mock.billing_configured),
-      hasSimulation: safeBoolean(mock.first_automation),
+      hasWhatsapp: safeBoolean(mock.connect_whatsapp),
+      hasImport: safeBoolean(mock.import_clients),
+      hasAutomation: safeBoolean(mock.create_first_automation),
+      hasChargeSent: safeBoolean(mock.send_first_charge),
+      hasBilling: safeBoolean(mock.configure_billing),
+      explicitMap: new Map(),
     };
   }
 
+  logger.debug('derived_status_requested', { company_id: companyId });
+
   const [
     { count: importCount, error: importError },
-    { data: billingConfig, error: billingError },
-    { count: simulationCount, error: simulationError },
+    { data: automationConfig, error: automationError },
+    { count: chargeLogCount, error: chargeError },
     { data: explicitSteps, error: stepsError },
+    { data: subscriptionRow, error: subscriptionError },
+    { data: integrations, error: integrationError },
   ] = await Promise.all([
     supabase
       .from('importacoes')
@@ -109,37 +165,45 @@ async function fetchDerivedStatus(companyId) {
       .from('onboarding_progress')
       .select('step_key, completed')
       .eq('company_id', companyId),
+    supabase
+      .from('subscriptions')
+      .select('status, plan_code, trial_ends_at, stripe_customer_id, stripe_subscription_id')
+      .eq('company_id', companyId)
+      .maybeSingle(),
+    supabase
+      .from('company_integrations')
+      .select('provider, connected, phone_number')
+      .eq('company_id', companyId),
   ]);
 
-  if (importError) {
-    throw new Error(importError.message || 'Falha ao verificar importacoes do onboarding.');
-  }
-  if (billingError) {
-    throw new Error(billingError.message || 'Falha ao verificar configuracao de cobranca.');
-  }
-  if (simulationError) {
-    throw new Error(simulationError.message || 'Falha ao verificar simulacoes do onboarding.');
-  }
-  if (stepsError) {
-    throw new Error(stepsError.message || 'Falha ao verificar progresso do onboarding.');
-  }
+  if (importError) throw new Error(importError.message || 'Falha ao verificar importacoes do onboarding.');
+  if (automationError) throw new Error(automationError.message || 'Falha ao verificar automacoes do onboarding.');
+  if (chargeError) throw new Error(chargeError.message || 'Falha ao verificar cobrancas do onboarding.');
+  if (stepsError) throw new Error(stepsError.message || 'Falha ao verificar progresso do onboarding.');
+  if (subscriptionError) throw new Error(subscriptionError.message || 'Falha ao verificar billing do onboarding.');
+  if (integrationError) throw new Error(integrationError.message || 'Falha ao verificar integracoes do onboarding.');
 
   const explicitMap = new Map((explicitSteps || []).map((item) => [item.step_key, Boolean(item.completed)]));
-  const hasBillingConfig = Boolean(
-    billingConfig?.ativo ||
-    billingConfig?.hora_envio ||
-    billingConfig?.mensagem_template ||
-    billingConfig?.template_preventiva ||
-    billingConfig?.template_vencimento ||
-    billingConfig?.template_atraso
+  const hasAutomation = Boolean(
+    automationConfig?.ativo ||
+    automationConfig?.hora_envio ||
+    automationConfig?.mensagem_template ||
+    automationConfig?.template_preventiva ||
+    automationConfig?.template_vencimento ||
+    automationConfig?.template_atraso
   );
+  const hasWhatsapp = (integrations || []).some((item) => String(item.provider || '').toLowerCase() === 'zapi' && item.connected);
+  const hasBilling = Boolean(subscriptionRow?.status || subscriptionRow?.plan_code || subscriptionRow?.trial_ends_at);
 
   return {
     hasCompany: true,
+    hasWhatsapp,
     hasImport: (importCount || 0) > 0,
-    hasBillingConfig,
-    hasSimulation: (simulationCount || 0) > 0,
+    hasAutomation,
+    hasChargeSent: (chargeLogCount || 0) > 0,
+    hasBilling,
     explicitMap,
+    subscriptionStatus: subscriptionRow?.status || '',
   };
 }
 
@@ -151,28 +215,23 @@ export async function getOnboardingStatus(companyId) {
   const steps = defaultSteps.map((step) => {
     let done = false;
 
-    if (step.id === 'company_created') done = derived.hasCompany;
-    if (step.id === 'first_import') done = derived.hasImport;
-    if (step.id === 'billing_configured') done = derived.hasBillingConfig;
-    if (step.id === 'first_automation') done = derived.hasSimulation;
+    if (step.id === 'connect_whatsapp') done = derived.hasWhatsapp;
+    if (step.id === 'import_clients') done = derived.hasImport;
+    if (step.id === 'create_first_automation') done = derived.hasAutomation;
+    if (step.id === 'send_first_charge') done = derived.hasChargeSent;
+    if (step.id === 'configure_billing') done = derived.hasBilling;
 
     if (explicitMap.has(step.id)) {
       done = Boolean(explicitMap.get(step.id));
     }
 
-    // Backward compatibility for earlier local/manual keys.
-    const legacyKeyMap = {
-      company_created: 'empresa',
-      first_import: 'primeiro-arquivo',
-      billing_configured: 'configurar-cobranca',
-      first_automation: 'primeira-simulacao',
-    };
-    if (explicitMap.has(legacyKeyMap[step.id])) {
-      done = Boolean(explicitMap.get(legacyKeyMap[step.id]));
-    }
-
-    if (mockProgress[step.id] === true) {
-      done = true;
+    for (const legacyKey of LEGACY_STEP_KEYS[step.id] || []) {
+      if (explicitMap.has(legacyKey)) {
+        done = Boolean(explicitMap.get(legacyKey));
+      }
+      if (mockProgress[legacyKey] === true) {
+        done = true;
+      }
     }
 
     return {
@@ -181,13 +240,21 @@ export async function getOnboardingStatus(companyId) {
     };
   });
 
-  return buildProgressResponse(steps);
+  logger.info('status_loaded', {
+    company_id: companyId,
+    progress: steps.filter((step) => step.done).length,
+    total: steps.length,
+  });
+
+  return buildProgressResponse(steps, derived);
 }
 
 export async function markOnboardingStep(companyId, stepKey) {
   if (!companyId || !stepKey) {
     return false;
   }
+
+  logger.info('mark_step_requested', { company_id: companyId, step_key: stepKey });
 
   if (!hasSupabaseConfig || !supabase) {
     const store = readMockStore();
@@ -198,6 +265,7 @@ export async function markOnboardingStep(companyId, stepKey) {
       [`${stepKey}_completed_at`]: new Date().toISOString(),
     };
     writeMockStore(store);
+    logger.info('mark_step_succeeded_mock', { company_id: companyId, step_key: stepKey });
     return true;
   }
 
@@ -213,9 +281,11 @@ export async function markOnboardingStep(companyId, stepKey) {
     .upsert(payload, { onConflict: 'company_id,step_key' });
 
   if (error) {
+    logger.error('mark_step_failed', error, { company_id: companyId, step_key: stepKey });
     throw new Error(error.message || 'Falha ao registrar etapa do onboarding.');
   }
 
+  logger.info('mark_step_succeeded', { company_id: companyId, step_key: stepKey });
   return true;
 }
 

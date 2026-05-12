@@ -1,4 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createRequestContext, errorResponse, logRuntime, withTimeout } from '../_shared/runtime.ts';
 
 type AdminClient = ReturnType<typeof createClient>;
 
@@ -167,19 +168,25 @@ async function fetchMessageStatusFromZapi(config: {
 
   for (const candidate of candidates) {
     try {
-      const response = await fetch(candidate.url, {
-        method: candidate.method,
-        headers: {
-          'Client-Token': config.clientToken,
-          'Content-Type': 'application/json',
-        },
-        body: candidate.body
-          ? JSON.stringify({
-              ...candidate.body,
-              ...(phone ? { phone } : {}),
-            })
-          : undefined,
-      });
+      const response = await withTimeout(
+        (signal) =>
+          fetch(candidate.url, {
+            method: candidate.method,
+            signal,
+            headers: {
+              'Client-Token': config.clientToken,
+              'Content-Type': 'application/json',
+            },
+            body: candidate.body
+              ? JSON.stringify({
+                  ...candidate.body,
+                  ...(phone ? { phone } : {}),
+                })
+              : undefined,
+          }),
+        12000,
+        'Tempo limite excedido ao consultar status na Z-API.',
+      );
 
       const data = await response.json().catch(() => ({}));
 
@@ -336,6 +343,7 @@ async function syncStatuses() {
 }
 
 Deno.serve(async (req) => {
+  const runtime = createRequestContext(req, { module: 'sync-whatsapp-status', action: 'sync_status' });
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -344,6 +352,7 @@ Deno.serve(async (req) => {
     const isGet = req.method === 'GET';
     const body = isGet ? {} : await req.json().catch(() => ({}));
     const action = String((body as Record<string, unknown>)?.action || 'sync_status').trim();
+    runtime.action = action || 'sync_status';
 
     if (!['sync_status', 'sync'].includes(action)) {
       return jsonResponse({
@@ -353,6 +362,7 @@ Deno.serve(async (req) => {
       }, 400);
     }
 
+    logRuntime(runtime, { metadata: { method: req.method } });
     const result = await syncStatuses();
 
     return jsonResponse({
@@ -361,13 +371,9 @@ Deno.serve(async (req) => {
       ...result,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error('[SYNC STATUS ERROR]', { error: message });
-    return jsonResponse({
-      ok: false,
-      success: false,
-      action: 'sync_status',
-      error: message,
-    }, 500);
+    return errorResponse(runtime, error, {
+      status: 500,
+      code: 'SYNC_WHATSAPP_STATUS_FAILED',
+    });
   }
 });

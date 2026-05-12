@@ -1,4 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createRequestContext, errorResponse, logRuntime } from '../_shared/runtime.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -248,17 +249,25 @@ function getTrialDaysRemaining(subscription: SubscriptionRow, plan: PlanRow) {
 }
 
 Deno.serve(async (req) => {
+  const runtime = createRequestContext(req, { module: 'stripe-billing', action: 'request' });
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
     const body = await req.json().catch(() => ({}));
     const action = String(body?.action || '').trim();
+    runtime.action = action || 'request';
 
     if (!action) return jsonResponse({ success: false, error: 'Action obrigatoria.' }, 400);
 
     const user = await getAuthenticatedUser(req);
     const admin = buildAdminClient();
     const companyId = String(body?.companyId || body?.company_id || '').trim();
+    logRuntime(runtime, {
+      companyId,
+      metadata: {
+        action,
+      },
+    });
 
     if (!companyId) return jsonResponse({ success: false, error: 'companyId obrigatorio.' }, 400);
 
@@ -353,10 +362,9 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ success: false, error: 'Action nao suportada.' }, 400);
   } catch (error) {
-    console.error('[stripe-billing] erro interno:', error);
-    return jsonResponse(
-      { success: false, error: error instanceof Error ? error.message : 'Erro interno no billing Stripe.' },
-      500,
-    );
+    return errorResponse(runtime, error, {
+      status: 500,
+      code: 'STRIPE_BILLING_FAILED',
+    });
   }
 });

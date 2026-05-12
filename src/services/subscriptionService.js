@@ -11,6 +11,9 @@ import {
   getMonthlyUsage as getMonthlyUsageSnapshot,
   incrementUsage as incrementUsageMetric,
 } from './usageService';
+import { createScopedLogger } from './loggerService';
+
+const logger = createScopedLogger('billing-limits');
 
 const STORAGE_KEY = 'bankextract.subscription.mock';
 const DEFAULT_PERIOD_DAYS = 30;
@@ -135,6 +138,15 @@ const buildCompanyCommercialFields = (planCode) => {
   };
 };
 
+const normalizeSubscriptionStatus = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'trial') return 'trialing';
+  if (['trialing', 'active', 'past_due', 'canceled', 'expired', 'blocked'].includes(normalized)) {
+    return normalized;
+  }
+  return 'trialing';
+};
+
 const normalizePlanRecord = (record = {}) => {
   const planId = normalizePlanId(record.plan_code || record.code || record.id);
   const planMeta = getPlanMeta(planId);
@@ -217,7 +229,7 @@ const mergeSubscriptionWithPlan = (subscription, usage = null) => {
       limits_json: usageSnapshot.limits_json || planDbSeeds[planId]?.limits_json || {},
       features_json: usageSnapshot.features_json || planDbSeeds[planId]?.features_json || [],
     },
-    status: subscription?.status || 'trialing',
+    status: normalizeSubscriptionStatus(subscription?.status || 'trialing'),
     trialEndsAt: subscription?.trial_ends_at || null,
     currentPeriodStart: period.start.toISOString(),
     currentPeriodEnd: period.end.toISOString(),
@@ -255,7 +267,7 @@ const mergeSubscriptionWithPlan = (subscription, usage = null) => {
       companies_count: Number(usageSnapshot.company_count || 1),
     },
     trialDaysRemaining:
-      subscription?.status === 'trialing' && subscription?.trial_ends_at
+      normalizeSubscriptionStatus(subscription?.status) === 'trialing' && subscription?.trial_ends_at
         ? Math.max(0, Math.ceil((new Date(subscription.trial_ends_at).getTime() - Date.now()) / 86400000))
         : 0,
   };
@@ -294,6 +306,7 @@ async function getUsageCounter(companyId, subscription = null) {
 }
 
 export async function getPlans() {
+  logger.debug('plans_requested', {});
   if (!hasSupabaseConfig || !supabase) {
     return buildPlanCatalogForUi();
   }
@@ -390,6 +403,7 @@ export async function ensureTrialSubscription(companyId) {
 
 export async function getCompanySubscription(companyId) {
   if (!companyId) return null;
+  logger.debug('subscription_requested', { company_id: companyId });
 
   const subscription = await ensureTrialSubscription(companyId);
   const usage = await getUsageCounter(companyId, subscription);
@@ -400,6 +414,7 @@ export async function updateCompanyPlan(companyId, planCode) {
   if (!companyId) {
     throw new Error('companyId obrigatorio para atualizar o plano.');
   }
+  logger.info('plan_update_requested', { company_id: companyId, plan_code: planCode });
 
   const normalizedPlan = normalizePlanId(planCode);
   const planMeta = getPlanMeta(normalizedPlan);
@@ -435,8 +450,11 @@ export async function updateCompanyPlan(companyId, planCode) {
 
   const { error } = await supabase.from('subscriptions').upsert(payload, { onConflict: 'company_id' });
   if (error) {
+    logger.error('plan_update_failed', error, { company_id: companyId, plan_code: normalizedPlan });
     throw new Error(error.message || 'Falha ao atualizar o plano da empresa.');
   }
+
+  logger.info('plan_update_succeeded', { company_id: companyId, plan_code: normalizedPlan });
 
   return {
     ...(await getCompanySubscription(companyId)),
@@ -474,6 +492,7 @@ export async function getUsageLimits(companyId) {
     extra_send_credits: extraCredits,
     used_real_sends: usedRealSends,
   });
+  const blockedBySubscription = ['blocked', 'expired'].includes(String(subscription.status || '').toLowerCase());
 
   return {
     ...subscription,
@@ -483,7 +502,8 @@ export async function getUsageLimits(companyId) {
     extra_send_credits: extraCredits,
     used_real_sends: usedRealSends,
     remaining_real_sends: remaining,
-    blocked_by_limit: remaining <= 0,
+    blocked_by_limit: remaining <= 0 || blockedBySubscription,
+    blocked_by_subscription: blockedBySubscription,
     usage_percent: getUsagePercent({
       monthly_send_limit: monthlyLimit,
       extra_send_credits: extraCredits,
@@ -495,6 +515,7 @@ export async function getUsageLimits(companyId) {
 export async function checkFeatureAccess(companyId, featureKey) {
   const subscription = await getCompanySubscription(companyId);
   const plan = subscription?.currentPlan || getPlanMeta('starter');
+  const normalizedStatus = String(subscription?.status || '').toLowerCase();
   const featureSet = new Set([
     ...(planDbSeeds[plan.id]?.features_json || []),
     ...(Array.isArray(plan.features_json) ? plan.features_json : []),
@@ -507,12 +528,13 @@ export async function checkFeatureAccess(companyId, featureKey) {
     advanced_reports: Boolean(plan.capabilities?.advanced_reports),
   };
 
-  const allowed = featureSet.has(featureKey) || capabilityMap[featureKey] === true;
+  const blockedByStatus = ['blocked', 'expired', 'canceled'].includes(normalizedStatus);
+  const allowed = !blockedByStatus && (featureSet.has(featureKey) || capabilityMap[featureKey] === true);
 
   return {
     allowed,
     plan: plan.id,
-    reason: allowed ? null : 'FEATURE_BLOCKED',
+    reason: allowed ? null : (blockedByStatus ? 'SUBSCRIPTION_INACTIVE' : 'FEATURE_BLOCKED'),
     upgradeTarget: plan.upgrade_target || null,
   };
 }

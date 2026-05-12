@@ -1,4 +1,8 @@
 import { supabase } from './supabaseClient';
+import { createScopedLogger } from './loggerService';
+import { withRetryMetadata } from './retryService';
+
+const logger = createScopedLogger('whatsapp-billing');
 
 const buildError = (err, fallback) => {
   if (err instanceof Error) return err;
@@ -130,6 +134,13 @@ export async function runBillingAutomationNow(companyId, options = {}) {
     throw new Error('Selecione uma empresa especifica para enviar as cobrancas.');
   }
 
+  if (!simulate) {
+    const gate = await checkSendPermission(companyId, 'automatic', 1);
+    if (gate?.allowed === false) {
+      throw new Error(gate.message || 'A assinatura da empresa nao permite envios automaticos reais agora.');
+    }
+  }
+
   const body = {
     action: 'run_now',
     companyId,
@@ -178,6 +189,13 @@ export async function sendSingleCharge(companyId, registroId, options = {}) {
     throw new Error('Nenhum titulo valido foi informado para envio individual.');
   }
 
+  if (!simulate) {
+    const gate = await checkSendPermission(companyId, 'manual', 1);
+    if (gate?.allowed === false) {
+      throw new Error(gate.message || 'A assinatura da empresa nao permite envios manuais reais agora.');
+    }
+  }
+
   const payload = {
     action: 'send_single_charge',
     companyId,
@@ -195,10 +213,19 @@ export async function sendSingleCharge(companyId, registroId, options = {}) {
     throw new Error('Supabase nao configurado.');
   }
 
+  logger.info('send_single_requested', {
+    company_id: companyId,
+    registro_id: registroId,
+    simulate,
+    force_resend: forceResend,
+    has_custom_message: Boolean(customMessage),
+  });
+
   const { data, error } = await supabase.functions.invoke('billing-automation', { body: payload });
   console.log('[SEND SINGLE CHARGE RESPONSE]', data, error);
 
   if (error) {
+    logger.error('send_single_failed_transport', error, { company_id: companyId, registro_id: registroId });
     throw buildError(error, 'Falha ao enviar a cobranca individual.');
   }
 
@@ -209,6 +236,13 @@ export async function sendSingleCharge(companyId, registroId, options = {}) {
     const errorResult = formatEdgeError(data, 'Falha ao enviar a cobranca individual.');
     errorResult.duplicate = data?.duplicate === true;
     errorResult.raw = data;
+    errorResult.retry = withRetryMetadata(errorResult, Number(data?.retry_count || 0));
+    logger.error('send_single_failed_response', errorResult, {
+      company_id: companyId,
+      registro_id: registroId,
+      duplicate: errorResult.duplicate,
+      retry: errorResult.retry,
+    });
     throw errorResult;
   }
 
@@ -216,9 +250,20 @@ export async function sendSingleCharge(companyId, registroId, options = {}) {
     const errorResult = formatEdgeError(data, 'Falha ao enviar a cobranca individual.');
     errorResult.duplicate = data?.duplicate === true;
     errorResult.raw = data;
+    errorResult.retry = withRetryMetadata(errorResult, Number(data?.retry_count || 0));
+    logger.error('send_single_failed_unknown', errorResult, {
+      company_id: companyId,
+      registro_id: registroId,
+      retry: errorResult.retry,
+    });
     throw errorResult;
   }
 
+  logger.info('send_single_succeeded', {
+    company_id: companyId,
+    registro_id: registroId,
+    simulated: data?.simulated === true,
+  });
   return data;
 }
 
@@ -294,6 +339,11 @@ export async function prepareManualCharge(companyId, registroId) {
 }
 
 export async function sendRealCharge(companyId, items = []) {
+  const gate = await checkSendPermission(companyId, 'batch_manual', Math.max(1, items.length || 1));
+  if (gate?.allowed === false) {
+    throw new Error(gate.message || 'A assinatura da empresa nao permite envio em lote real neste momento.');
+  }
+
   const data = await invokeBillingAutomation(
     {
       action: 'send_real',
@@ -514,3 +564,37 @@ export async function previewBillingTemplate(companyId, template, sample = {}) {
     'Falha ao testar o template da regua.'
   );
 }
+
+
+export default {
+  getBillingAutomationOverview,
+  runBillingAutomationNow,
+  sendSingleCharge,
+  reprocessBillingFailures,
+  syncBillingDrive,
+  syncBoletoDriveIntelligent,
+  getBoletoSyncReport,
+  previewChargePayload,
+  prepareManualCharge,
+  sendRealCharge,
+  syncBillingSheet,
+  getDriveConfig,
+  getBillingConfig,
+  saveBillingConfig,
+  getBillingRules,
+  saveBillingRules,
+  saveDriveConfig,
+  testDriveConnection,
+  getBillingCenter,
+  getBillingHistory,
+  getBillingInconsistencies,
+  getPlanCapabilities,
+  getUsageSummary,
+  checkSendPermission,
+  getRealSendChecklist,
+  simulateChargeBatch,
+  simulateChargeItem,
+  updateChargeStatus,
+  updateFinancialPhone,
+  previewBillingTemplate,
+};

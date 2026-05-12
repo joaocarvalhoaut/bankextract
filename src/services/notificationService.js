@@ -1,6 +1,9 @@
 import { getPlanMeta, normalizePlanId } from '../constants/plans';
 import { createAuditEvent } from './auditTimelineService';
+import { createScopedLogger } from './loggerService';
 import { hasSupabaseConfig, supabase } from './supabaseClient';
+
+const logger = createScopedLogger('notifications');
 
 const STORAGE_KEY = 'bankextract.notifications.mock';
 const NOTIFICATION_EVENT = 'bankextract:notifications-changed';
@@ -23,7 +26,6 @@ const makeUuid = () => {
   if (globalThis.crypto?.randomUUID) {
     return globalThis.crypto.randomUUID();
   }
-
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
     const random = Math.floor(Math.random() * 16);
     const value = char === 'x' ? random : (random & 0x3) | 0x8;
@@ -33,7 +35,6 @@ const makeUuid = () => {
 
 const readMockStore = () => {
   if (typeof window === 'undefined') return [];
-
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
@@ -88,7 +89,6 @@ const buildPayload = (companyId, payload = {}) =>
 
 export function subscribeNotifications(callback) {
   if (typeof window === 'undefined') return () => {};
-
   const handler = (event) => callback?.(event.detail || {});
   window.addEventListener(NOTIFICATION_EVENT, handler);
   return () => window.removeEventListener(NOTIFICATION_EVENT, handler);
@@ -96,6 +96,7 @@ export function subscribeNotifications(callback) {
 
 export async function getNotifications(companyId, options = {}) {
   if (!companyId) return [];
+  logger.debug('list_requested', { company_id: companyId, options });
 
   if (!hasSupabaseConfig || !supabase) {
     const items = sortNotifications(readMockStore())
@@ -117,10 +118,7 @@ export async function getNotifications(companyId, options = {}) {
   }
 
   const { data, error } = await query;
-
-  if (error) {
-    throw new Error(error.message || 'Falha ao carregar notificacoes.');
-  }
+  if (error) throw new Error(error.message || 'Falha ao carregar notificacoes.');
 
   return (Array.isArray(data) ? data : [])
     .map(normalizeNotification)
@@ -140,15 +138,17 @@ export async function getUnreadCount(companyId) {
     .eq('company_id', companyId)
     .eq('status', 'unread');
 
-  if (error) {
-    throw new Error(error.message || 'Falha ao contar notificacoes nao lidas.');
-  }
-
+  if (error) throw new Error(error.message || 'Falha ao contar notificacoes nao lidas.');
   return Number(count || 0);
 }
 
 export async function createNotification(companyId, payload = {}) {
   if (!companyId) return null;
+  logger.info('create_requested', {
+    company_id: companyId,
+    type: payload.type || 'info',
+    severity: payload.severity || 'info',
+  });
 
   const nextItem = buildPayload(companyId, payload);
   const dedupeKey = nextItem.metadata?.dedupe_key;
@@ -191,9 +191,7 @@ export async function createNotification(companyId, payload = {}) {
       .limit(1)
       .maybeSingle();
 
-    if (existing) {
-      return normalizeNotification(existing);
-    }
+    if (existing) return normalizeNotification(existing);
   }
 
   const { data, error } = await supabase.from('notifications').insert({
@@ -208,10 +206,12 @@ export async function createNotification(companyId, payload = {}) {
   }).select('*').single();
 
   if (error) {
+    logger.error('create_failed', error, { company_id: companyId, type: nextItem.type });
     throw new Error(error.message || 'Falha ao criar notificacao.');
   }
 
   const created = normalizeNotification(data);
+  logger.info('create_succeeded', { company_id: companyId, notification_id: created.id, type: created.type });
   emitNotificationsChanged({ companyId, notificationId: created.id, action: 'created' });
   try {
     await createAuditEvent(companyId, {
@@ -235,16 +235,13 @@ export async function createNotification(companyId, payload = {}) {
 
 export async function markAsRead(notificationId) {
   if (!notificationId) return null;
+  logger.debug('mark_read_requested', { notification_id: notificationId });
 
   if (!hasSupabaseConfig || !supabase) {
     const items = readMockStore();
     const nextItems = items.map((item) =>
       item.id === notificationId
-        ? {
-            ...item,
-            status: 'read',
-            read_at: item.read_at || new Date().toISOString(),
-          }
+        ? { ...item, status: 'read', read_at: item.read_at || new Date().toISOString() }
         : item
     );
     writeMockStore(nextItems);
@@ -258,9 +255,7 @@ export async function markAsRead(notificationId) {
           entity_id: notificationId,
           title: 'Notificacao lida',
           description: current.title,
-          metadata: {
-            notification_title: current.title,
-          },
+          metadata: { notification_title: current.title },
           severity: 'info',
         });
       } catch {
@@ -272,15 +267,13 @@ export async function markAsRead(notificationId) {
 
   const { data, error } = await supabase
     .from('notifications')
-    .update({
-      status: 'read',
-      read_at: new Date().toISOString(),
-    })
+    .update({ status: 'read', read_at: new Date().toISOString() })
     .eq('id', notificationId)
     .select('*')
     .single();
 
   if (error) {
+    logger.error('mark_read_failed', error, { notification_id: notificationId });
     throw new Error(error.message || 'Falha ao marcar notificacao como lida.');
   }
 
@@ -293,9 +286,7 @@ export async function markAsRead(notificationId) {
       entity_id: notificationId,
       title: 'Notificacao lida',
       description: updated.title,
-      metadata: {
-        notification_title: updated.title,
-      },
+      metadata: { notification_title: updated.title },
       severity: 'info',
     });
   } catch {
@@ -306,6 +297,7 @@ export async function markAsRead(notificationId) {
 
 export async function markAllAsRead(companyId) {
   if (!companyId) return 0;
+  logger.debug('mark_all_read_requested', { company_id: companyId });
 
   if (!hasSupabaseConfig || !supabase) {
     const now = new Date().toISOString();
@@ -323,15 +315,13 @@ export async function markAllAsRead(companyId) {
 
   const { data, error } = await supabase
     .from('notifications')
-    .update({
-      status: 'read',
-      read_at: new Date().toISOString(),
-    })
+    .update({ status: 'read', read_at: new Date().toISOString() })
     .eq('company_id', companyId)
     .eq('status', 'unread')
     .select('id');
 
   if (error) {
+    logger.error('mark_all_read_failed', error, { company_id: companyId });
     throw new Error(error.message || 'Falha ao marcar notificacoes como lidas.');
   }
 

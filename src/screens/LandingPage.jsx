@@ -451,6 +451,17 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
             </div>
           </div>
         </section>
+
+        <footer className="rounded-[28px] border border-cyan-500/10 bg-slate-900/50 px-6 py-5 text-sm text-slate-400">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <p>NC Finance by NC HUB &middot; Operacao, cobranca e automacao empresarial.</p>
+            <div className="flex flex-wrap items-center gap-4">
+              <a href="/privacidade" className="hover:text-cyan-300">Privacidade</a>
+              <a href="/termos" className="hover:text-cyan-300">Termos</a>
+              <a href="mailto:contato@nchub.com.br" className="hover:text-cyan-300">Contato</a>
+            </div>
+          </div>
+        </footer>
       </div>
     </div>
   );

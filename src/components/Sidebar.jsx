@@ -36,8 +36,10 @@ const items = [
   { id: 'automacoes', label: 'Automacoes', icon: SlidersHorizontal, group: 'configuracoes' },
   { id: 'integracoes', label: 'Integracoes', icon: Link2, group: 'configuracoes' },
   { id: 'configuracoes', label: 'Configuracoes', icon: Cog, group: 'configuracoes' },
-  { id: 'planos', label: 'Planos', icon: BriefcaseBusiness, group: 'admin', adminOnly: true },
-  { id: 'billing', label: 'Billing', icon: CreditCard, group: 'admin', adminOnly: true },
+  // billingAccess: visivel para owner, admin da empresa e system admin.
+  // adminOnly: reservado exclusivamente ao system admin da plataforma.
+  { id: 'planos', label: 'Planos', icon: BriefcaseBusiness, group: 'admin', billingAccess: true },
+  { id: 'billing', label: 'Billing', icon: CreditCard, group: 'admin', billingAccess: true },
   { id: 'admin-saas', label: 'Admin SaaS', icon: Settings2, group: 'admin', adminOnly: true },
 ];
 
@@ -74,6 +76,7 @@ export default function Sidebar({
   stats,
   billingExecutionMode = 'simulate',
   isSystemAdmin = false,
+  canAccessBilling = false,
   onOpenCompanyModal,
   onOpenPlans,
 }) {
@@ -216,7 +219,10 @@ export default function Sidebar({
 
         {groups.map((group) => {
           const groupItems = items.filter(
-            (item) => item.group === group && (!item.adminOnly || isSystemAdmin)
+            (item) =>
+              item.group === group &&
+              (!item.adminOnly || isSystemAdmin) &&
+              (!item.billingAccess || canAccessBilling)
           );
           if (!groupItems.length) return null;
 
@@ -245,6 +251,27 @@ export default function Sidebar({
           );
         })}
       </div>
+
+        {/* ── Rodapé LGPD ─────────────────────────────────────── */}
+        <div className="mt-auto border-t border-slate-700/40 px-4 pb-4 pt-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab('privacy')}
+              className="text-[10px] text-slate-500 transition hover:text-slate-300"
+            >
+              Privacidade
+            </button>
+            <span className="text-slate-700 text-[10px]">·</span>
+            <button
+              type="button"
+              onClick={() => setActiveTab('terms')}
+              className="text-[10px] text-slate-500 transition hover:text-slate-300"
+            >
+              Termos
+            </button>
+          </div>
+        </div>
     </aside>
   );
 }

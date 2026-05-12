@@ -1,4 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createRequestContext, errorResponse, logRuntime, withTimeout } from '../_shared/runtime.ts';
 
 type AdminClient = ReturnType<typeof createClient>;
 
@@ -1910,6 +1911,20 @@ async function sendRealChargesData(
 
     const numeroBoletoEfetivo = getNumeroBoletoEfetivo((record || item) as Partial<FinancialRow> & Record<string, unknown>);
     const clienteEfetivo = getClienteEfetivo((record || item) as Partial<FinancialRow> & Record<string, unknown>) || String(item?.cliente || item?.cliente_nome || 'Cliente');
+    const dispatchType = 'whatsapp_manual_real';
+    const dispatch = await reserveAutomationDispatch(supabaseAdmin, {
+      companyId,
+      customerId: String(record?.cliente_numero || item?.cliente_numero || registroId || normalizedPhone || ''),
+      dueDate: String(record?.data_vencimento || item?.vencimento || ''),
+      amount: Number(record?.valor || item?.valor || 0),
+      template: String(message || 'manual_message'),
+      dispatchType,
+      body: {
+        registro_id: registroId,
+        documento,
+        telefone: normalizedPhone || phoneRaw || '',
+      },
+    });
 
     const logBase = {
       financeiro_id: String(record?.id || registroId || '').trim() || null,
@@ -1928,6 +1943,23 @@ async function sendRealChargesData(
       arquivo_encontrado: temBoletoEncontrado((record || item) as Partial<FinancialRow> & Record<string, unknown>),
       drive_file_id: String(item?.drive_file_id || '') || null,
     };
+
+    if (dispatch.duplicate && !Boolean(item?.force_resend)) {
+      await finalizeAutomationDispatch(supabaseAdmin, {
+        companyId,
+        dispatchType,
+        operationHash: dispatch.operationHash,
+        status: 'duplicate',
+        metadata: { reason: 'manual_dispatch_duplicate' },
+      });
+      failed.push({
+        ...item,
+        registro_id: registroId || null,
+        telefone: normalizedPhone || phoneRaw || '',
+        error: 'Esta operacao ja foi processada anteriormente.',
+      });
+      continue;
+    }
 
     if (!message) {
       const errorMessage = 'Mensagem vazia para envio real.';
@@ -1970,6 +2002,13 @@ async function sendRealChargesData(
         registro_id: registroId || null,
         telefone: normalizedPhone || phoneRaw || '',
         error: errorMessage,
+      });
+      await finalizeAutomationDispatch(supabaseAdmin, {
+        companyId,
+        dispatchType,
+        operationHash: dispatch.operationHash,
+        status: 'failed',
+        metadata: { reason: 'empty_message' },
       });
       continue;
     }
@@ -2015,6 +2054,13 @@ async function sendRealChargesData(
         registro_id: registroId || null,
         telefone: normalizedPhone || phoneRaw || '',
         error: errorMessage,
+      });
+      await finalizeAutomationDispatch(supabaseAdmin, {
+        companyId,
+        dispatchType,
+        operationHash: dispatch.operationHash,
+        status: 'failed',
+        metadata: { reason: 'invalid_phone' },
       });
       continue;
     }
@@ -2085,6 +2131,17 @@ async function sendRealChargesData(
         initialStatus,
         sentAt,
       });
+      await finalizeAutomationDispatch(supabaseAdmin, {
+        companyId,
+        dispatchType,
+        operationHash: dispatch.operationHash,
+        status: 'completed',
+        externalReference: providerMessageId,
+        metadata: {
+          provider_message_id: providerMessageId,
+          sent_at: sentAt,
+        },
+      });
 
       if (record?.id) {
         await supabaseAdmin
@@ -2152,6 +2209,13 @@ async function sendRealChargesData(
         registro_id: registroId || null,
         telefone: normalizedPhone || phoneRaw || '',
         error: errorMessage,
+      });
+      await finalizeAutomationDispatch(supabaseAdmin, {
+        companyId,
+        dispatchType,
+        operationHash: dispatch.operationHash,
+        status: 'failed',
+        metadata: { reason: errorMessage },
       });
     }
   }
@@ -2301,20 +2365,26 @@ async function sendZapiDocument(
     throw new Error('WhatsApp API não configurada. Defina ZAPI_INSTANCE_ID, ZAPI_TOKEN, ZAPI_CLIENT_TOKEN e, se necessário, ZAPI_DOCUMENT_ENDPOINT.');
   }
 
-  const response = await fetch(documentEndpoint, {
-    method: 'POST',
-    headers: {
-      'Client-Token': clientToken,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      phone,
-      fileName,
-      mimeType: 'application/pdf',
-      caption,
-      base64,
-    }),
-  });
+  const response = await withTimeout(
+    (signal) =>
+      fetch(documentEndpoint, {
+        method: 'POST',
+        signal,
+        headers: {
+          'Client-Token': clientToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phone,
+          fileName,
+          mimeType: 'application/pdf',
+          caption,
+          base64,
+        }),
+      }),
+    15000,
+    'Tempo limite excedido ao enviar documento pela Z-API.',
+  );
 
   const data = await response.json().catch(() => ({}));
 
@@ -2351,19 +2421,25 @@ async function sendZapiText(
     throw new Error('Telefone invalido para envio real.');
   }
 
-  const response = await fetch(
-    `https://api.z-api.io/instances/${zapiConfig.instanceId}/token/${zapiConfig.token}/send-text`,
-    {
-      method: 'POST',
-      headers: {
-        'Client-Token': zapiConfig.clientToken,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        phone: normalizedPhone,
-        message,
-      }),
-    },
+  const response = await withTimeout(
+    (signal) =>
+      fetch(
+        `https://api.z-api.io/instances/${zapiConfig.instanceId}/token/${zapiConfig.token}/send-text`,
+        {
+          method: 'POST',
+          signal,
+          headers: {
+            'Client-Token': zapiConfig.clientToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            phone: normalizedPhone,
+            message,
+          }),
+        },
+      ),
+    15000,
+    'Tempo limite excedido ao enviar mensagem pela Z-API.',
   );
 
   const data = await response.json().catch(() => ({}));
@@ -2455,6 +2531,126 @@ async function findRecentSuccessfulWhatsappCharge(
   return data || null;
 }
 
+async function reserveAutomationDispatch(
+  supabaseAdmin: AdminClient,
+  payload: {
+    companyId: string;
+    customerId: string;
+    dueDate: string;
+    amount: number;
+    template: string;
+    dispatchType: string;
+    body?: Record<string, unknown>;
+    externalReference?: string | null;
+  },
+) {
+  try {
+    const operationHash = await sha256Hex([
+      payload.companyId,
+      payload.customerId,
+      payload.dueDate,
+      Number(payload.amount || 0).toFixed(2),
+      payload.template,
+      payload.dispatchType,
+    ].join('|'));
+    const payloadHash = await sha256Hex(JSON.stringify(payload.body || {}));
+
+    const { data: existing } = await supabaseAdmin
+      .from('automation_dispatches')
+      .select('id, status')
+      .eq('company_id', payload.companyId)
+      .eq('operation_hash', operationHash)
+      .eq('dispatch_type', payload.dispatchType)
+      .maybeSingle();
+
+    if (existing?.id) {
+      return {
+        duplicate: true,
+        operationHash,
+        dispatchId: existing.id,
+      };
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('automation_dispatches')
+      .insert({
+        company_id: payload.companyId,
+        operation_hash: operationHash,
+        dispatch_type: payload.dispatchType,
+        status: 'processing',
+        payload_hash: payloadHash,
+        external_reference: payload.externalReference || null,
+        metadata: {
+          customer_id: payload.customerId,
+          due_date: payload.dueDate,
+          amount: payload.amount,
+          template: payload.template,
+        },
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      if (String(error.message || '').includes('duplicate') || String((error as { code?: string })?.code || '') === '23505') {
+        return {
+          duplicate: true,
+          operationHash,
+          dispatchId: null,
+        };
+      }
+      throw error;
+    }
+
+    return {
+      duplicate: false,
+      operationHash,
+      dispatchId: data?.id || null,
+    };
+  } catch (error) {
+    console.warn('[IDEMPOTENCY] reserve warning', error instanceof Error ? error.message : error);
+    return {
+      duplicate: false,
+      operationHash: '',
+      dispatchId: null,
+    };
+  }
+}
+
+async function finalizeAutomationDispatch(
+  supabaseAdmin: AdminClient,
+  payload: {
+    companyId: string;
+    dispatchType: string;
+    operationHash: string;
+    status: 'completed' | 'failed' | 'duplicate' | 'skipped' | 'retrying';
+    externalReference?: string | null;
+    retryCount?: number;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  if (!payload.operationHash) return;
+
+  try {
+    const { error } = await supabaseAdmin
+      .from('automation_dispatches')
+      .update({
+        status: payload.status,
+        external_reference: payload.externalReference || null,
+        completed_at: ['completed', 'duplicate', 'skipped'].includes(payload.status) ? new Date().toISOString() : null,
+        retry_count: Number(payload.retryCount || 0),
+        last_retry_at: payload.status === 'retrying' ? new Date().toISOString() : null,
+        metadata: payload.metadata || {},
+      })
+      .eq('company_id', payload.companyId)
+      .eq('operation_hash', payload.operationHash)
+      .eq('dispatch_type', payload.dispatchType);
+
+    if (error) throw error;
+  } catch (error) {
+    console.warn('[IDEMPOTENCY] finalize warning', error instanceof Error ? error.message : error);
+  }
+}
+
 async function processChargeForRecord(
   supabaseAdmin: AdminClient,
   record: FinancialRow,
@@ -2506,6 +2702,34 @@ async function processChargeForRecord(
   const diasAtraso = diff < 0 ? Math.abs(diff) : 0;
   const { numeroBoletoEfetivo, clienteEfetivo } = logCobrancaMapping(record);
   const hash = await sha256Hex(`${record.company_id}|${record.id}|${numeroBoletoEfetivo || ''}|${tipo}|${todayIso}`);
+  const template = resolveTemplate(config, tipo);
+  const dispatchType = simulate ? `whatsapp_${tipo}_simulado` : `whatsapp_${tipo}_real`;
+  const dispatch = await reserveAutomationDispatch(supabaseAdmin, {
+    companyId: record.company_id,
+    customerId: String(record.cliente_numero || record.id || ''),
+    dueDate: String(record.data_vencimento || ''),
+    amount: Number(record.valor || 0),
+    template,
+    dispatchType,
+    body: {
+      registro_id: record.id,
+      documento: record.documento,
+      numero_boleto: numeroBoletoEfetivo,
+      tipo,
+      simulate,
+    },
+  });
+
+  if (dispatch.duplicate && !force) {
+    await finalizeAutomationDispatch(supabaseAdmin, {
+      companyId: record.company_id,
+      dispatchType,
+      operationHash: dispatch.operationHash,
+      status: 'duplicate',
+      metadata: { reason: 'dispatch_already_exists' },
+    });
+    return { status: 'ignorado', reason: 'duplicado_idempotencia' };
+  }
 
   if (!force) {
     const { data: duplicate } = await supabaseAdmin
@@ -2544,10 +2768,17 @@ async function processChargeForRecord(
       payload: { company_id: record.company_id, record_id: record.id },
       envio_hash: hash,
     });
+    await finalizeAutomationDispatch(supabaseAdmin, {
+      companyId: record.company_id,
+      dispatchType,
+      operationHash: dispatch.operationHash,
+      status: 'failed',
+      metadata: { reason: 'boleto_nao_encontrado' },
+    });
     return { status: 'erro', reason: 'boleto_nao_encontrado' };
   }
 
-  const message = fillTemplate(resolveTemplate(config, tipo), record, diasAtraso, companyName);
+  const message = fillTemplate(template, record, diasAtraso, companyName);
 
   if (simulate) {
     await insertLog(supabaseAdmin, {
@@ -2577,6 +2808,13 @@ async function processChargeForRecord(
       },
       envio_hash: hash,
     });
+    await finalizeAutomationDispatch(supabaseAdmin, {
+      companyId: record.company_id,
+      dispatchType,
+      operationHash: dispatch.operationHash,
+      status: 'completed',
+      metadata: { simulated: true, file_name: file?.name || null },
+    });
 
     return {
       status: 'sucesso',
@@ -2589,6 +2827,13 @@ async function processChargeForRecord(
   }
 
   if (!file?.id) {
+    await finalizeAutomationDispatch(supabaseAdmin, {
+      companyId: record.company_id,
+      dispatchType,
+      operationHash: dispatch.operationHash,
+      status: 'failed',
+      metadata: { reason: 'boleto_nao_encontrado' },
+    });
     return { status: 'erro', reason: 'boleto_nao_encontrado' };
   }
 
@@ -2664,6 +2909,17 @@ async function processChargeForRecord(
       sent_at: sentAt,
     },
     envio_hash: hash,
+  });
+  await finalizeAutomationDispatch(supabaseAdmin, {
+    companyId: record.company_id,
+    dispatchType,
+    operationHash: dispatch.operationHash,
+    status: 'completed',
+    externalReference: providerMessageId,
+    metadata: {
+      provider_message_id: providerMessageId,
+      sent_at: sentAt,
+    },
   });
 
   return { status: 'sucesso', tipo, fileId: file.id };
@@ -3333,9 +3589,11 @@ function normalizeSubscriptionPlan(value: string | null | undefined) {
 
 function normalizeSubscriptionStatus(value: string | null | undefined) {
   const normalized = normalizeText(value);
-  if (normalized === 'trialing') return 'trialing';
+  if (normalized === 'trialing' || normalized === 'trial') return 'trialing';
   if (normalized === 'past_due') return 'past_due';
   if (normalized === 'canceled') return 'canceled';
+  if (normalized === 'expired') return 'expired';
+  if (normalized === 'blocked') return 'blocked';
   return 'active';
 }
 
@@ -3513,7 +3771,7 @@ async function checkSendPermissionData(
   const usage = await getUsageSummaryData(supabaseAdmin, companyId, todayIso);
   const nextQuantity = Math.max(1, Number(quantity || 1));
 
-  if (!['active', 'trialing'].includes(planData.status)) {
+  if (!['active', 'trialing', 'trial'].includes(planData.status)) {
     return {
       ok: true,
       allowed: false,
@@ -3793,6 +4051,7 @@ async function resolveTargetCompanies(admin: AdminClient, companyId: string | nu
 }
 
 Deno.serve(async (req: Request) => {
+  const runtime = createRequestContext(req, { module: 'billing-automation', action: 'overview' });
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   if (req.method !== 'POST') return jsonResponse({ ok: false, error: 'Metodo nao permitido.' }, 405);
 
@@ -3815,12 +4074,20 @@ Deno.serve(async (req: Request) => {
 
     const body = await req.json().catch(() => ({}));
     action = String(body?.action || 'overview');
+    runtime.action = action;
     companyId = body?.company_id
       ? String(body.company_id)
       : (body?.companyId ? String(body.companyId) : null);
     manual = body?.manual === true;
     simulate = body?.simulate === true;
     console.log('billing-automation request', { action, company_id: companyId });
+    logRuntime(runtime, {
+      companyId,
+      metadata: {
+        manual,
+        simulate,
+      },
+    });
 
     if (action === 'get_drive_config' || action === 'save_drive_config' || action === 'test_drive_connection' || action === 'sync_drive' || action === 'sync_boleto_drive_intelligent') {
       requireCompanyId(companyId);
@@ -4950,21 +5217,13 @@ Deno.serve(async (req: Request) => {
 
     return jsonResponse({ ok: false, error: 'Acao nao suportada.' }, 400);
   } catch (error) {
-    console.error('billing-automation fatal error', {
-      action,
-      company_id: companyId,
-      name: error instanceof Error ? error.name : undefined,
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
-    return jsonResponse(
-      {
-        ok: false,
+    return errorResponse(runtime, error, {
+      status: 500,
+      code: 'BILLING_AUTOMATION_FATAL',
+      metadata: {
         action,
         company_id: companyId,
-        error: error instanceof Error ? error.message : 'Erro interno na billing-automation',
       },
-      500,
-    );
+    });
   }
 });

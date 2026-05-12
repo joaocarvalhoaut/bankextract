@@ -970,15 +970,17 @@ export default function App() {
         }
 
         const saved = await financeService.saveFinancialConfig(currentCompanyId, payload);
+        // Atualiza config imediatamente — VisaoGeralScreen recalcula via useEffect([rows, config]).
+        // NAO chama refreshAllData() aqui: setFinancialRecords([]) limparia a tabela durante o fetch,
+        // fazendo KPIs e totais sumirem temporariamente (bug de flash reportado em producao).
         setFinancialConfig(saved);
         await auditLog.financialConfigChanged(currentCompanyId, payload, currentUserId);
-        await refreshAllData();
         showToast('sucesso', 'Configuracao financeira salva com sucesso.');
       } catch (error) {
         showToast('erro', error.message || 'Nao foi possivel salvar a configuracao financeira.');
       }
     },
-    [currentCompanyId, globalMode, refreshAllData, showToast]
+    [currentCompanyId, currentUserRole, globalMode, showToast]
   );
 
   const handleExport = useCallback(
@@ -1921,6 +1923,7 @@ export default function App() {
           stats={sidebarStats}
           billingExecutionMode={billingExecutionMode}
           isSystemAdmin={empresa.isSystemAdmin}
+          canAccessBilling={empresa.isSystemAdmin || ['owner', 'admin'].includes(empresa.userRole)}
           onOpenCompanyModal={handleOpenEmpresaModal}
           onOpenPlans={() => setActiveTab('planos')}
         />

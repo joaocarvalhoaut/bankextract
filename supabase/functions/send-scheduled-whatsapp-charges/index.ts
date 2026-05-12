@@ -1,4 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { withTimeout } from '../_shared/runtime.ts';
 
 interface WhatsAppAutoConfig {
   empresa_id: string;
@@ -228,7 +229,13 @@ const formatCurrencyBRL = (value: number) =>
 const normalizePhone = (raw: string) => {
   const digits = String(raw || '').replace(/\D/g, '');
   if (!digits) return '';
-  return digits.startsWith('55') ? digits : `55${digits}`;
+  if (digits.startsWith('55')) {
+    return digits.length >= 12 && digits.length <= 13 ? digits : '';
+  }
+  if (digits.length === 10 || digits.length === 11) {
+    return `55${digits}`;
+  }
+  return '';
 };
 
 const calculateUpdatedValue = (
@@ -355,17 +362,23 @@ async function sendChargeMessage(
   }
 
   try {
-    const response = await fetch(zapi.url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Client-Token': zapi.clientToken,
-      },
-      body: JSON.stringify({
-        phone,
-        message,
-      }),
-    });
+    const response = await withTimeout(
+      (signal) =>
+        fetch(zapi.url, {
+          method: 'POST',
+          signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'Client-Token': zapi.clientToken,
+          },
+          body: JSON.stringify({
+            phone,
+            message,
+          }),
+        }),
+      15000,
+      'Tempo limite excedido ao enviar cobranca agendada pela Z-API.',
+    );
 
     const data = await response.json().catch(() => ({}));
     const zapiMessageId = String(
