@@ -85,11 +85,11 @@ export default function FinanceTable({
   };
 
   const statusClasses = (status) => {
-    if (status === 'liquidado') return 'border-blue-500/20 bg-blue-900/200/10 text-cyan-200';
-    if (status === 'negociacao') return 'border-amber-200 bg-amber-50 text-amber-700';
-    if (status === 'promessa') return 'border-blue-700/40 bg-blue-900/20 text-blue-700';
-    if (status === 'vencido') return 'border-red-200 bg-red-50 text-red-700';
-    if (status === 'aberto') return 'border-sky-200 bg-sky-50 text-sky-700';
+    if (status === 'liquidado') return 'border-cyan-500/30 bg-cyan-900/20 text-cyan-300';
+    if (status === 'negociacao') return 'border-amber-500/30 bg-amber-900/20 text-amber-300';
+    if (status === 'promessa') return 'border-blue-500/30 bg-blue-900/20 text-blue-300';
+    if (status === 'vencido') return 'border-red-500/30 bg-red-900/20 text-red-300';
+    if (status === 'aberto') return 'border-sky-500/30 bg-sky-900/20 text-sky-300';
     return 'border-slate-700 bg-slate-800/60 text-slate-200';
   };
 
@@ -309,7 +309,7 @@ export default function FinanceTable({
                                   value={editingValue}
                                   onChange={(event) => setEditingValue(event.target.value)}
                                   onBlur={saveCellEdit}
-                                  className="w-full rounded border border-emerald-500 px-2 py-1.5 text-sm outline-none"
+                                  className="w-full rounded border border-emerald-500 bg-slate-800 px-2 py-1.5 text-sm text-slate-100 outline-none"
                                 >
                                   <option value="pendente">Pendente</option>
                                   <option value="aberto">Aberto</option>
@@ -341,7 +341,7 @@ export default function FinanceTable({
                                   value={editingValue}
                                   onChange={(event) => setEditingValue(event.target.value)}
                                   onBlur={saveCellEdit}
-                                  className="w-full rounded border border-emerald-500 px-2 py-1.5 text-sm outline-none"
+                                  className="w-full rounded border border-emerald-500 bg-slate-800 px-2 py-1.5 text-sm text-slate-100 outline-none"
                                 >
                                   <option value="vencidos">Vencidos</option>
                                   <option value="liquidacao">Liquidação</option>
@@ -371,7 +371,7 @@ export default function FinanceTable({
                                   onKeyDown={(event) =>
                                     event.key === 'Enter' ? saveCellEdit() : event.key === 'Escape' ? cancelCellEdit() : null
                                   }
-                                  className="w-full rounded border border-emerald-500 px-2 py-1 text-right text-sm outline-none"
+                                  className="w-full rounded border border-emerald-500 bg-slate-800 px-2 py-1 text-right text-sm text-slate-100 caret-slate-100 outline-none"
                                 />
                               ) : (
                                 <button
@@ -406,7 +406,7 @@ export default function FinanceTable({
                                   onKeyDown={(event) =>
                                     event.key === 'Enter' ? saveCellEdit() : event.key === 'Escape' ? cancelCellEdit() : null
                                   }
-                                  className="w-full rounded border border-emerald-500 px-2 py-1 text-sm outline-none"
+                                  className="w-full rounded border border-emerald-500 bg-slate-800 px-2 py-1 text-sm text-slate-100 caret-slate-100 outline-none"
                                 />
                               ) : (
                                 <button className="w-full text-left" onDoubleClick={() => (canEdit ? startCellEdit(row.id, column.campo, row[column.campo]) : null)}>
@@ -436,7 +436,7 @@ export default function FinanceTable({
                                 onKeyDown={(event) =>
                                   event.key === 'Enter' ? saveCellEdit() : event.key === 'Escape' ? cancelCellEdit() : null
                                 }
-                                className="w-full rounded border border-emerald-500 px-2 py-1 text-sm outline-none"
+                                className="w-full rounded border border-emerald-500 bg-slate-800 px-2 py-1 text-sm text-slate-100 caret-slate-100 outline-none"
                               />
                             ) : (
                               <button
@@ -511,6 +511,16 @@ export default function FinanceTable({
                 {'>'}
               </button>
               <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="rounded border border-slate-700 px-2 py-1 text-xs disabled:opacity-40">
+                {'>>'}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+"rounded border border-slate-700 px-2 py-1 text-xs disabled:opacity-40">
                 {'>>'}
               </button>
             </div>

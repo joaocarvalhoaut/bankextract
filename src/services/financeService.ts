@@ -1125,10 +1125,13 @@ export const financeService = {
       },
     );
 
+    // result comes back as a snake_case DB row; reading camelCase fields would
+    // return undefined and silently fall back to defaults. Return the payload
+    // values we just persisted instead — they are guaranteed to be correct.
     return {
-      company_id: result.company_id,
-      multaPercentual: Number(result.multaPercentual ?? 2),
-      jurosPercentualDia: Number(result.jurosPercentualDia ?? 0.033),
+      company_id: companyId,
+      multaPercentual: Number(payload.multaPercentual ?? 2),
+      jurosPercentualDia: Number(payload.jurosPercentualDia ?? 0.033),
     };
   },
 
@@ -1317,6 +1320,23 @@ export const financeService = {
       } catch {
         return {
           chargeId,
+          status: 'mock_enviado',
+          mocked: true,
+          mode,
+        };
+      }
+    }
+
+    return {
+      chargeId,
+      status: 'mock_enviado',
+      mocked: true,
+      mode,
+    };
+  },
+};
+
+export default financeService;
           status: 'mock_enviado',
           mocked: true,
           mode,

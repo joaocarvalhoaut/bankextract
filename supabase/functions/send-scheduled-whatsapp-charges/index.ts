@@ -519,13 +519,15 @@ async function processCompany(
   if (candidateRows.length === 0) {
     const { data: fallbackRows, error: fallbackError } = await supabaseAdmin
       .from('registros_financeiros')
-      .select('id, company_id, nome, numero_boleto, data_vencimento, valor, telefone, status');
+      .select('id, company_id, nome, numero_boleto, data_vencimento, valor, telefone, status')
+      .eq('company_id', companyIdForQuery)
+      .limit(500);
 
     if (fallbackError) {
       throw new Error(fallbackError.message || 'Falha ao buscar fallback de registros financeiros.');
     }
 
-    candidateRows = ((fallbackRows ||      []) as RegistroFinanceiro[]).filter(
+    candidateRows = ((fallbackRows || []) as RegistroFinanceiro[]).filter(
       (r) => r.company_id === companyIdForQuery
     );
 
@@ -534,6 +536,23 @@ async function processCompany(
   }
 
   result.debug.total_registros_buscados = candidateRows.length;
+
+  // ── Batch-fetch charge history para todos os candidatos em UMA query (evita N+1) ──
+  const candidateIds = candidateRows.map((r) => r.id).filter(Boolean);
+  const historicoMap = new Map<string, { id: string; created_at: string; status: string }[]>();
+  if (candidateIds.length > 0) {
+    const { data: allHistorico } = await supabaseAdmin
+      .from('cobrancas_whatsapp')
+      .select('id, registro_id, created_at, status')
+      .in('registro_id', candidateIds)
+      .in('status', ['enviado', 'mock_enviado'])
+      .order('created_at', { ascending: false });
+    for (const row of (allHistorico || [])) {
+      const list = historicoMap.get(row.registro_id) || [];
+      list.push({ id: row.id, created_at: row.created_at, status: row.status });
+      historicoMap.set(row.registro_id, list);
+    }
+  }
 
   const todayDate = parseBrazilianDate(todayIso);
 
@@ -573,21 +592,9 @@ async function processCompany(
       continue;
     }
 
-    // ── Histórico de cobranças anteriores ────────────────────────────────
-    const { data: historicoRows, error: historicoError } = await supabaseAdmin
-      .from('cobrancas_whatsapp')
-      .select('id, created_at, status')
-      .eq('registro_id', registro.id)
-      .in('status', ['enviado', 'mock_enviado'])
-      .order('created_at', { ascending: false });
-
-    if (historicoError) {
-      result.debug.descartados.outros++;
-      pushDiscardExample(registro, `erro_historico: ${historicoError.message}`);
-      continue;
-    }
-
-    const historicoCount   = (historicoRows || []).length;
+    // ── Histórico de cobranças anteriores (pré-carregado em batch, sem N+1) ─
+    const historicoRows = historicoMap.get(registro.id) || [];
+    const historicoCount   = historicoRows.length;
     const ultimoEnvioIso   = historicoCount > 0 ? historicoRows![0].created_at : null;
     const diasDesdeUltimo  = ultimoEnvioIso
       ? Math.floor((Date.now() - new Date(ultimoEnvioIso).getTime()) / 86400000)
@@ -667,7 +674,7 @@ async function processCompany(
     const phone = normalizePhone(registro.telefone || '');
     const sendResult = await sendChargeMessage(phone, mensagem, zapi);
 
-    await supabaseAdmin.from('cobrancas_whatsapp').insert({
+    const { error: trackingError } = await supabaseAdmin.from('cobrancas_whatsapp').insert({
       empresa_id: config.empresa_id,
       registro_id: registro.id,
       telefone: phone,
@@ -676,7 +683,10 @@ async function processCompany(
       zapi_message_id: sendResult.zapiMessageId,
       erro: sendResult.error,
       enviado_por: null,
-    }).then(() => {}).catch(() => {});
+    });
+    if (trackingError) {
+      console.log(JSON.stringify({ event: 'tracking_insert_error', registro_id: registro.id, error: trackingError.message }));
+    }
 
     if (sendResult.ok) {
       result.sent++;

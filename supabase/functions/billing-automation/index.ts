@@ -81,6 +81,7 @@ interface DriveCandidate {
   parents?: string[];
   webViewLink?: string;
   webContentLink?: string;
+  modifiedTime?: string;
 }
 
 interface ExtractedBoletoData {
@@ -239,17 +240,6 @@ function temBoletoEncontrado(registro: Partial<FinancialRow> & Record<string, un
 function logCobrancaMapping(registro: Partial<FinancialRow> & Record<string, unknown>) {
   const numeroBoletoEfetivo = getNumeroBoletoEfetivo(registro);
   const clienteEfetivo = getClienteEfetivo(registro);
-  console.log(
-    '[COBRANCA]',
-    'cliente=',
-    clienteEfetivo,
-    'documento=',
-    String(registro?.documento || ''),
-    'numero_nf=',
-    String(registro?.numero_nf || ''),
-    'usando=',
-    numeroBoletoEfetivo,
-  );
   return { numeroBoletoEfetivo, clienteEfetivo };
 }
 
@@ -941,14 +931,20 @@ async function getGoogleAccessToken() {
     .replace(/\//g, '_')
     .replace(/=+$/, '');
 
-  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion: `${signingInput}.${signatureB64}`,
-    }),
-  });
+  const tokenRes = await withTimeout(
+    (signal) =>
+      fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        signal,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          assertion: `${signingInput}.${signatureB64}`,
+        }),
+      }),
+    12000,
+    'Tempo limite excedido ao autenticar Google API.',
+  );
 
   if (!tokenRes.ok) {
     throw new Error(`Falha ao autenticar Google API: ${await tokenRes.text()}`);
@@ -982,15 +978,33 @@ function requireDriveFolderId(folderId: string | null | undefined) {
 }
 
 async function googleJson<T>(url: string, token: string): Promise<T> {
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const MAX_RETRIES = 3;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const response = await withTimeout(
+      (signal) => fetch(url, { signal, headers: { Authorization: `Bearer ${token}` } }),
+      12000,
+      'Tempo limite excedido ao consultar Google Drive API.',
+    );
 
-  if (!response.ok) {
-    throw new Error(await response.text());
+    if (response.status === 429 || response.status === 503) {
+      const retryAfterHeader = response.headers.get('Retry-After');
+      const retryAfterSec = retryAfterHeader ? Number(retryAfterHeader) : attempt * 2;
+      console.log(JSON.stringify({ event: 'google_api_rate_limit', status: response.status, attempt, retry_after_sec: retryAfterSec }));
+      if (attempt < MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, retryAfterSec * 1000));
+        continue;
+      }
+      throw new Error(`Google API rate limit: status ${response.status} após ${attempt} tentativas.`);
+    }
+
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+
+    return await response.json() as T;
   }
 
-  return await response.json() as T;
+  throw new Error('googleJson: excedido número máximo de tentativas.');
 }
 
 async function getDriveFileMetadata(token: string, fileId: string) {
@@ -1033,7 +1047,7 @@ async function listPdfFilesInFolder(token: string, folderId: string, limit = 50)
     const query = encodeURIComponent(`'${folderId}' in parents and mimeType='application/pdf' and trashed=false`);
     const suffix = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
     const data = await googleJson<{ files?: DriveCandidate[]; nextPageToken?: string }>(
-      `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType,parents,webViewLink,webContentLink),nextPageToken&pageSize=${Math.min(100, limit - files.length)}${suffix}`,
+      `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType,parents,webViewLink,webContentLink,modifiedTime),nextPageToken&pageSize=${Math.min(100, limit - files.length)}${suffix}`,
       token,
     );
 
@@ -1099,9 +1113,15 @@ async function searchDriveFiles(token: string, folderId: string, record: Financi
 }
 
 async function downloadDriveFileBase64(token: string, fileId: string) {
-  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const response = await withTimeout(
+    (signal) =>
+      fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+        signal,
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    30000,
+    'Tempo limite excedido ao baixar arquivo PDF do Google Drive (base64).',
+  );
 
   if (!response.ok) {
     throw new Error(await response.text());
@@ -1109,17 +1129,19 @@ async function downloadDriveFileBase64(token: string, fileId: string) {
 
   const buffer = await response.arrayBuffer();
   const bytes = new Uint8Array(buffer);
-  let binary = '';
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte);
-  });
-  return btoa(binary);
+  return bytesToBase64(bytes);
 }
 
 async function downloadDriveFileBytes(token: string, fileId: string) {
-  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const response = await withTimeout(
+    (signal) =>
+      fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+        signal,
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    30000,
+    'Tempo limite excedido ao baixar arquivo PDF do Google Drive (bytes).',
+  );
 
   if (!response.ok) {
     throw new Error(await response.text());
@@ -1462,6 +1484,10 @@ function buildBoletoStatus(value: string | null | undefined) {
 
 async function extractBoletoDataFromDriveFile(token: string, file: DriveCandidate): Promise<ExtractedBoletoData> {
   const bytes = await downloadDriveFileBytes(token, file.id);
+  if (bytes.length < 10) {
+    console.log(JSON.stringify({ event: 'drive_empty_pdf', file_id: file.id, file_name: file.name, bytes: bytes.length }));
+    throw new Error(`PDF vazio ou ilegivel: ${file.name} (${bytes.length} bytes).`);
+  }
   const text = extractReadableTextFromBytes(bytes);
   const filenameText = String(file.name || '').replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ');
   const mergedText = `${filenameText}\n${text}`;
@@ -1490,15 +1516,17 @@ async function extractBoletoDataFromDriveFile(token: string, file: DriveCandidat
 function scoreFinancialMatch(pdfData: ExtractedBoletoData, record: FinancialRow): MatchCandidate {
   let score = 0;
   const reasons: string[] = [];
+
+  // Boleto tokens from PDF text only — pdf_nome intentionally excluded to avoid false positives
   const pdfBoletoTokens = [
     pdfData.numero_boleto,
     pdfData.documento,
     pdfData.numero_nf,
     pdfData.nosso_numero,
-    pdfData.pdf_nome,
   ]
     .map((item) => normalizeBoletoNumber(item))
     .filter(Boolean);
+
   const recordBoletoTokens = [
     record.numero_boleto,
     record.documento,
@@ -1507,30 +1535,56 @@ function scoreFinancialMatch(pdfData: ExtractedBoletoData, record: FinancialRow)
     .map((item) => normalizeBoletoNumber(item))
     .filter(Boolean);
 
+  // +50 exact boleto/document token match from PDF text
   const exactBoletoMatch = pdfBoletoTokens.length > 0 && recordBoletoTokens.length > 0 && pdfBoletoTokens.some((token) => recordBoletoTokens.includes(token));
   if (exactBoletoMatch) {
-    score += 60;
-    if (normalizeBoletoNumber(pdfData.pdf_nome) && recordBoletoTokens.includes(normalizeBoletoNumber(pdfData.pdf_nome))) {
-      reasons.push('exact_boleto_filename');
-    } else if (normalizeBoletoNumber(pdfData.numero_boleto) && recordBoletoTokens.includes(normalizeBoletoNumber(pdfData.numero_boleto))) {
+    score += 50;
+    if (normalizeBoletoNumber(pdfData.numero_boleto) && recordBoletoTokens.includes(normalizeBoletoNumber(pdfData.numero_boleto))) {
       reasons.push('exact_boleto_text');
     } else {
       reasons.push('exact_document_match');
     }
   }
 
+  // +30 nosso_numero match (strong signal — uniquely identifies the boleto in the bank system)
+  const nossoNumeroNorm = normalizeBoletoNumber(pdfData.nosso_numero);
+  if (nossoNumeroNorm && recordBoletoTokens.includes(nossoNumeroNorm)) {
+    score += 30;
+    reasons.push('nosso_numero_match');
+  }
+
+  // +25 CPF/CNPJ match — check if record.documento digits appear in extracted PDF text
+  const recordDocNumeric = String(record.documento || '').replace(/\D/g, '');
+  if (recordDocNumeric.length >= 11) {
+    const pdfTextNumeric = String(pdfData.texto_extraido || '').replace(/\D/g, '');
+    if (pdfTextNumeric.includes(recordDocNumeric)) {
+      score += 25;
+      reasons.push('cpf_cnpj_match');
+    }
+  }
+
+  // +20 filename contains a record boleto token (separate from text extraction, lower weight)
+  const filenameLower = normalizeBoletoNumber(pdfData.pdf_nome || '');
+  if (filenameLower && recordBoletoTokens.some((token) => token && filenameLower.includes(token))) {
+    score += 20;
+    reasons.push('filename_boleto_match');
+  }
+
+  // +15 value match (within 5% tolerance)
   const valueMatch = compareNumbers(pdfData.valor, record.valor, 0.05);
   if (valueMatch) {
-    score += 20;
+    score += 15;
     reasons.push('boleto_value_match');
   }
 
+  // +10 due date match
   const dueDateMatch = compareIsoDates(pdfData.vencimento, record.data_vencimento);
   if (dueDateMatch) {
     score += 10;
     reasons.push('due_date_match');
   }
 
+  // +5 fuzzy name similarity
   const hasLinhaDigitavel = Boolean(String(pdfData.linha_digitavel || '').trim());
   if (hasLinhaDigitavel) {
     reasons.push('linha_digitavel_detected');
@@ -1538,10 +1592,11 @@ function scoreFinancialMatch(pdfData: ExtractedBoletoData, record: FinancialRow)
 
   const similarity = nameSimilarityScore(pdfData.nome_cliente, getClienteEfetivo(record) || record.nome);
   if (similarity >= 0.55) {
-    score += 10;
+    score += 5;
     reasons.push('fuzzy_name_match');
   }
 
+  // Score floor boosts — only when strong signals combine
   if (exactBoletoMatch) {
     score = Math.max(score, 80);
   }
@@ -1609,9 +1664,20 @@ async function syncBoletoDriveIntelligentForCompany(
   supabaseAdmin: AdminClient,
   companyId: string,
   token: string,
-  limit = 50,
+  limit = 200,
 ) {
   requireCompanyId(companyId);
+  const syncStart = Date.now();
+  const requestId = crypto.randomUUID();
+
+  console.log(JSON.stringify({
+    event: 'drive_sync_started',
+    request_id: requestId,
+    company_id: companyId,
+    limit,
+    ts: new Date().toISOString(),
+  }));
+
   const config = await getSheetsDriveConfig(supabaseAdmin, companyId);
   const folderId = requireDriveFolderId(await ensureConfiguredFolderId(config?.drive_root_folder_id, companyId));
   await getDriveFolderInfo(token, folderId);
@@ -1638,6 +1704,7 @@ async function syncBoletoDriveIntelligentForCompany(
 
   for (const file of pdfFiles) {
     summary.pdfs_analisados += 1;
+    const fileStart = Date.now();
     try {
       const pdfData = await extractBoletoDataFromDriveFile(token, file);
       const candidates = records
@@ -1659,31 +1726,69 @@ async function syncBoletoDriveIntelligentForCompany(
         matchedRecord = best.record;
         errorMessage = 'Mais de um registro financeiro apresentou score alto semelhante.';
         strategy = 'conflict_high_score';
+
+        console.log(JSON.stringify({
+          event: 'drive_match_conflict',
+          request_id: requestId,
+          company_id: companyId,
+          file_id: file.id,
+          file_name: file.name,
+          financial_record_id: best.record.id,
+          confidence_score: confidence,
+          second_score: second.score,
+          duration_ms: Date.now() - fileStart,
+        }));
       } else if (best && best.score >= 80) {
         status = 'encontrado';
         matchedRecord = best.record;
         strategy = best.reasons[0] || 'exact_boleto_text';
+
+        console.log(JSON.stringify({
+          event: 'drive_match_found',
+          request_id: requestId,
+          company_id: companyId,
+          file_id: file.id,
+          file_name: file.name,
+          financial_record_id: best.record.id,
+          confidence_score: confidence,
+          strategy,
+          reasons: best.reasons,
+          duration_ms: Date.now() - fileStart,
+        }));
       } else if (best && best.score >= 50) {
         status = 'baixa_confianca';
         matchedRecord = best.record;
         strategy = `low_confidence${best.reasons[0] ? `|${best.reasons[0]}` : ''}`;
+
+        console.log(JSON.stringify({
+          event: 'drive_match_low_confidence',
+          request_id: requestId,
+          company_id: companyId,
+          file_id: file.id,
+          file_name: file.name,
+          financial_record_id: best.record.id,
+          confidence_score: confidence,
+          reasons: best.reasons,
+          duration_ms: Date.now() - fileStart,
+        }));
       } else {
         strategy = 'no_match';
+
+        console.log(JSON.stringify({
+          event: 'drive_match_missing',
+          request_id: requestId,
+          company_id: companyId,
+          file_id: file.id,
+          file_name: file.name,
+          top_score: confidence,
+          duration_ms: Date.now() - fileStart,
+        }));
       }
 
       if (matchedRecord) {
         const combinedStrategy = [strategy, pdfData.match_strategy, ...(best?.reasons || [])].filter(Boolean).join('|');
         await upsertBoletoMatchResult(supabaseAdmin, companyId, matchedRecord, pdfData, status, confidence, combinedStrategy, errorMessage);
       }
-
-      console.log('boleto_match_debug', {
-        pdf_nome: pdfData.pdf_nome,
-        numero_extraido: pdfData.numero_boleto,
-        numero_registro: matchedRecord?.numero_boleto || best?.record?.numero_boleto || null,
-        score_final: confidence,
-        estrategia: strategy,
-        status,
-      });
 
       if (status === 'encontrado') summary.vinculados += 1;
       else if (status === 'baixa_confianca') summary.baixa_confianca += 1;
@@ -1706,6 +1811,16 @@ async function syncBoletoDriveIntelligentForCompany(
       });
     } catch (error) {
       summary.erros += 1;
+      const errMsg = error instanceof Error ? error.message : 'Falha ao analisar PDF do Drive.';
+      console.log(JSON.stringify({
+        event: 'drive_sync_failed',
+        request_id: requestId,
+        company_id: companyId,
+        file_id: file.id,
+        file_name: file.name,
+        error: errMsg,
+        duration_ms: Date.now() - fileStart,
+      }));
       items.push({
         pdf_nome: file.name || `${file.id}.pdf`,
         drive_file_id: file.id,
@@ -1717,10 +1832,20 @@ async function syncBoletoDriveIntelligentForCompany(
         vencimento: null,
         confidence: 0,
         status: 'erro',
-        erro: error instanceof Error ? error.message : 'Falha ao analisar PDF do Drive.',
+        erro: errMsg,
       });
     }
   }
+
+  const totalDuration = Date.now() - syncStart;
+  console.log(JSON.stringify({
+    event: 'drive_sync_completed',
+    request_id: requestId,
+    company_id: companyId,
+    folder_id: folderId,
+    summary,
+    duration_ms: totalDuration,
+  }));
 
   return {
     folder_id: folderId,
@@ -2555,12 +2680,19 @@ async function reserveAutomationDispatch(
     ].join('|'));
     const payloadHash = await sha256Hex(JSON.stringify(payload.body || {}));
 
+    // Only block if: (a) there's an active concurrent processing record, OR
+    // (b) a completed dispatch happened within the last 5 minutes.
+    // Failed or older records must allow retry.
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const { data: existing } = await supabaseAdmin
       .from('automation_dispatches')
-      .select('id, status')
+      .select('id, status, created_at')
       .eq('company_id', payload.companyId)
       .eq('operation_hash', operationHash)
       .eq('dispatch_type', payload.dispatchType)
+      .or(`status.eq.processing,and(status.eq.completed,created_at.gte.${fiveMinutesAgo})`)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (existing?.id) {
@@ -2744,8 +2876,57 @@ async function processChargeForRecord(
     }
   }
 
-  const candidates = await searchDriveFiles(token, folderId, record);
-  const file = candidates[0];
+  // Security guard: block sends when boleto matching found a conflict
+  const boletoStatus = String(record.boleto_status || '').trim();
+  if (boletoStatus === 'conflito') {
+    await insertLog(supabaseAdmin, {
+      financeiro_id: record.id,
+      company_id: record.company_id,
+      cliente_nome: clienteEfetivo || record.nome,
+      cliente_numero: record.cliente_numero,
+      telefone: record.telefone,
+      documento: record.documento,
+      numero_boleto: numeroBoletoEfetivo || null,
+      numero_nf: record.numero_nf,
+      valor: record.valor,
+      vencimento: record.data_vencimento,
+      tipo_cobranca: tipo,
+      dias_atraso: diasAtraso,
+      arquivo_encontrado: false,
+      drive_file_id: record.drive_file_id || null,
+      status_envio: 'erro',
+      erro: 'boleto_conflito',
+      payload: { company_id: record.company_id, record_id: record.id, boleto_status: boletoStatus },
+      envio_hash: hash,
+    });
+    await finalizeAutomationDispatch(supabaseAdmin, {
+      companyId: record.company_id,
+      dispatchType,
+      operationHash: dispatch.operationHash,
+      status: 'failed',
+      metadata: { reason: 'boleto_conflito' },
+    });
+    return { status: 'erro', reason: 'boleto_conflito' };
+  }
+
+  // Use pre-matched boleto from Drive sync when available and confidence is sufficient
+  const preMatchedConfidence = Number(record.boleto_match_confidence || 0);
+  const usePreMatched = boletoStatus === 'encontrado' && preMatchedConfidence >= 80 && Boolean(record.drive_file_id);
+
+  let file: DriveCandidate | null = null;
+  if (usePreMatched) {
+    // Verify the pre-matched file still exists in Drive (cheap metadata call, no re-search)
+    file = await getDriveFileMetadata(token, record.drive_file_id!).catch(() => null);
+    if (!file?.id) {
+      // Pre-matched file missing or inaccessible — fall back to live search
+      file = null;
+    }
+  }
+
+  if (!file) {
+    const candidates = await searchDriveFiles(token, folderId, record);
+    file = candidates[0] || null;
+  }
 
   if (!file?.id && !permitirEnvioSemBoleto) {
     await insertLog(supabaseAdmin, {
@@ -2839,7 +3020,22 @@ async function processChargeForRecord(
 
   const zapiConfig = await resolveCompanyZapiConfig(supabaseAdmin, record.company_id, { allowTestMode: false });
   const base64 = await downloadDriveFileBase64(token, file.id);
-  const sendResult = await sendZapiDocument(zapiConfig, phone, message, file.name || `${numeroBoletoEfetivo || record.documento || record.id}.pdf`, base64);
+  let sendResult: { provider_id: string; raw: unknown };
+  try {
+    sendResult = await sendZapiDocument(zapiConfig, phone, message, file.name || `${numeroBoletoEfetivo || record.documento || record.id}.pdf`, base64);
+  } catch (sendErr) {
+    console.log(JSON.stringify({
+      event: 'attachment_failed',
+      company_id: record.company_id,
+      financial_record_id: record.id,
+      file_id: file.id,
+      file_name: file.name,
+      tipo,
+      phone,
+      error: sendErr instanceof Error ? sendErr.message : String(sendErr),
+    }));
+    throw sendErr;
+  }
   const sentAt = new Date().toISOString();
   const providerMessageId = sendResult.provider_id || null;
 
@@ -2921,6 +3117,18 @@ async function processChargeForRecord(
       sent_at: sentAt,
     },
   });
+
+  console.log(JSON.stringify({
+    event: 'attachment_sent',
+    company_id: record.company_id,
+    financial_record_id: record.id,
+    file_id: file.id,
+    file_name: file.name,
+    tipo,
+    provider_message_id: providerMessageId,
+    phone,
+    sent_at: sentAt,
+  }));
 
   return { status: 'sucesso', tipo, fileId: file.id };
 }
@@ -4089,7 +4297,7 @@ Deno.serve(async (req: Request) => {
       },
     });
 
-    if (action === 'get_drive_config' || action === 'save_drive_config' || action === 'test_drive_connection' || action === 'sync_drive' || action === 'sync_boleto_drive_intelligent') {
+    if (action === 'get_drive_config' || action === 'save_drive_config' || action === 'test_drive_connection' || action === 'sync_drive' || action === 'sync_boleto_drive_intelligent' || action === 'reprocess_boleto_drive_single') {
       requireCompanyId(companyId);
       requireEnvSecret('GOOGLE_CLIENT_EMAIL');
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
@@ -4108,6 +4316,7 @@ Deno.serve(async (req: Request) => {
       'sync_drive',
       'sync_sheet',
       'sync_boleto_drive_intelligent',
+      'reprocess_boleto_drive_single',
       'run',
       'run_now',
       'reprocess_failures',
@@ -4298,6 +4507,86 @@ Deno.serve(async (req: Request) => {
           action: 'sync_boleto_drive_intelligent',
           error: String(error instanceof Error ? error.message : error),
           details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
+    }
+
+    if (action === 'reprocess_boleto_drive_single') {
+      try {
+        const registroId = String(body?.registro_id || '').trim();
+        if (!registroId) {
+          return jsonResponse({ ok: false, success: false, error: 'registro_id e obrigatorio.' }, 400);
+        }
+
+        const config = await getSheetsDriveConfig(admin, companyId || '');
+        const folderId = requireDriveFolderId(await ensureConfiguredFolderId(config?.drive_root_folder_id, companyId || ''));
+
+        const { data: record, error: fetchError } = await admin
+          .from('registros_financeiros')
+          .select('id, company_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, status, drive_file_id, linha_digitavel, codigo_barras, boleto_url, boleto_pdf_nome, boleto_match_confidence, boleto_extraido_em, boleto_status, boleto_match_strategy, boleto_erro, preventiva_enviada, data_envio_preventiva, cobranca_vencimento_enviada, data_envio_vencimento, ultima_cobranca, tentativas_cobranca')
+          .eq('id', registroId)
+          .eq('company_id', companyId || '')
+          .maybeSingle();
+
+        if (fetchError) throw new Error(fetchError.message);
+        if (!record) {
+          return jsonResponse({ ok: false, success: false, error: 'Registro nao encontrado.' }, 404);
+        }
+
+        const typedRecord = record as FinancialRow;
+
+        // Targeted Drive search for this specific record
+        const candidates = await searchDriveFiles(googleToken, folderId, typedRecord);
+
+        let bestMatch: { pdfData: ExtractedBoletoData; score: number; status: string; reasons: string[] } | null = null;
+
+        for (const file of candidates.slice(0, 5)) {
+          try {
+            const pdfData = await extractBoletoDataFromDriveFile(googleToken, file);
+            const match = scoreFinancialMatch(pdfData, typedRecord);
+            if (!bestMatch || match.score > bestMatch.score) {
+              const matchStatus = match.score >= 80 ? 'encontrado' : match.score >= 50 ? 'baixa_confianca' : 'nao_encontrado';
+              bestMatch = { pdfData, score: match.score, status: matchStatus, reasons: match.reasons };
+            }
+          } catch (_fileErr) {
+            // Continue to next candidate
+          }
+        }
+
+        if (bestMatch && bestMatch.status !== 'nao_encontrado') {
+          const strategy = [bestMatch.status, bestMatch.pdfData.match_strategy, ...bestMatch.reasons].filter(Boolean).join('|');
+          await upsertBoletoMatchResult(admin, companyId || '', typedRecord, bestMatch.pdfData, bestMatch.status, bestMatch.score, strategy, null);
+        } else {
+          // Mark as not found, clearing any stale drive_file_id
+          await admin
+            .from('registros_financeiros')
+            .update({
+              boleto_status: 'nao_encontrado',
+              boleto_match_confidence: 0,
+              boleto_match_strategy: 'reprocess_targeted_search',
+              boleto_erro: 'Nenhum PDF com score suficiente encontrado no Drive para este registro.',
+              boleto_extraido_em: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', registroId)
+            .eq('company_id', companyId || '');
+        }
+
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'reprocess_boleto_drive_single',
+          registro_id: registroId,
+          result: bestMatch
+            ? { status: bestMatch.status, confidence: bestMatch.score, reasons: bestMatch.reasons }
+            : { status: 'nao_encontrado', confidence: 0, reasons: [] },
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'reprocess_boleto_drive_single',
+          error: String(error instanceof Error ? error.message : error),
         }, 200);
       }
     }

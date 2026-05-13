@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   Edit3,
+  FileCheck,
+  FileX,
+  GitMerge,
   Loader2,
   Phone,
   RefreshCcw,
@@ -13,6 +17,8 @@ import {
 import DataTable from '../components/DataTable';
 import {
   getBillingInconsistencies,
+  getBoletoSyncReport,
+  reprocessBoletoDriveSingle,
   updateChargeStatus,
   updateFinancialPhone,
 } from '../services/billingAutomationService';
@@ -94,6 +100,7 @@ export default function InconsistenciasCobrancaScreen({
 
   const [loading, setLoading] = useState(false);
   const [runningAction, setRunningAction] = useState('');
+  const [reprocessingId, setReprocessingId] = useState('');
   const [cards, setCards] = useState({
     sem_telefone: 0,
     telefone_invalido: 0,
@@ -104,6 +111,14 @@ export default function InconsistenciasCobrancaScreen({
     duplicados: 0,
     suspensos: 0,
   });
+  const [driveCards, setDriveCards] = useState({
+    baixa_confianca: 0,
+    conflitos: 0,
+    nao_encontrados: 0,
+    erros: 0,
+    encontrados: 0,
+  });
+  const [driveLoading, setDriveLoading] = useState(false);
   const [items, setItems] = useState([]);
   const [filters, setFilters] = useState({
     cliente: '',
@@ -176,6 +191,36 @@ export default function InconsistenciasCobrancaScreen({
   useEffect(() => {
     loadInconsistencies(appliedFilters);
   }, [loadInconsistencies, appliedFilters]);
+
+  const loadDriveReport = useCallback(async () => {
+    if (!resolvedCompanyId || globalMode) return;
+    setDriveLoading(true);
+    try {
+      const report = await getBoletoSyncReport(resolvedCompanyId);
+      if (report?.cards) {
+        const total = Number(report.cards.total_titulos || 0);
+        const found = Number(report.cards.boletos_encontrados || 0);
+        const baixa = Number(report.cards.baixa_confianca || 0);
+        const conf = Number(report.cards.conflitos || 0);
+        const erros = Number(report.cards.erros || 0);
+        setDriveCards({
+          encontrados: found,
+          baixa_confianca: baixa,
+          conflitos: conf,
+          erros,
+          nao_encontrados: Math.max(0, total - found - baixa - conf - erros),
+        });
+      }
+    } catch (_err) {
+      // Drive report is informational; silent fail
+    } finally {
+      setDriveLoading(false);
+    }
+  }, [globalMode, resolvedCompanyId]);
+
+  useEffect(() => {
+    loadDriveReport();
+  }, [loadDriveReport]);
 
   const handleApplyFilters = useCallback(() => {
     setAppliedFilters(filters);
@@ -287,10 +332,31 @@ export default function InconsistenciasCobrancaScreen({
           </button>
           <button
             type="button"
-            onClick={() => onToast?.('aviso', 'Reprocessamento individual de boleto ainda nao esta disponivel nesta tela.')}
-            className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-800/40"
+            disabled={Boolean(reprocessingId) || !canEditRecords}
+            onClick={async () => {
+              if (!resolvedCompanyId || !row.registro_id) return;
+              setReprocessingId(row.registro_id);
+              try {
+                const result = await reprocessBoletoDriveSingle(resolvedCompanyId, row.registro_id);
+                const status = result?.result?.status || 'nao_encontrado';
+                const confidence = Number(result?.result?.confidence || 0);
+                const msg = status === 'encontrado'
+                  ? `Boleto localizado com ${confidence.toFixed(0)}% de confianca.`
+                  : status === 'baixa_confianca'
+                  ? `Boleto encontrado com baixa confianca (${confidence.toFixed(0)}%). Revise manualmente.`
+                  : 'Nenhum boleto encontrado no Drive para este registro.';
+                onToast?.(status === 'encontrado' ? 'sucesso' : 'aviso', msg);
+                await loadInconsistencies(appliedFilters);
+                await loadDriveReport();
+              } catch (err) {
+                onToast?.('erro', err.message || 'Falha ao reprocessar boleto no Drive.');
+              } finally {
+                setReprocessingId('');
+              }
+            }}
+            className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
           >
-            <RefreshCcw size={12} />
+            {reprocessingId === row.registro_id ? <Loader2 size={12} className="animate-spin" /> : <RefreshCcw size={12} />}
             Reprocessar boleto
           </button>
           <button
@@ -321,7 +387,7 @@ export default function InconsistenciasCobrancaScreen({
         </div>
       ),
     },
-  ], [canEditRecords, canManageCharges, handleIgnore, onToast, runStatusAction, runningAction]);
+  ], [appliedFilters, canEditRecords, canManageCharges, handleIgnore, loadDriveReport, loadInconsistencies, onToast, reprocessingId, resolvedCompanyId, runStatusAction, runningAction]);
 
   if (globalMode || !resolvedCompanyId) {
     return (
@@ -374,6 +440,74 @@ export default function InconsistenciasCobrancaScreen({
         <InconsistencyCard label="Valor zerado" value={cards.valor_zerado || 0} tone="red" />
         <InconsistencyCard label="Duplicados" value={cards.duplicados || 0} tone="blue" />
         <InconsistencyCard label="Suspensos" value={cards.suspensos || 0} tone="slate" />
+      </section>
+
+      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-blue-700/40 bg-blue-900/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-300">
+              <FileCheck size={13} />
+              Status dos boletos no Google Drive
+            </div>
+            <p className="mt-2 text-sm text-slate-400">Resultado da ultima varredura inteligente de PDFs no Drive.</p>
+          </div>
+          <button
+            type="button"
+            onClick={loadDriveReport}
+            disabled={driveLoading}
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
+          >
+            {driveLoading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCcw size={13} />}
+            Atualizar
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+          <div className="flex flex-col gap-1 rounded-2xl border border-emerald-700/30 bg-emerald-900/15 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <FileCheck size={14} className="text-emerald-400" />
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-emerald-500">Encontrados</span>
+            </div>
+            <p className="text-2xl font-semibold text-emerald-300">{driveCards.encontrados}</p>
+          </div>
+          <div className="flex flex-col gap-1 rounded-2xl border border-amber-700/30 bg-amber-900/15 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={14} className="text-amber-400" />
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-amber-500">Baixa confianca</span>
+            </div>
+            <p className="text-2xl font-semibold text-amber-300">{driveCards.baixa_confianca}</p>
+          </div>
+          <div className="flex flex-col gap-1 rounded-2xl border border-red-700/30 bg-red-900/15 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <GitMerge size={14} className="text-red-400" />
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-red-500">Conflitos</span>
+            </div>
+            <p className="text-2xl font-semibold text-red-300">{driveCards.conflitos}</p>
+          </div>
+          <div className="flex flex-col gap-1 rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <FileX size={14} className="text-slate-400" />
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">Nao encontrados</span>
+            </div>
+            <p className="text-2xl font-semibold text-slate-300">{driveCards.nao_encontrados}</p>
+          </div>
+          <div className="flex flex-col gap-1 rounded-2xl border border-red-900/30 bg-red-950/20 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={14} className="text-red-500" />
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-red-600">Erros Drive</span>
+            </div>
+            <p className="text-2xl font-semibold text-red-400">{driveCards.erros}</p>
+          </div>
+        </div>
+        {(driveCards.conflitos > 0 || driveCards.baixa_confianca > 0) ? (
+          <div className="mt-4 rounded-2xl border border-amber-700/30 bg-amber-900/10 px-4 py-3 text-xs text-amber-300">
+            <strong>
+              {driveCards.conflitos > 0 ? `${driveCards.conflitos} conflito(s)` : ''}
+              {driveCards.conflitos > 0 && driveCards.baixa_confianca > 0 ? ' e ' : ''}
+              {driveCards.baixa_confianca > 0 ? `${driveCards.baixa_confianca} registro(s) com baixa confianca` : ''}
+            </strong>
+            {' '}detectado(s). Use o botao &quot;Reprocessar boleto&quot; na tabela abaixo para reanalise individual.
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">

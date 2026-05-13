@@ -274,7 +274,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
               {(onboarding.steps || []).slice(0, 4).map((step) => (
                 <div key={step.id} className={`rounded-2xl border p-4 ${step.done ? 'border-emerald-200 bg-emerald-50/70' : 'border-slate-700 bg-slate-800/40'}`}>
                   <div className="flex items-start gap-3">
-                    <div className={`flex h-9 w-9 items-center justify-center rounded-2xl ${step.done ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-300'}`}>
+                    <div className={`flex h-9 w-9 items-center justify-center rounded-2xl ${step.done ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-400'}`}>
                       <ListChecks size={16} />
                     </div>
                     <div className="min-w-0 flex-1">

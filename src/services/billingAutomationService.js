@@ -308,6 +308,19 @@ export async function getBoletoSyncReport(companyId) {
   );
 }
 
+export async function reprocessBoletoDriveSingle(companyId, registroId) {
+  if (!companyId) throw new Error('Selecione uma empresa para reprocessar.');
+  if (!registroId) throw new Error('ID do registro nao informado.');
+  return invokeBillingAutomation(
+    {
+      action: 'reprocess_boleto_drive_single',
+      company_id: companyId,
+      registro_id: registroId,
+    },
+    'Falha ao reprocessar o boleto no Google Drive.'
+  );
+}
+
 export async function previewChargePayload(companyId, registroId) {
   const data = await invokeBillingAutomation(
     {
@@ -588,13 +601,14 @@ export default {
   getBillingCenter,
   getBillingHistory,
   getBillingInconsistencies,
+  reprocessBoletoDriveSingle,
   getPlanCapabilities,
   getUsageSummary,
   checkSendPermission,
+  updateChargeStatus,
+  updateFinancialPhone,
   getRealSendChecklist,
   simulateChargeBatch,
   simulateChargeItem,
-  updateChargeStatus,
-  updateFinancialPhone,
   previewBillingTemplate,
 };

@@ -492,12 +492,18 @@ async function reserveDispatch(
       telefone: charge.telefone || record?.telefone || '',
     }));
 
+    // Block only if: (a) actively processing (concurrent guard), OR
+    // (b) completed within the last 5 minutes. Failed or older records allow retry.
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const { data: existing } = await supabaseAdmin
       .from('automation_dispatches')
-      .select('id, status')
+      .select('id, status, created_at')
       .eq('company_id', companyId)
       .eq('operation_hash', operationHash)
       .eq('dispatch_type', dispatchType)
+      .or(`status.eq.processing,and(status.eq.completed,created_at.gte.${fiveMinutesAgo})`)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (existing?.id) {

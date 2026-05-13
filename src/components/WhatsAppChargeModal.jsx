@@ -1,7 +1,12 @@
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
+  FileCheck,
+  FileQuestion,
+  FileX,
   FlaskConical,
+  GitMerge,
   Loader2,
   MessageSquare,
   Phone,
@@ -9,6 +14,70 @@ import {
   X,
 } from 'lucide-react';
 import { formatCurrencyBRL, formatDateBR } from '../utils/format';
+
+function BoletoBadge({ row }) {
+  const status = row.boleto_status || 'pendente';
+  const confidence = Number(row.boleto_match_confidence || 0);
+  const filename = row.boleto_pdf_nome || null;
+
+  if (status === 'encontrado') {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-700/40 bg-emerald-900/20 px-3 py-1.5 text-xs">
+        <FileCheck size={12} className="text-emerald-400 shrink-0" />
+        <span className="font-semibold text-emerald-300">Boleto encontrado</span>
+        <span className="text-emerald-500">{confidence.toFixed(0)}% confianca</span>
+        {filename ? <span className="truncate max-w-[160px] text-slate-400" title={filename}>{filename}</span> : null}
+      </div>
+    );
+  }
+
+  if (status === 'baixa_confianca') {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-700/40 bg-amber-900/20 px-3 py-1.5 text-xs">
+        <AlertTriangle size={12} className="text-amber-400 shrink-0" />
+        <span className="font-semibold text-amber-300">Baixa confianca</span>
+        <span className="text-amber-500">{confidence.toFixed(0)}%</span>
+        {filename ? <span className="truncate max-w-[160px] text-slate-400" title={filename}>{filename}</span> : null}
+      </div>
+    );
+  }
+
+  if (status === 'conflito') {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-red-700/40 bg-red-900/20 px-3 py-1.5 text-xs">
+        <GitMerge size={12} className="text-red-400 shrink-0" />
+        <span className="font-semibold text-red-300">Conflito de boleto</span>
+        <span className="text-slate-400">Multiplos PDFs com score alto</span>
+      </div>
+    );
+  }
+
+  if (status === 'nao_encontrado') {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/40 px-3 py-1.5 text-xs">
+        <FileX size={12} className="text-slate-400 shrink-0" />
+        <span className="text-slate-400">Boleto nao localizado no Drive</span>
+      </div>
+    );
+  }
+
+  if (status === 'erro') {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-red-800/40 bg-red-950/30 px-3 py-1.5 text-xs">
+        <AlertCircle size={12} className="text-red-400 shrink-0" />
+        <span className="text-red-300">Erro ao processar PDF</span>
+      </div>
+    );
+  }
+
+  // pendente / default
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/40 px-3 py-1.5 text-xs">
+      <FileQuestion size={12} className="text-slate-500 shrink-0" />
+      <span className="text-slate-500">Boleto pendente de varredura</span>
+    </div>
+  );
+}
 
 export default function WhatsAppChargeModal({ modal, onClose, onUpdateMessage, onSend }) {
   if (!modal) return null;
@@ -115,6 +184,10 @@ export default function WhatsAppChargeModal({ modal, onClose, onUpdateMessage, o
                         </span>
                       )
                     ) : null}
+                  </div>
+
+                  <div className="mb-2">
+                    <BoletoBadge row={row} />
                   </div>
 
                   {result && !result.ok && result.error ? (
