@@ -36,16 +36,28 @@ function normalizeStatus(value: unknown) {
 
 Deno.serve(async (req) => {
   try {
-    const rawBody = await req.text();
+    // ── Validação de secret (se configurado) ─────────────────────────────────
+    // Configura ZAPI_WEBHOOK_SECRET no painel de secrets do Supabase.
+    // A Z-API envia o token no header x-api-token ou como query param ?token=.
+    const webhookSecret = Deno.env.get('ZAPI_WEBHOOK_SECRET') || '';
+    if (webhookSecret) {
+      const headerToken = req.headers.get('x-api-token') || req.headers.get('x-token') || '';
+      const url = new URL(req.url);
+      const queryToken = url.searchParams.get('token') || '';
+      const receivedToken = headerToken || queryToken;
+      if (receivedToken !== webhookSecret) {
+        return jsonResponse({ ok: false, error: 'Unauthorized' }, 401);
+      }
+    }
 
-    console.log('[ZAPI WEBHOOK RAW]', rawBody);
+    const rawBody = await req.text();
 
     let body: Record<string, unknown> = {};
 
     try {
       body = JSON.parse(rawBody);
     } catch {
-      console.error('[ZAPI WEBHOOK INVALID JSON]', rawBody);
+      // Invalid JSON — acknowledge silently to avoid Z-API retries
       return jsonResponse({ ok: true, received: true });
     }
 
@@ -63,8 +75,6 @@ Deno.serve(async (req) => {
 
     const status = normalizeStatus(body.status);
 
-    console.log('[ZAPI WEBHOOK PARSED]', { providerMessageId, status });
-
     if (!providerMessageId) {
       return jsonResponse({ ok: true, received: true });
     }
@@ -73,15 +83,12 @@ Deno.serve(async (req) => {
     const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
     if (!supabaseUrl || !supabaseServiceRoleKey) {
-      console.error('[ZAPI WEBHOOK ERROR]', 'Supabase admin nao configurado.');
       return jsonResponse({ ok: true, received: true });
     }
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
     const now = new Date().toISOString();
-    const patch: Record<string, unknown> = {
-      status,
-    };
+    const patch: Record<string, unknown> = { status };
 
     if (status === 'sent') {
       patch.sent_at = now;
@@ -95,18 +102,16 @@ Deno.serve(async (req) => {
       patch.erro = String(body?.type || body?.status || 'Falha retornada pela Z-API.');
     }
 
-    const { error } = await supabaseAdmin
+    // Idempotente: update por provider_message_id. Chamadas duplicadas
+    // apenas re-aplicam o mesmo status no mesmo registro — sem side effects.
+    await supabaseAdmin
       .from('cobrancas_whatsapp')
       .update(patch)
       .eq('provider_message_id', providerMessageId);
 
-    if (error) {
-      console.error('[ZAPI WEBHOOK ERROR]', error);
-    }
-
     return jsonResponse({ ok: true, received: true });
-  } catch (error) {
-    console.error('[ZAPI WEBHOOK ERROR]', error);
+  } catch {
+    // Não expõe detalhes do erro para o caller
     return jsonResponse({ ok: true, received: false });
   }
 });

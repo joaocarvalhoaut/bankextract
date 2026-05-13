@@ -141,7 +141,7 @@ export default function NotificationBell({ companyId, onOpenNotifications, onNav
         ref={buttonRef}
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="micro-bounce relative inline-flex items-center justify-center rounded-xl border border-slate-700 bg-slate-900/60 p-2.5 text-slate-500 transition hover:bg-slate-800/40 hover:text-slate-200"
+        className="control-surface micro-bounce relative inline-flex min-h-11 items-center justify-center rounded-xl p-2.5 text-slate-300"
       >
         <Bell size={16} />
         {unreadCount > 0 ? (
@@ -154,10 +154,10 @@ export default function NotificationBell({ companyId, onOpenNotifications, onNav
       {open ? (
         <div
           ref={menuRef}
-          className="fixed z-[99999] w-[360px] max-w-[calc(100vw-32px)] rounded-3xl border border-slate-700 bg-slate-900/60 p-3 shadow-xl"
+          className="fixed z-[110] w-[360px] max-w-[calc(100vw-32px)] rounded-3xl border border-slate-700 bg-slate-900/96 p-3 shadow-xl backdrop-blur"
           style={{ top: `${position.top}px`, right: `${position.right}px` }}
         >
-          <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-2 pb-3">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-2 pb-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Notificacoes</p>
               <p className="mt-1 text-sm font-medium text-slate-200">{unreadCount} nao lida(s)</p>
@@ -166,7 +166,7 @@ export default function NotificationBell({ companyId, onOpenNotifications, onNav
               type="button"
               onClick={handleMarkAll}
               disabled={!companyId || unreadCount === 0}
-              className="inline-flex items-center gap-1 rounded-xl border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800/40 disabled:opacity-50"
+              className="control-surface inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold text-slate-200 disabled:opacity-50"
             >
               <CheckCheck size={14} />
               Marcar tudo

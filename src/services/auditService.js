@@ -24,7 +24,6 @@ export async function logAuditEvent({
 
   if (!hasSupabaseConfig || !supabase) {
     if (isProduction) {
-      // eslint-disable-next-line no-console
       console.error('[AuditLog] Supabase nao configurado para producao.');
     }
     return false;
@@ -58,14 +57,12 @@ export async function logAuditEvent({
     });
 
     if (error) {
-      // eslint-disable-next-line no-console
       console.warn('[AuditLog] Falha ao registrar log:', error.message);
       return false;
     }
 
     return true;
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.warn('[AuditLog] Erro inesperado:', error?.message);
     return false;
   }

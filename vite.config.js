@@ -9,5 +9,17 @@ export default defineConfig({
   },
   build: {
     emptyOutDir: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return null;
+          if (id.includes('@sentry')) return 'vendor-sentry';
+          if (id.includes('@supabase')) return 'vendor-supabase';
+          if (id.includes('lucide-react')) return 'vendor-icons';
+          if (id.includes('react')) return 'vendor-react';
+          return 'vendor-misc';
+        },
+      },
+    },
   },
 });

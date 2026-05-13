@@ -13,6 +13,7 @@ import {
   Send,
   X,
 } from 'lucide-react';
+import { useEffect } from 'react';
 import { formatCurrencyBRL, formatDateBR } from '../utils/format';
 
 function BoletoBadge({ row }) {
@@ -70,7 +71,6 @@ function BoletoBadge({ row }) {
     );
   }
 
-  // pendente / default
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/40 px-3 py-1.5 text-xs">
       <FileQuestion size={12} className="text-slate-500 shrink-0" />
@@ -80,6 +80,29 @@ function BoletoBadge({ row }) {
 }
 
 export default function WhatsAppChargeModal({ modal, onClose, onUpdateMessage, onSend }) {
+  useEffect(() => {
+    if (!modal) return undefined;
+
+    const currentLockCount = Number(document.body.dataset.modalLockCount || '0');
+    if (currentLockCount === 0) {
+      document.body.dataset.modalPreviousOverflow = document.body.style.overflow || '';
+    }
+    document.body.dataset.modalLockCount = String(currentLockCount + 1);
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      const nextLockCount = Math.max(0, Number(document.body.dataset.modalLockCount || '1') - 1);
+      if (nextLockCount === 0) {
+        document.body.style.overflow = document.body.dataset.modalPreviousOverflow || '';
+        delete document.body.dataset.modalPreviousOverflow;
+        delete document.body.dataset.modalLockCount;
+        return;
+      }
+
+      document.body.dataset.modalLockCount = String(nextLockCount);
+    };
+  }, [modal]);
+
   if (!modal) return null;
 
   const { records, messages, sending, results, mocked } = modal;
@@ -96,16 +119,16 @@ export default function WhatsAppChargeModal({ modal, onClose, onUpdateMessage, o
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/70 px-4 pb-10 pt-8 backdrop-blur-sm">
-      <div className="card-hover w-full max-w-4xl overflow-hidden rounded-[32px] border border-white/70 bg-slate-900/60/95 shadow-[0_40px_120px_rgba(15,23,42,0.2)] backdrop-blur">
+    <div className="modal-overlay fixed inset-0 z-[140] flex items-start justify-center overflow-y-auto px-4 pb-10 pt-6 sm:pt-8">
+      <div className="modal-shell w-full max-w-4xl overflow-hidden rounded-[32px]">
         <div className="hero-mesh border-b border-slate-700/50 px-5 py-5 sm:px-6">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 shadow-sm">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-300 shadow-sm">
                 <MessageSquare size={18} />
               </div>
               <div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-slate-900/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-700">
+                <div className="notice-success inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em]">
                   {mocked ? <FlaskConical size={12} /> : <Send size={12} />}
                   {mocked ? 'Modo teste' : 'Revisao antes do envio'}
                 </div>
@@ -118,7 +141,7 @@ export default function WhatsAppChargeModal({ modal, onClose, onUpdateMessage, o
               type="button"
               onClick={onClose}
               disabled={sending}
-              className="rounded-2xl border border-slate-700 bg-slate-900/60/85 p-2 text-slate-500 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800/40 disabled:opacity-50"
+              className="btn-secondary rounded-2xl p-2 text-slate-300"
             >
               <X size={16} />
             </button>
@@ -126,14 +149,14 @@ export default function WhatsAppChargeModal({ modal, onClose, onUpdateMessage, o
         </div>
 
         {mocked ? (
-          <div className="mx-5 mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow-sm sm:mx-6">
+          <div className="notice-warning mx-5 mt-5 rounded-2xl px-4 py-3 text-sm shadow-sm sm:mx-6">
             Os secrets da Z-API ainda nao foram configurados. As cobrancas serao registradas como preparadas no banco, sem disparo real de mensagem.
           </div>
         ) : null}
 
-        <div className="max-h-[60vh] space-y-3 overflow-y-auto px-5 py-5 sm:px-6">
+        <div className="max-h-[min(78vh,720px)] space-y-3 overflow-y-auto px-5 py-5 sm:px-6">
           {records.length === 0 ? (
-            <div className="rounded-[28px] border border-dashed border-slate-700 bg-slate-800/40 px-6 py-12 text-center shadow-inner">
+            <div className="empty-state rounded-[28px] px-6 py-12 text-center shadow-inner">
               <p className="text-base font-semibold text-slate-50">Nenhum registro elegivel encontrado</p>
               <p className="mt-2 text-sm text-slate-500">Revise os filtros da carteira, telefone e status antes de gerar novas cobrancas.</p>
             </div>
@@ -144,13 +167,13 @@ export default function WhatsAppChargeModal({ modal, onClose, onUpdateMessage, o
               const tone = result
                 ? result.ok
                   ? isMockedResult
-                    ? 'border-amber-200 bg-amber-50/80'
-                    : 'border-emerald-200 bg-emerald-50/80'
-                  : 'border-red-200 bg-red-50/80'
-                : 'border-slate-700 bg-slate-900/60';
+                    ? 'notice-warning'
+                    : 'notice-success'
+                  : 'notice-danger'
+                : 'surface-panel';
 
               return (
-                <div key={row.id} className={`rounded-[28px] border px-4 py-4 shadow-sm transition hover:-translate-y-0.5 ${tone}`}>
+                <div key={row.id} className={`rounded-[28px] px-4 py-4 shadow-sm transition hover:-translate-y-0.5 ${tone}`}>
                   <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-slate-50">{row.nome}</p>
@@ -167,18 +190,18 @@ export default function WhatsAppChargeModal({ modal, onClose, onUpdateMessage, o
                     {result ? (
                       result.ok ? (
                         isMockedResult ? (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700 shadow-sm">
+                          <span className="notice-warning inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold shadow-sm">
                             <FlaskConical size={11} />
                             Preparado (modo teste)
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 shadow-sm">
+                          <span className="notice-success inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold shadow-sm">
                             <CheckCircle2 size={11} />
                             Enviado
                           </span>
                         )
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-100 px-3 py-1 text-xs font-semibold text-red-700 shadow-sm">
+                        <span className="notice-danger inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold shadow-sm">
                           <AlertCircle size={11} />
                           Erro
                         </span>
@@ -203,7 +226,7 @@ export default function WhatsAppChargeModal({ modal, onClose, onUpdateMessage, o
                       className="input-premium min-h-[180px] w-full font-mono text-xs disabled:cursor-not-allowed disabled:opacity-60"
                     />
                   ) : (
-                    <div className="rounded-2xl border border-white/60 bg-slate-900/60/75 px-4 py-3 text-xs leading-6 text-slate-300 shadow-inner">
+                    <div className="surface-panel-muted rounded-2xl px-4 py-3 text-xs leading-6 text-slate-200 shadow-inner">
                       <p className="whitespace-pre-line">{messages[row.id]}</p>
                     </div>
                   )}
@@ -218,8 +241,8 @@ export default function WhatsAppChargeModal({ modal, onClose, onUpdateMessage, o
             <span className="font-medium">{records.length} registro(s)</span>
             {results ? (
               <>
-                <span className="text-emerald-700">{sentCount} com sucesso</span>
-                <span className="text-red-600">{failCount} com erro</span>
+                <span className="text-emerald-300">{sentCount} com sucesso</span>
+                <span className="text-red-300">{failCount} com erro</span>
               </>
             ) : null}
           </div>
@@ -229,7 +252,7 @@ export default function WhatsAppChargeModal({ modal, onClose, onUpdateMessage, o
               type="button"
               onClick={onClose}
               disabled={sending}
-              className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
+              className="btn-secondary rounded-2xl px-4 py-3 text-sm font-semibold"
             >
               Fechar
             </button>

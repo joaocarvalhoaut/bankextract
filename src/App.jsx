@@ -42,6 +42,9 @@ const PlanosScreen = lazy(() => import('./screens/PlanosScreen'));
 const BillingScreen = lazy(() => import('./screens/BillingScreen'));
 const AnalyticsScreen = lazy(() => import('./screens/AnalyticsScreen'));
 const AdminSaasScreen = lazy(() => import('./screens/AdminSaasScreen'));
+const AdminOpsScreen = lazy(() => import('./screens/AdminOpsScreen'));
+const PrivacyPolicyScreen = lazy(() => import('./screens/PrivacyPolicyScreen'));
+const TermsScreen = lazy(() => import('./screens/TermsScreen'));
 const NotificationsScreen = lazy(() => import('./screens/NotificationsScreen'));
 const AuditTimelineScreen = lazy(() => import('./screens/AuditTimelineScreen'));
 const HelpCenterScreen = lazy(() => import('./screens/HelpCenterScreen'));
@@ -232,6 +235,18 @@ const headerMap = {
     title: 'Admin SaaS',
     subtitle: 'Painel master para acompanhar empresas, assinaturas internas, uso e auditoria.',
   },
+  'admin-ops': {
+    title: 'Central Operacional',
+    subtitle: 'Monitoramento em tempo real de envios, integracoes, automacoes, alertas e saude do sistema.',
+  },
+  privacy: {
+    title: 'Politica de Privacidade',
+    subtitle: 'Conformidade LGPD — tratamento de dados pessoais pelo NC Finance.',
+  },
+  terms: {
+    title: 'Termos de Uso',
+    subtitle: 'Condicoes gerais de uso da plataforma NC Finance.',
+  },
 };
 
 const companyDependentTabs = new Set(['importacao', 'visao-geral', 'historico', 'cobrancas', 'central-cobranca', 'historico-cobranca', 'inconsistencias', 'pronto-envio', 'automacoes', 'integracoes', 'analytics', 'notifications', 'audit', 'production-checklist']);
@@ -302,7 +317,7 @@ export default function App() {
   const initialPath = getCurrentPathname();
   const [activeTab, setActiveTab] = useState(() => resolveTabFromPath(initialPath));
   const [publicScreen, setPublicScreen] = useState(() => resolvePublicScreenFromPath(initialPath));
-  const [appLoading, setAppLoading] = useState(false);
+  const [, setAppLoading] = useState(false);
   const [toast, setToast] = useState(null);
   const [pageError, setPageError] = useState('');
 
@@ -461,10 +476,6 @@ export default function App() {
     setToast({ type, text });
     window.clearTimeout(window.__bankextractToastTimeout);
     window.__bankextractToastTimeout = window.setTimeout(() => setToast(null), 3200);
-  }, []);
-
-  const handleViewPublicSite = useCallback(() => {
-    setPublicScreen('public-landing-auth');
   }, []);
 
   const handleOpenNotifications = useCallback(() => {
@@ -805,7 +816,6 @@ export default function App() {
         observacoes: row.observacoes ?? row.observacao ?? '',
         tipo_importacao: importType,
       }));
-      console.log('[IMPORT] payload', payload);
       const result = await financeService.importSelectedRows(preview?.rows || [], batchId, currentCompanyId, {
         fileName: preview.fileName,
         tipo: importType,
@@ -1251,8 +1261,6 @@ export default function App() {
       message: nextRow.mensagem || '',
     };
 
-    console.log('[SEND MODAL WHATSAPP CLICKED]', chargePreviewModal.row);
-    console.log('[SEND MODAL WHATSAPP REQUEST]', payload);
 
     setChargePreviewSending(true);
     setChargeRows((prev) =>
@@ -1438,7 +1446,6 @@ export default function App() {
       const successUrl = `${baseUrl}/billing?checkout=success&plan=${encodeURIComponent(targetPlanCode)}`;
       const cancelUrl = `${baseUrl}/planos?checkout=canceled`;
 
-      console.log('[App] iniciando createStripeCheckoutSession', { planCode: targetPlanCode, companyId: currentCompanyId });
 
       let result;
       try {
@@ -1829,6 +1836,20 @@ export default function App() {
           />
         );
         break;
+      case 'admin-ops':
+        currentContent = (
+          <AdminOpsScreen
+            isSystemAdminUser={empresa.isSystemAdmin}
+            onToast={showToast}
+          />
+        );
+        break;
+      case 'privacy':
+        currentContent = <PrivacyPolicyScreen />;
+        break;
+      case 'terms':
+        currentContent = <TermsScreen />;
+        break;
       default:
         currentContent = <DashboardScreen metrics={dashboardMetrics} errorMessage={pageError} onRetry={refreshAllData} companyId={globalMode ? null : currentCompanyId} allCompanies={globalMode && empresa.isSystemAdmin} onNavigate={setActiveTab} />;
         break;
@@ -1934,7 +1955,7 @@ export default function App() {
               title={sectionHeader.title}
               subtitle={sectionHeader.subtitle}
               userEmail={auth.user?.email || ''}
-              onSignOut={auth.signOut}
+              onSignOut={handleSignOut}
               companyName={currentCompanyName}
               companyId={currentCompanyId}
               onNavigate={handleHeaderNavigation}

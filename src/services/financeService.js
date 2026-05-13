@@ -5,12 +5,10 @@ import {
   supabase
 } from './supabaseClient';
 import { GLOBAL_COMPANY_ID } from './companyService';
-import { buildPlanCatalogForUi, getPlanMeta, normalizePlanId } from '../constants/plans';
 import {
   currentTenantUserId as currentUserId,
   defaultTenantCompanyId as defaultCompanyId,
   fallbackTenantIds,
-  tenantContext,
 } from './tenantContext.js';
 import {
   buildLocalBootstrap,
@@ -21,8 +19,6 @@ import {
   defaultAutomationRules,
   localDelay,
   mapEmpresaToApp,
-  sampleNames,
-  samplePhones,
 } from './financeDataset.js';
 import {
   mapConfiguracaoToApp,
@@ -72,13 +68,6 @@ function normalizeStatus(status) {
 
   return 'pendente';
 }
-
-const cleanInsertPayload = (items = []) =>
-  (items || []).map((item) => {
-    const clone = { ...(item || {}) };
-    delete clone.id;
-    return clone;
-  });
 
 const isSystemAdminUser = async (userId) => {
   if (!hasSupabaseConfig || !userId) {
@@ -700,7 +689,7 @@ export const financeService = {
     };
   },
 
-  async processImportFile(file, tipo = 'vencidos', companyId) {
+  async processImportFile() {
     throw new Error('OCR nao configurado ou indisponivel. Nenhum dado foi importado.');
   },
 
@@ -778,8 +767,7 @@ export const financeService = {
       );
       const cleanPayload = items.map((item) => {
         const normalizedStatus = normalizeStatus(item?.status);
-        console.log('[IMPORT] normalized status', item?.status, '=>', normalizedStatus);
-        const documentoFinal =
+          const documentoFinal =
           item?.documento ||
           item?.numero_boleto ||
           item?.numeroBoleto ||
@@ -801,24 +789,16 @@ export const financeService = {
         };
         delete clone.id;
         clone.documento = documentoFinal;
-        console.log('[IMPORT DOC]', {
-          original: item,
-          documentoFinal: clone.documento
-        });
         return clone;
       });
 
-      console.log('[IMPORT] payload', payload);
-      console.log('[IMPORT] cleanPayload', cleanPayload);
 
       const { data, error } = await client.from('registros_financeiros').insert(cleanPayload).select();
       if (error) throw buildError(error, 'Falha ao inserir registros.');
-      console.log('[IMPORT] resultado', data);
       return (data || []).map(mapRegistroToApp);
     }
 
     db.registros.push(...clone(items));
-    console.log('[IMPORT] resultado', items);
     return localDelay(items);
   },
 
@@ -1154,7 +1134,6 @@ export const financeService = {
     }
 
     const selectedRows = (rows || []).filter((row) => row.selected !== false);
-    console.log('[IMPORT] selecionados', selectedRows.length);
 
     if (!selectedRows.length) {
       throw new Error('Nenhuma linha selecionada para importar.');

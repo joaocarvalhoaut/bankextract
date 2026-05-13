@@ -73,7 +73,9 @@ function readIgnored(companyId) {
 function writeIgnored(companyId, values) {
   try {
     window.localStorage.setItem(`${IGNORED_PREFIX}${companyId}`, JSON.stringify(values));
-  } catch {}
+  } catch {
+    // Ignored on purpose: local persistence is best-effort only.
+  }
 }
 
 export default function InconsistenciasCobrancaScreen({
@@ -211,8 +213,8 @@ export default function InconsistenciasCobrancaScreen({
           nao_encontrados: Math.max(0, total - found - baixa - conf - erros),
         });
       }
-    } catch (_err) {
-      // Drive report is informational; silent fail
+    } catch {
+      // Drive report is informational; silent fail.
     } finally {
       setDriveLoading(false);
     }

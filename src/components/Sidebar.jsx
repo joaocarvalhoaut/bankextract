@@ -17,6 +17,7 @@ import {
   Target,
   Upload,
   WalletCards,
+  Zap,
 } from 'lucide-react';
 import { getPlanMeta, getUpgradeRecommendation, normalizePlanId } from '../constants/plans';
 import SubscriptionBadge from './SubscriptionBadge';
@@ -41,6 +42,7 @@ const items = [
   { id: 'planos', label: 'Planos', icon: BriefcaseBusiness, group: 'admin', billingAccess: true },
   { id: 'billing', label: 'Billing', icon: CreditCard, group: 'admin', billingAccess: true },
   { id: 'admin-saas', label: 'Admin SaaS', icon: Settings2, group: 'admin', adminOnly: true },
+  { id: 'admin-ops', label: 'Central Ops', icon: Zap, group: 'admin', adminOnly: true },
 ];
 
 const groupLabels = {
@@ -73,7 +75,6 @@ export default function Sidebar({
   setActiveCompanyId,
   companies,
   activeCompany,
-  stats,
   billingExecutionMode = 'simulate',
   isSystemAdmin = false,
   canAccessBilling = false,
@@ -120,8 +121,8 @@ export default function Sidebar({
   });
 
   return (
-    <aside className="w-full border-r border-slate-700 bg-slate-900/60 lg:min-h-screen lg:w-[286px] lg:px-3 lg:py-5">
-      <div className="space-y-4 lg:sticky lg:top-0">
+    <aside className="text-crisp w-full border-r border-slate-700 bg-slate-900/60 lg:min-h-screen lg:w-[286px] lg:px-3 lg:py-5">
+      <div className="space-y-4 lg:sticky lg:top-0 lg:max-h-screen lg:overflow-y-auto lg:pr-1">
         {/* ── Brand header ── */}
         <div
           className="overflow-hidden rounded-[26px] shadow-lifted"
@@ -132,7 +133,7 @@ export default function Sidebar({
 
             <div className={`mt-3 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] ${
               billingExecutionMode === 'real'
-                ? 'border-blue-500/30 bg-blue-900/200/10 text-blue-300'
+                ? 'border-blue-500/30 bg-blue-500/10 text-blue-300'
                 : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
             }`}>
               <Shield size={11} className={billingExecutionMode === 'real' ? 'text-blue-300' : 'text-amber-400'} />
@@ -236,7 +237,7 @@ export default function Sidebar({
                     key={item.id}
                     type="button"
                     onClick={() => setActiveTab(item.id)}
-                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-medium transition-colors ${
+                    className={`flex min-h-11 w-full items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-medium transition-colors ${
                       isActive
                         ? 'nav-active-brand'
                         : 'text-slate-300 hover:bg-slate-800/60 hover:text-slate-50'
@@ -253,7 +254,7 @@ export default function Sidebar({
       </div>
 
         {/* ── Rodapé LGPD ─────────────────────────────────────── */}
-        <div className="mt-auto border-t border-slate-700/40 px-4 pb-4 pt-3">
+        <div className="mt-4 border-t border-slate-700/40 px-4 pb-4 pt-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <button
               type="button"

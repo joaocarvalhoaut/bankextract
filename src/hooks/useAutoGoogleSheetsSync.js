@@ -61,7 +61,7 @@ export function useAutoGoogleSheetsSync({ activeCompanyId, isGlobalView, enabled
       const hasConfig = Boolean(config && config.ativo);
       configCacheRef.current = { companyId, hasConfig, cachedAt: now };
       return hasConfig;
-    } catch (_err) {
+    } catch {
       // Falha silenciosa: tratar como "sem config"
       return false;
     }
@@ -94,7 +94,6 @@ export function useAutoGoogleSheetsSync({ activeCompanyId, isGlobalView, enabled
         try {
           await syncGoogleSheets(activeCompanyId);
           setSyncStatus(SYNC_STATUS.SYNCED);
-          // eslint-disable-next-line no-console
           console.log('[AutoSync] Google Sheets sincronizado — motivo: ' + safeReason);
 
           clearTimeout(clearSyncRef.current);
@@ -102,7 +101,6 @@ export function useAutoGoogleSheetsSync({ activeCompanyId, isGlobalView, enabled
         } catch (syncErr) {
           setSyncStatus(SYNC_STATUS.ERROR);
           setSyncMessage((syncErr && syncErr.message) || 'Falha na sincronização automática com Google Sheets.');
-          // eslint-disable-next-line no-console
           console.warn('[AutoSync] Falha — motivo: ' + safeReason, syncErr);
 
           clearTimeout(clearSyncRef.current);
@@ -111,7 +109,7 @@ export function useAutoGoogleSheetsSync({ activeCompanyId, isGlobalView, enabled
             setSyncMessage('');
           }, 6000);
         }
-      } catch (_outerErr) {
+      } catch {
         // Proteção extra: qualquer erro inesperado não deve crashar o app
       }
     }, 1000);

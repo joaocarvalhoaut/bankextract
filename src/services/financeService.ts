@@ -1337,20 +1337,3 @@ export const financeService = {
 };
 
 export default financeService;
-          status: 'mock_enviado',
-          mocked: true,
-          mode,
-        };
-      }
-    }
-
-    return {
-      chargeId,
-      status: 'mock_enviado',
-      mocked: true,
-      mode,
-    };
-  },
-};
-
-export default financeService;

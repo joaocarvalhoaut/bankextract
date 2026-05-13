@@ -2,7 +2,6 @@ import {
   Activity,
   AlertCircle,
   ArrowRight,
-  CheckCircle2,
   ChevronRight,
   Clock3,
   FileSearch,
@@ -15,8 +14,6 @@ import {
   WalletCards,
 } from 'lucide-react';
 import BrandLockup from '../components/branding/BrandLockup';
-import PlanCard from '../components/plans/PlanCard';
-import { getAllPlans } from '../constants/plans';
 
 const painPoints = [
   {
@@ -88,43 +85,11 @@ const practicalFlow = [
   },
 ];
 
-const outcomes = [
-  'Ate 80% menos trabalho manual',
-  'Mais controle sobre titulos em aberto',
-  'Menos falhas antes do envio',
-  'Mensagens padronizadas por empresa',
-  'Auditoria completa da operacao',
-  'Preparacao segura para automacao real',
-];
-
 const socialLogos = ['Construtora', 'Distribuidora', 'Industria', 'Atacado', 'Servicos', 'B2B'];
 const trustMetrics = [
   { value: '+87%', label: 'Boletos localizados automaticamente' },
   { value: '3x', label: 'Mais produtividade operacional' },
   { value: '100%', label: 'Operacao auditavel por titulo' },
-];
-
-const faqItems = [
-  {
-    question: 'O sistema envia cobranca automatica?',
-    answer: 'O fluxo ja nasce preparado para simulacao, auditoria e automacao futura. O envio real pode ser ativado em uma fase posterior.',
-  },
-  {
-    question: 'Preciso configurar WhatsApp agora?',
-    answer: 'Nao. Nesta etapa voce consegue organizar carteira, importar dados, simular cobrancas e validar o processo sem integrar um provedor pago.',
-  },
-  {
-    question: 'Posso usar sem dominio proprio?',
-    answer: 'Sim. O NC Finance funciona como plataforma SaaS multiempresa sem exigir dominio proprio para iniciar a operacao.',
-  },
-  {
-    question: 'Os dados sao separados por empresa?',
-    answer: 'Sim. O produto opera com isolamento por company_id, mantendo registros, cobrancas e auditoria separados por empresa.',
-  },
-  {
-    question: 'Posso testar antes de pagar?',
-    answer: 'Sim. O produto foi desenhado para onboarding, simulacao e validacao operacional antes de qualquer integracao comercial paga.',
-  },
 ];
 
 function SectionBadge({ children }) {
@@ -170,7 +135,6 @@ function InfoCard({ icon: Icon, title, description, tone = 'blue' }) {
 export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated = false }) {
   const handleStart = onStartNow || (() => {});
   const handlePlans = onOpenPlans || (() => {});
-  const plans = getAllPlans();
 
   const scrollToSection = (sectionId) => {
     if (typeof document === 'undefined') return false;

@@ -3,8 +3,6 @@ import {
   Activity,
   AlertCircle,
   CheckCircle2,
-  Clock3,
-  Database,
   ExternalLink,
   FolderOpen,
   Lock,
@@ -20,7 +18,6 @@ import {
   normalizeGoogleSheetsStatus,
   saveGoogleSheetsConfig,
   syncGoogleSheetsNow,
-  syncGoogleSheets,
   testGoogleSheetsConnection,
   toFriendlyGoogleSheetsError,
 } from '../services/googleSheetsService';
@@ -33,9 +30,9 @@ function extractSpreadsheetId(input) {
 function StatusBadge({ type, message }) {
   if (!message) return null;
   const styles = {
-    success: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
-    error: 'border-red-500/30 bg-red-500/10 text-red-300',
-    info: 'border-blue-500/30 bg-blue-500/10 text-blue-300',
+    success: 'notice-success',
+    error: 'notice-danger',
+    info: 'notice-info',
   };
   const Icon = type === 'success' ? CheckCircle2 : type === 'error' ? AlertCircle : Sparkles;
   return (
@@ -122,13 +119,6 @@ function formatRelativeSyncTime(value) {
     label: `ha ${diffDays} dia${diffDays > 1 ? 's' : ''}`,
     tone: 'warning',
     icon: '🟡',
-    health: 'Atencao',
-  };
-
-  return {
-    label: `Ultima sincronizacao ha ${diffHours}h`,
-    tone: 'warning',
-    icon: '🔴',
     health: 'Atencao',
   };
 }
@@ -264,7 +254,9 @@ export default function GoogleSheetsConfig({
       setConnectionState(normalizeGoogleSheetsStatus({ ativo: true, spreadsheet_id: cleanId, sheet_name: sheetName }).status);
       try {
         await refreshGoogleMetadata();
-      } catch {}
+      } catch {
+        // Metadata refresh is best-effort after saving.
+      }
       await loadStatusSnapshot().catch(() => {});
       setStatus({ type: 'success', message: 'Configuracao salva com sucesso.' });
       onSaved?.();
@@ -351,9 +343,9 @@ export default function GoogleSheetsConfig({
 
   if (globalMode) {
     return (
-      <div className="card-hover rounded-[30px] border border-white/70 bg-slate-900/70 p-5 shadow-soft backdrop-blur">
+      <div className="surface-card rounded-[30px] p-5 shadow-soft">
         <div className="mb-3 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-300">
             <Sheet size={18} />
           </div>
           <div>
@@ -361,7 +353,7 @@ export default function GoogleSheetsConfig({
             <p className="text-sm text-slate-500">Selecione uma empresa especifica para sincronizar.</p>
           </div>
         </div>
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow-sm">
+        <div className="notice-warning rounded-2xl px-4 py-3 text-sm shadow-sm">
           A sincronizacao global nao e permitida. Escolha uma empresa especifica antes de conectar ou sincronizar a planilha.
         </div>
       </div>
@@ -370,9 +362,9 @@ export default function GoogleSheetsConfig({
 
   if (!empresaId) {
     return (
-      <div className="card-hover rounded-[30px] border border-white/70 bg-slate-900/70 p-5 shadow-soft backdrop-blur">
+      <div className="surface-card rounded-[30px] p-5 shadow-soft">
         <div className="mb-3 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-300">
             <Sheet size={18} />
           </div>
           <div>
@@ -380,7 +372,7 @@ export default function GoogleSheetsConfig({
             <p className="text-sm text-slate-500">Selecione uma empresa para habilitar a sincronizacao.</p>
           </div>
         </div>
-        <div className="rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-4 text-sm text-slate-300 shadow-sm">
+        <div className="surface-panel-muted rounded-2xl px-4 py-4 text-sm text-slate-300 shadow-sm">
           Nenhuma empresa ativa selecionada para esta integracao.
         </div>
       </div>
@@ -408,16 +400,6 @@ export default function GoogleSheetsConfig({
   const importMeta = formatRelativeSyncTime(effectiveLastImportAt);
   const hasRealSyncError = Boolean(statusSnapshot?.last_source_sync_error);
   const isConfigured = Boolean(hasConfig && resolvedSheetName && resolvedSheetName !== 'Nenhuma aba selecionada');
-  const syncHealthMeta =
-    connectionState === 'syncing'
-      ? { ...syncMeta, health: 'Atencao', tone: 'warning', icon: '🟡' }
-      : connectionState === 'error' ||
-          connectionState === 'erro' ||
-          connectionState === 'missing_spreadsheet' ||
-          connectionState === 'missing_sheet' ||
-          statusSnapshot?.last_source_sync_error
-        ? { ...syncMeta, health: 'Erro', tone: 'danger', icon: '🔴' }
-        : syncMeta;
   const effectiveSyncHealthMeta =
     connectionState === 'syncing'
       ? { ...syncMeta, health: 'Aguardando sincronizacao', tone: 'neutral', icon: '⚪' }
@@ -431,16 +413,16 @@ export default function GoogleSheetsConfig({
           : syncMeta;
   const resolvedStatus =
     connectionState === 'syncing'
-      ? { label: 'Sincronizando', tone: 'border-blue-700/40 bg-blue-900/20 text-blue-700' }
+      ? { label: 'Sincronizando', tone: 'notice-info' }
       : connectionState === 'error' || connectionState === 'erro'
-        ? { label: 'Erro na conexao', tone: 'border-red-200 bg-red-50 text-red-700' }
+        ? { label: 'Erro na conexao', tone: 'notice-danger' }
         : connectionState === 'missing_spreadsheet'
-          ? { label: 'Planilha nao selecionada', tone: 'border-amber-200 bg-amber-50 text-amber-700' }
+          ? { label: 'Planilha nao selecionada', tone: 'notice-warning' }
           : connectionState === 'missing_sheet'
-            ? { label: 'Aba nao selecionada', tone: 'border-amber-200 bg-amber-50 text-amber-700' }
+            ? { label: 'Aba nao selecionada', tone: 'notice-warning' }
             : hasConfig
-              ? { label: 'Conectado', tone: 'border-emerald-200 bg-emerald-50 text-emerald-700' }
-              : { label: 'Nao configurado', tone: 'border-slate-700 bg-slate-800/60 text-slate-300' };
+              ? { label: 'Conectado', tone: 'notice-success' }
+              : { label: 'Nao configurado', tone: 'surface-panel-muted text-slate-300' };
   const sheetsUrl = hasConfig
     ? `https://docs.google.com/spreadsheets/d/${extractSpreadsheetId(spreadsheetId)}/edit`
     : null;
@@ -456,17 +438,17 @@ export default function GoogleSheetsConfig({
 
   if (isHubVariant) {
     const healthStyles = {
-      success: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-      warning: 'border-amber-200 bg-amber-50 text-amber-700',
-      danger: 'border-red-200 bg-red-50 text-red-700',
-      neutral: 'border-slate-700 bg-slate-800/40 text-slate-300',
+      success: 'notice-success',
+      warning: 'notice-warning',
+      danger: 'notice-danger',
+      neutral: 'surface-panel-muted text-slate-300',
     };
     const syncToneClass = healthStyles[effectiveSyncHealthMeta.tone] || healthStyles.neutral;
 
     return (
       <section className="group rounded-[32px] border border-slate-700/90 bg-slate-900/60 p-7 shadow-[0_22px_70px_rgba(15,23,42,0.08)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_28px_90px_rgba(15,23,42,0.1)] lg:p-8">
         <div className="flex items-start gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-[24px] bg-blue-900/20 text-blue-700 shadow-sm ring-1 ring-blue-100">
+          <div className="flex h-14 w-14 items-center justify-center rounded-[24px] bg-blue-500/10 text-blue-300 shadow-sm ring-1 ring-blue-500/20">
             <Sheet size={22} />
           </div>
           <div className="flex-1">
@@ -567,8 +549,8 @@ export default function GoogleSheetsConfig({
 
         <div className={`mt-5 rounded-2xl border px-4 py-3 text-sm shadow-sm ${
           statusSnapshot?.last_source_sync_error
-            ? 'border-red-200 bg-red-50 text-red-700'
-            : 'border-blue-700/40 bg-blue-900/20 text-blue-800'
+            ? 'notice-danger'
+            : 'notice-info'
         }`}>
           {statusSnapshot?.last_source_sync_error ||
             'Use a credencial tecnica do Google compartilhada com esta empresa para sincronizar planilhas sem expor segredos no frontend.'}
@@ -586,7 +568,7 @@ export default function GoogleSheetsConfig({
               disabled={anyLoading || !canManage}
               className="w-full rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm text-slate-50 placeholder-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-60"
             />
-            <p className="text-on-light-muted mt-2 text-xs">
+            <p className="mt-2 text-xs text-slate-400">
               Cole a URL da planilha ou apenas o ID do Google Sheets.
             </p>
           </label>
@@ -601,14 +583,14 @@ export default function GoogleSheetsConfig({
               disabled={anyLoading || !canManage}
               className="w-full rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm text-slate-50 placeholder-slate-500 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-60"
             />
-            <p className="text-on-light-muted mt-2 text-xs">Informe o nome exato da aba que recebera a sincronizacao.</p>
+            <p className="mt-2 text-xs text-slate-400">Informe o nome exato da aba que recebera a sincronizacao.</p>
           </label>
         </div>
 
         {status ? <div className="mt-5"><StatusBadge type={status.type} message={status.message} /></div> : null}
 
         {!canManage ? (
-          <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow-sm">
+          <div className="notice-warning mt-5 rounded-2xl px-4 py-3 text-sm shadow-sm">
             Seu perfil pode apenas visualizar o status desta integracao. Solicite acesso de financeiro, admin ou system admin para editar.
           </div>
         ) : null}
@@ -628,7 +610,7 @@ export default function GoogleSheetsConfig({
             type="button"
             onClick={handleSelectSpreadsheet}
             disabled={anyLoading}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800/40 disabled:cursor-not-allowed disabled:opacity-50"
+            className="btn-secondary inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
           >
             <FolderOpen size={14} />
             Selecionar planilha
@@ -638,7 +620,7 @@ export default function GoogleSheetsConfig({
             type="button"
             onClick={handleTest}
             disabled={anyLoading || !hasConfig}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800/40 disabled:cursor-not-allowed disabled:opacity-50"
+            className="btn-secondary inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
           >
             <Wifi size={14} />
             {testing ? 'Testando...' : 'Testar conexao'}
@@ -659,7 +641,7 @@ export default function GoogleSheetsConfig({
               href={sheetsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800/40"
+              className="btn-secondary inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
             >
               <ExternalLink size={14} />
               Abrir planilha
@@ -671,15 +653,15 @@ export default function GoogleSheetsConfig({
   }
 
   return (
-    <div className="card-hover overflow-hidden rounded-[32px] border border-white/70 bg-slate-900/70 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur">
+    <div className="surface-card overflow-hidden rounded-[32px] shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
       <div className="hero-mesh border-b border-slate-700/50 px-5 py-5 sm:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-100 text-blue-700 shadow-sm">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-300 shadow-sm">
             <Sheet size={18} />
           </div>
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-blue-700/40 bg-slate-900/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-700">
+              <div className="notice-info inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em]">
                 <Sparkles size={12} />
                 Integracao viva
               </div>
@@ -692,8 +674,8 @@ export default function GoogleSheetsConfig({
             <span
               className={`inline-flex rounded-full border px-3 py-2 text-xs font-semibold shadow-sm ${
                 hasConfig
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                  : 'border-slate-700 bg-slate-900/60 text-slate-300'
+                  ? 'notice-success'
+                  : 'surface-panel-muted text-slate-300'
               }`}
             >
               {hasConfig ? 'Planilha conectada' : 'Aguardando configuracao'}
@@ -703,7 +685,7 @@ export default function GoogleSheetsConfig({
                 href={sheetsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-700 bg-slate-900/60/85 px-3 py-2 text-xs font-semibold text-slate-300 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800/40"
+                className="btn-secondary inline-flex items-center gap-1.5 rounded-2xl px-3 py-2 text-xs font-semibold"
               >
                 <ExternalLink size={12} />
                 Abrir planilha
@@ -727,14 +709,14 @@ export default function GoogleSheetsConfig({
                 <p className="mt-2 text-base font-semibold text-slate-50">{hasConfig ? 'Configurada' : 'Pendente'}</p>
                 <p className="mt-1 text-sm text-slate-500">Use o ID da planilha ou cole a URL completa.</p>
               </div>
-              <div className="rounded-3xl border border-blue-700/40/80 bg-blue-900/20/70 p-4">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-blue-700">Sincronizacao</p>
-                <p className="mt-2 text-base font-semibold text-blue-950">{lastSync ? 'Atualizada' : 'Nunca sincronizada'}</p>
-                <p className="mt-1 text-sm text-blue-700/80">A integracao nunca expone credenciais no frontend.</p>
+              <div className="notice-info rounded-3xl p-4">
+                <p className="text-[11px] uppercase tracking-[0.2em]">Sincronizacao</p>
+                <p className="mt-2 text-base font-semibold">{lastSync ? 'Atualizada' : 'Nunca sincronizada'}</p>
+                <p className="mt-1 text-sm text-blue-200">A integracao nunca expone credenciais no frontend.</p>
               </div>
-              <div className="rounded-3xl border border-blue-700/40/80 bg-blue-900/20/70 p-4">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-blue-700">Ultima sincronizacao</p>
-                <p className="mt-2 text-base font-semibold text-blue-950">
+              <div className="notice-info rounded-3xl p-4">
+                <p className="text-[11px] uppercase tracking-[0.2em]">Ultima sincronizacao</p>
+                <p className="mt-2 text-base font-semibold">
                   {lastSync
                     ? new Date(lastSync).toLocaleString('pt-BR', {
                         day: '2-digit',
@@ -778,7 +760,7 @@ export default function GoogleSheetsConfig({
               </label>
             </div>
 
-            <div className="rounded-2xl border border-blue-700/40 bg-blue-900/20 px-4 py-3 text-sm text-blue-800 shadow-sm">
+            <div className="notice-info rounded-2xl px-4 py-3 text-sm shadow-sm">
               Compartilhe a planilha com a credencial tecnica configurada do sistema para permitir escrita segura durante a sincronizacao.
             </div>
 
@@ -799,7 +781,7 @@ export default function GoogleSheetsConfig({
                 type="button"
                 onClick={handleTest}
                 disabled={anyLoading || !hasConfig}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800/40 disabled:cursor-not-allowed disabled:opacity-50"
+                className="btn-secondary inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
               >
                 <Wifi size={14} />
                 {testing ? 'Testando...' : 'Testar conexao'}

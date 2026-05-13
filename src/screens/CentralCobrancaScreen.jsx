@@ -568,7 +568,6 @@ export default function CentralCobrancaScreen({
         elegivel: isChargeRowEligible(row),
       };
     });
-    console.log('[PREPARAR COBRANCA] payload', debugPayload);
 
     setRunningAction('prepare-selected');
     try {
@@ -818,7 +817,7 @@ export default function CentralCobrancaScreen({
               type="button"
               disabled={!row.boleto_url}
               onClick={() => window.open(row.boleto_url, '_blank', 'noopener,noreferrer')}
-              className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
+              className="control-surface inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-medium text-slate-200 transition disabled:opacity-50"
             >
               <ExternalLink size={12} />
               Abrir boleto
@@ -827,14 +826,14 @@ export default function CentralCobrancaScreen({
               <button
                 type="button"
                 onClick={() => setOpenMenuRowId((current) => (current === row.id ? null : row.id))}
-                className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-slate-800/40"
+                className="control-surface inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-medium text-slate-200 transition"
               >
                 <MoreHorizontal size={12} />
                 Mais acoes
                 <ChevronDown size={12} />
               </button>
               {openMenuRowId === row.id ? (
-                <div className="absolute right-0 top-[calc(100%+8px)] z-[9999] min-w-[220px] rounded-2xl border border-slate-700 bg-slate-900/60 p-2 shadow-xl">
+                <div className="absolute right-0 top-[calc(100%+8px)] z-[90] min-w-[220px] rounded-2xl border border-slate-700 bg-slate-900/96 p-2 shadow-xl backdrop-blur">
                   <button
                     type="button"
                     disabled={!canManageCharges || Boolean(runningAction)}
@@ -958,7 +957,7 @@ export default function CentralCobrancaScreen({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="text-crisp space-y-6">
       {limitNotice ? <PlanLimitNotice {...limitNotice} /> : null}
       <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -976,7 +975,7 @@ export default function CentralCobrancaScreen({
             type="button"
             onClick={loadCenter}
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition hover:bg-slate-800/40 disabled:opacity-50"
+            className="control-surface inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition disabled:opacity-50"
           >
             {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCcw size={15} />}
             Atualizar central
@@ -985,7 +984,7 @@ export default function CentralCobrancaScreen({
             type="button"
             onClick={() => handlePrepareSelected({ fallbackToEligible: true })}
             disabled={Boolean(runningAction)}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-2.5 text-sm font-semibold text-slate-300 shadow-soft transition hover:bg-slate-800/60"
+            className="control-surface inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition"
           >
             <Send size={15} />
             Preparar cobranca
@@ -994,7 +993,7 @@ export default function CentralCobrancaScreen({
             type="button"
             onClick={() => handlePrepareSelected({ fallbackToEligible: false })}
             disabled={!selectedRows.size || Boolean(runningAction)}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-2.5 text-sm font-semibold text-slate-300 shadow-soft transition hover:bg-slate-800/60 disabled:opacity-50"
+            className="control-surface inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition disabled:opacity-50"
           >
             {runningAction === 'prepare-selected' ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
             Preparar lote
@@ -1014,7 +1013,7 @@ export default function CentralCobrancaScreen({
       </section>
 
       {simulationResult ? (
-        <section className="rounded-[28px] border border-blue-700/40 bg-blue-900/20/70 p-6 shadow-soft">
+        <section className="rounded-[28px] border border-blue-700/40 bg-blue-500/10 p-6 shadow-soft">
           <div className="flex items-start gap-3">
             <CheckCircle2 className="mt-0.5 text-blue-700" size={18} />
             <div className="w-full">
@@ -1071,8 +1070,8 @@ export default function CentralCobrancaScreen({
       </section>
 
       {previewResult ? (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/45 p-4">
-          <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[28px] border border-emerald-200 bg-slate-900/60 p-6 shadow-2xl">
+        <div className="modal-overlay fixed inset-0 z-[140] flex items-center justify-center p-4">
+          <div className="modal-shell text-crisp max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[28px] p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-emerald-900">Previa do envio</p>
@@ -1081,7 +1080,7 @@ export default function CentralCobrancaScreen({
               <button
                 type="button"
                 onClick={() => setPreviewResult(null)}
-                className="rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200"
+                className="control-surface rounded-xl px-3 py-2 text-xs font-semibold text-slate-200"
               >
                 Fechar
               </button>
@@ -1118,7 +1117,7 @@ export default function CentralCobrancaScreen({
                 savingTemplate={savingTemplate}
               />
 
-              <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 text-sm text-slate-200">
+              <div className="panel-subtle rounded-2xl p-4 text-sm text-slate-200">
                 <p><span className="font-semibold text-slate-50">Numero boleto:</span> {getNumeroBoletoEfetivo(previewResult.payload) || '-'}</p>
                 <p className="mt-2"><span className="font-semibold text-slate-50">Linha digitavel:</span> {previewResult.payload?.linha_digitavel || '-'}</p>
                 <p className="mt-2"><span className="font-semibold text-slate-50">Codigo barras:</span> {previewResult.payload?.codigo_barras || '-'}</p>
@@ -1132,8 +1131,8 @@ export default function CentralCobrancaScreen({
       ) : null}
 
       {manualResult ? (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/45 p-4">
-          <div className="max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-[28px] border border-emerald-200 bg-slate-900/60 p-6 shadow-2xl">
+        <div className="modal-overlay fixed inset-0 z-[140] flex items-center justify-center p-4">
+          <div className="modal-shell text-crisp max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-[28px] p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-emerald-900">Envio manual assistido</p>
@@ -1144,7 +1143,7 @@ export default function CentralCobrancaScreen({
                   <button
                     type="button"
                     onClick={() => downloadManualCsv(manualResult.items || [])}
-                    className="rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200"
+                    className="control-surface rounded-xl px-3 py-2 text-xs font-semibold text-slate-200"
                   >
                     Baixar CSV
                   </button>
@@ -1160,7 +1159,7 @@ export default function CentralCobrancaScreen({
                 <button
                   type="button"
                   onClick={() => setManualResult(null)}
-                  className="rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200"
+                className="control-surface rounded-xl px-3 py-2 text-xs font-semibold text-slate-200"
                 >
                   Fechar
                 </button>
@@ -1182,7 +1181,7 @@ export default function CentralCobrancaScreen({
 
             <div className="mt-5 space-y-4">
               {(manualResult.items || []).map((item, index) => (
-                <div key={`${item.drive_file_id || getNumeroBoletoEfetivo(item) || index}`} className="rounded-2xl border border-slate-700 bg-slate-800/40 p-4">
+                <div key={`${item.drive_file_id || getNumeroBoletoEfetivo(item) || index}`} className="rounded-2xl border border-slate-700 bg-slate-800/50 p-4">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="space-y-2 text-sm text-slate-200">
                       <p><span className="font-semibold text-slate-50">Cliente:</span> {getClienteEfetivo(item) || '-'}</p>

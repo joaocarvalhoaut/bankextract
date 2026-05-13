@@ -5,10 +5,10 @@ export default function DataTable({
   emptyDescription = 'Ajuste os filtros ou importe uma nova carteira.',
 }) {
   return (
-    <div className="overflow-hidden rounded-[28px] border border-slate-700 bg-slate-900/60 shadow-card">
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="border-b border-slate-700 bg-slate-800/40/90">
+    <div className="text-crisp overflow-hidden rounded-[28px] border border-slate-700 bg-slate-900/60 shadow-card">
+      <div className="table-scroll max-h-[70vh]">
+        <table className="table-sticky-head min-w-[920px] divide-y divide-slate-800">
+          <thead className="border-b border-slate-700 bg-[#10213B]/92">
             <tr>
               {columns.map((column) => (
                 <th
@@ -20,17 +20,17 @@ export default function DataTable({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-800">
             {!rows.length ? (
               <tr>
                 <td colSpan={columns.length} className="px-6 py-16 text-center">
                   <p className="text-base font-semibold text-slate-100">{emptyTitle}</p>
-                  <p className="mt-2 text-sm text-slate-500">{emptyDescription}</p>
+                  <p className="mt-2 max-w-xl mx-auto text-sm leading-relaxed text-slate-400">{emptyDescription}</p>
                 </td>
               </tr>
             ) : (
               rows.map((row, index) => (
-                <tr key={row.id || index} className="transition-colors hover:bg-slate-800/40/90">
+                <tr key={row.id || index} className="transition-colors hover:bg-slate-800/55">
                   {columns.map((column) => (
                     <td
                       key={column.key}

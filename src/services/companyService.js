@@ -448,7 +448,24 @@ export const companyService = {
       throw new Error('Codigo de convite nao reconhecido ou invalido.');
     }
 
-    const resolved = await resolveCompany(companyData);
+    const membershipsResult = await this.listUserCompanies(userId, { email: '' });
+    const resolvedCompanyId = companyData.id || companyData.company_id;
+    const resolved =
+      membershipsResult.companies.find((item) => item.id === resolvedCompanyId) && membershipsResult.memberships.find((item) => item.companyId === resolvedCompanyId)
+        ? {
+            company: membershipsResult.companies.find((item) => item.id === resolvedCompanyId),
+            membership: memberships.find((item) => item.companyId === resolvedCompanyId),
+          }
+        : {
+            company: mapCompanyToApp(companyData, { role: companyData.role || 'operador' }),
+            membership: {
+              id: companyData.membership_id || `membership_${resolvedCompanyId}`,
+              userId,
+              companyId: resolvedCompanyId,
+              role: companyData.role || 'operador',
+              createdAt: companyData.created_at || new Date().toISOString(),
+            },
+          };
     await createAuditEvent(resolved.company.id, {
       action: 'user_joined',
       entity_type: 'usuarios_empresas',

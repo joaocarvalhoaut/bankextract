@@ -5,7 +5,7 @@ function StatusBadge({ status, ok }) {
   const isWarning = status === 'atencao';
   if (isReady) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+      <span className="notice-success inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold">
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
         Pronto
       </span>
@@ -13,14 +13,14 @@ function StatusBadge({ status, ok }) {
   }
   if (isWarning) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
+      <span className="notice-warning inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold">
         <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
         Atencao
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-800/60 px-3 py-1 text-xs font-semibold text-slate-500 ring-1 ring-slate-700">
+    <span className="surface-panel-muted inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold text-slate-300">
       <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
       Pendente
     </span>
@@ -29,7 +29,7 @@ function StatusBadge({ status, ok }) {
 
 function StatusRow({ item }) {
   return (
-    <div className="flex items-start justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-800/40/80 px-4 py-3 transition hover:bg-slate-800/40">
+    <div className="surface-panel-muted flex items-start justify-between gap-4 rounded-2xl px-4 py-3 transition hover:bg-slate-800/70">
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-slate-50">{item.label}</p>
         <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{item.detail}</p>
@@ -51,7 +51,7 @@ export default function SystemStatusScreen({ status }) {
   return (
     <div className="space-y-6">
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <article className="relative overflow-hidden rounded-[28px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
+        <article className="surface-card relative overflow-hidden rounded-[28px] p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
           <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-blue-400 to-blue-600 opacity-70" />
           <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-900/20 text-blue-700">
             <ShieldCheck size={18} />
@@ -63,25 +63,25 @@ export default function SystemStatusScreen({ status }) {
           <p className="mt-1 truncate text-xs text-slate-400">{status?.companyName || 'Nenhuma empresa ativa'}</p>
         </article>
 
-        <article className="relative overflow-hidden rounded-[28px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
+        <article className="surface-card relative overflow-hidden rounded-[28px] p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
           <div className={`absolute inset-x-0 top-0 h-0.5 ${status?.googleSheetsConnected ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' : 'bg-slate-200'}`} />
-          <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl ${status?.googleSheetsConnected ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-800/60 text-slate-400'}`}>
+          <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl ${status?.googleSheetsConnected ? 'bg-emerald-500/10 text-emerald-300' : 'bg-slate-800/60 text-slate-400'}`}>
             {status?.googleSheetsConnected ? <Wifi size={18} /> : <WifiOff size={18} />}
           </div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Google Sheets</p>
-          <p className={`mt-1.5 text-2xl font-semibold ${status?.googleSheetsConnected ? 'text-emerald-700' : 'text-slate-500'}`}>
+          <p className={`mt-1.5 text-2xl font-semibold ${status?.googleSheetsConnected ? 'text-emerald-300' : 'text-slate-300'}`}>
             {status?.googleSheetsConnected ? 'Conectado' : 'Desconectado'}
           </p>
           <p className="mt-1 truncate text-xs text-slate-400">{status?.googleSheetsSheetName || 'Sem planilha vinculada'}</p>
         </article>
 
-        <article className="relative overflow-hidden rounded-[28px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
+        <article className="surface-card relative overflow-hidden rounded-[28px] p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
           <div className={`absolute inset-x-0 top-0 h-0.5 ${status?.whatsappMockMode ? 'bg-gradient-to-r from-amber-400 to-orange-400' : 'bg-gradient-to-r from-emerald-400 to-emerald-600'}`} />
-          <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl ${status?.whatsappMockMode ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
+          <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl ${status?.whatsappMockMode ? 'bg-amber-500/10 text-amber-300' : 'bg-emerald-500/10 text-emerald-300'}`}>
             <Activity size={18} />
           </div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">WhatsApp</p>
-          <p className={`mt-1.5 text-2xl font-semibold ${status?.whatsappMockMode ? 'text-amber-700' : 'text-emerald-700'}`}>
+          <p className={`mt-1.5 text-2xl font-semibold ${status?.whatsappMockMode ? 'text-amber-300' : 'text-emerald-300'}`}>
             {status?.whatsappMockMode ? 'Modo teste' : 'Pronto'}
           </p>
           <p className="mt-1 truncate text-xs text-slate-400">
@@ -89,9 +89,9 @@ export default function SystemStatusScreen({ status }) {
           </p>
         </article>
 
-        <article className="relative overflow-hidden rounded-[28px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
+        <article className="surface-card relative overflow-hidden rounded-[28px] p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
           <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-violet-400 to-purple-500 opacity-70" />
-          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-50 text-violet-700">
+          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-300">
             <ShieldCheck size={18} />
           </div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Role atual</p>
@@ -103,11 +103,11 @@ export default function SystemStatusScreen({ status }) {
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <article className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
+        <article className="surface-card rounded-[28px] p-5 shadow-soft">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Itens prontos</p>
-              <p className="mt-1.5 text-4xl font-semibold text-emerald-700">{readyCount}</p>
+              <p className="mt-1.5 text-4xl font-semibold text-emerald-300">{readyCount}</p>
               <p className="mt-1 text-xs text-slate-500">Fluxos prontos para operacao.</p>
             </div>
             <CheckCircle2 size={32} className="text-emerald-200" />
@@ -118,7 +118,7 @@ export default function SystemStatusScreen({ status }) {
           <p className="mt-1 text-right text-[10px] text-slate-400">{readyPct}% completo</p>
         </article>
 
-        <article className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
+        <article className="surface-card rounded-[28px] p-5 shadow-soft">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Pendencias</p>
@@ -129,11 +129,11 @@ export default function SystemStatusScreen({ status }) {
           </div>
         </article>
 
-        <article className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
+        <article className="surface-card rounded-[28px] p-5 shadow-soft">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Atencao</p>
-              <p className="mt-1.5 text-4xl font-semibold text-amber-700">{attentionCount}</p>
+              <p className="mt-1.5 text-4xl font-semibold text-amber-300">{attentionCount}</p>
               <p className="mt-1 text-xs text-slate-500">Funcionais, aguardando validacao.</p>
             </div>
             <Activity size={32} className="text-amber-100" />
@@ -141,7 +141,7 @@ export default function SystemStatusScreen({ status }) {
         </article>
       </section>
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="surface-card rounded-[28px] p-6 shadow-soft">
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-slate-50">Checklist de prontidao</h3>
@@ -164,7 +164,7 @@ export default function SystemStatusScreen({ status }) {
         )}
       </section>
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="surface-card rounded-[28px] p-6 shadow-soft">
         <div className="mb-5">
           <h3 className="text-lg font-semibold text-slate-50">Ultimos audit logs</h3>
           <p className="text-sm text-slate-500">Historico recente de operacoes sensiveis no escopo atual.</p>
@@ -174,7 +174,7 @@ export default function SystemStatusScreen({ status }) {
             {recentAuditLogs.map((item, index) => (
               <div
                 key={`${item.action}-${item.created_at}-${index}`}
-                className="flex items-start justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-800/40/80 px-4 py-3"
+                className="surface-panel-muted flex items-start justify-between gap-4 rounded-2xl px-4 py-3"
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-slate-50">{item.action}</p>

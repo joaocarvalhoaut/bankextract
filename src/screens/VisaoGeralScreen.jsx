@@ -576,10 +576,10 @@ export default function VisaoGeralScreen({
 
   return (
     <div className="space-y-6">
-      <section className="hero-mesh border-brand overflow-hidden rounded-[32px] border p-6 shadow-lifted lg:p-8">
+      <section className="hero-mesh text-crisp border-brand overflow-hidden rounded-[32px] border p-6 shadow-lifted lg:p-8">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-700/40 bg-blue-900/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
+            <div className="notice-info mb-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em]">
               <WalletCards size={13} />
               Carteira financeira
             </div>
@@ -594,17 +594,17 @@ export default function VisaoGeralScreen({
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
             <div className="surface-elevated rounded-2xl p-4 shadow-soft">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Escopo atual</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">Escopo atual</p>
               <p className="text-on-light mt-2 text-sm font-semibold">
                 {globalMode ? 'Todas as empresas' : activeCompanyName || 'Nenhuma empresa ativa'}
               </p>
             </div>
             <div className="surface-elevated rounded-2xl p-4 shadow-soft">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Registros visiveis</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">Registros visiveis</p>
               <p className="text-on-light mt-2 text-2xl font-semibold">{rows.length}</p>
             </div>
             <div className="surface-elevated rounded-2xl p-4 shadow-soft">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Acoes destrutivas</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">Acoes destrutivas</p>
               <p className="text-on-light mt-2 text-sm font-semibold">
                 {globalMode ? 'Bloqueadas no modo global' : canClearView ? 'Controladas por role' : 'Restritas'}
               </p>
@@ -624,13 +624,13 @@ export default function VisaoGeralScreen({
         saveLabel="Salvar configuracao"
       />
 
-      <section className="accent-bar surface-card rounded-[28px] p-5">
+      <section className="accent-bar text-crisp surface-card rounded-[28px] p-5">
         <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-slate-50">Carteira financeira</h3>
-            <p className="text-sm text-slate-500">Visao principal dos registros importados por empresa e lote.</p>
+            <p className="text-sm text-slate-300">Visao principal dos registros importados por empresa e lote.</p>
             {!canExport || !canClearView ? (
-              <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <p className="notice-warning mt-2 rounded-xl px-3 py-2 text-xs">
                 Algumas acoes desta tela estao bloqueadas para o seu perfil atual.
               </p>
             ) : null}
@@ -641,7 +641,7 @@ export default function VisaoGeralScreen({
               <button
                 type="button"
                 onClick={onExportCsv}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm font-medium text-slate-200 shadow-soft hover:bg-slate-800/40"
+                className="btn-secondary inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium"
               >
                 <Download size={14} />
                 Exportar CSV
@@ -651,7 +651,7 @@ export default function VisaoGeralScreen({
               <button
                 type="button"
                 onClick={onExportExcel}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm font-medium text-slate-200 shadow-soft hover:bg-slate-800/40"
+                className="btn-secondary inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium"
               >
                 <FileSpreadsheet size={14} />
                 Exportar Excel
@@ -661,7 +661,7 @@ export default function VisaoGeralScreen({
               <button
                 type="button"
                 onClick={onOpenClearOverview}
-                className="inline-flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100"
+                className="notice-danger inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold"
               >
                 <Eraser size={14} />
                 Limpar visao
@@ -671,8 +671,8 @@ export default function VisaoGeralScreen({
         </div>
 
         <div className="mb-5 grid grid-cols-1 gap-3 xl:grid-cols-6">
-          <label className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-3 shadow-soft">
-            <span className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          <label className="surface-panel rounded-2xl px-4 py-3 shadow-soft">
+            <span className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
               <SlidersHorizontal size={13} />
               Empresa
             </span>
@@ -728,7 +728,7 @@ export default function VisaoGeralScreen({
             <option value="vencidos">Vencidos</option>
             <option value="liquidacao">Liquidacao</option>
           </select>
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-700 px-4 py-3 shadow-soft">
+          <div className="surface-panel flex items-center gap-2 rounded-2xl px-4 py-3 shadow-soft">
             <Search size={14} className="text-slate-400" />
             <input
               value={filters.search}

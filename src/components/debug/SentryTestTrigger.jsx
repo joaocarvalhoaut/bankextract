@@ -50,7 +50,6 @@ export default function SentryTestTrigger({
     // Usa apenas uma vez — remove para nao re-disparar em navegacoes futuras
     sessionStorage.removeItem(SESSION_KEY);
 
-    console.log('[SENTRY TEST] Param detectado:', param, '| company:', companyId, '| user:', userId);
 
     // Re-sync do contexto multi-tenant com dados atuais do usuario logado
     syncSentryContext({
@@ -105,8 +104,6 @@ export default function SentryTestTrigger({
         setTriggerThrow(true);
       });
     }
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // REMOVER APOS VALIDACAO DO SENTRY

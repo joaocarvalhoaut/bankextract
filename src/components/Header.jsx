@@ -67,7 +67,7 @@ export default function Header({
   }, [menuOpen]);
 
   return (
-    <header className="accent-bar surface-card relative z-20 mb-6 overflow-visible rounded-[30px]">
+    <header className="accent-bar text-crisp surface-card relative z-30 mb-6 overflow-visible rounded-[30px]">
       <div className="overflow-visible px-5 py-4 lg:px-6 lg:py-5">
         <div className="flex flex-col gap-4 overflow-visible xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0 space-y-1">
@@ -76,7 +76,7 @@ export default function Header({
                 <Building2 size={11} />
                 {companyName || 'Sem empresa ativa'}
               </div>
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-900/200/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">
                 <Zap size={10} />
                 NC Finance
               </div>
@@ -98,7 +98,7 @@ export default function Header({
               <button
                 type="button"
                 onClick={onViewPublicSite}
-                className="flex items-center gap-1.5 rounded-xl border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800"
+                className="control-surface flex items-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-200"
               >
                 <Globe2 size={13} />
                 Site
@@ -110,7 +110,7 @@ export default function Header({
                 ref={buttonRef}
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
-                className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800"
+                className="control-surface flex min-h-11 items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-200"
               >
                 <User2 size={14} />
                 <span className="max-w-[120px] truncate">{userEmail || 'Conta'}</span>
@@ -120,7 +120,7 @@ export default function Header({
               {menuOpen && (
                 <div
                   ref={menuRef}
-                  className="fixed z-[200] min-w-[180px] rounded-2xl border border-slate-700 bg-[#10213B] py-1 shadow-xl"
+                  className="fixed z-[110] min-w-[200px] rounded-2xl border border-slate-700 bg-[#10213B]/96 py-1 shadow-xl backdrop-blur"
                   style={{ top: menuPosition.top, right: menuPosition.right }}
                 >
                   <div className="border-b border-slate-700 px-4 py-2.5">

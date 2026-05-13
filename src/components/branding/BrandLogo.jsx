@@ -1,5 +1,3 @@
-import { BRAND } from '../../theme/brand';
-
 /**
  * BrandLogo — Símbolo compacto "NC" com glow azul
  * size: 'sm' | 'md' | 'lg'

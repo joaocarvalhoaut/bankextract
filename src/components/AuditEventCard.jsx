@@ -105,6 +105,9 @@ export default function AuditEventCard({ event, onFavorite, compact = false }) {
       event.description ? `Detalhe: ${event.description}` : '',
       `Data: ${new Date(event.created_at).toLocaleString('pt-BR')}`,
       event.user_email ? `Usuario: ${event.user_email}` : '',
+      event.company_id ? `Tenant: ${event.company_id}` : '',
+      event.request_id ? `Request: ${event.request_id}` : '',
+      event.correlation_id ? `Correlation: ${event.correlation_id}` : '',
       metaEntries.length ? `Metadata: ${metaEntries.map((entry) => `${entry.key}=${entry.value}`).join(', ')}` : '',
     ]
       .filter(Boolean)
@@ -141,7 +144,7 @@ export default function AuditEventCard({ event, onFavorite, compact = false }) {
         <div className="mt-1 w-px flex-1 bg-slate-800/60" />
       </div>
 
-      <div className="mb-4 min-w-0 flex-1 rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm transition-shadow hover:shadow-md">
+      <div className="mb-4 min-w-0 flex-1 rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-sm transition-shadow hover:shadow-card">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -161,7 +164,7 @@ export default function AuditEventCard({ event, onFavorite, compact = false }) {
               type="button"
               onClick={() => onFavorite?.(event)}
               title="Favoritar"
-              className={`rounded-lg p-1.5 transition-colors ${event.favorited ? 'text-yellow-500' : 'text-slate-300 hover:text-yellow-400'}`}
+              className={`rounded-lg p-2 transition-colors ${event.favorited ? 'text-yellow-500' : 'text-slate-300 hover:bg-slate-800/50 hover:text-yellow-400'}`}
             >
               <Star size={14} fill={event.favorited ? 'currentColor' : 'none'} />
             </button>
@@ -169,7 +172,7 @@ export default function AuditEventCard({ event, onFavorite, compact = false }) {
               type="button"
               onClick={handleCopy}
               title="Copiar detalhes"
-              className="rounded-lg p-1.5 text-slate-300 transition-colors hover:text-slate-300"
+              className="rounded-lg p-2 text-slate-300 transition-colors hover:bg-slate-800/50 hover:text-slate-100"
             >
               {copied ? <CheckCircle2 size={14} className="text-emerald-500" /> : <ClipboardCopy size={14} />}
             </button>
@@ -178,7 +181,7 @@ export default function AuditEventCard({ event, onFavorite, compact = false }) {
                 type="button"
                 onClick={() => setExpanded((value) => !value)}
                 title="Expandir metadata"
-                className="rounded-lg p-1.5 text-slate-300 transition-colors hover:text-slate-300"
+                className="rounded-lg p-2 text-slate-300 transition-colors hover:bg-slate-800/50 hover:text-slate-100"
               >
                 {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
@@ -187,6 +190,11 @@ export default function AuditEventCard({ event, onFavorite, compact = false }) {
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
+          {event.company_id ? (
+            <span className="rounded-full bg-slate-800/50 px-2 py-1 font-mono text-[10px] text-slate-300">
+              tenant {event.company_id}
+            </span>
+          ) : null}
           {event.user_email ? (
             <span className="flex items-center gap-1">
               <User size={11} />
@@ -200,13 +208,23 @@ export default function AuditEventCard({ event, onFavorite, compact = false }) {
           {event.entity ? (
             <span className="font-mono text-slate-300">
               {event.entity}
-              {event.entity_id ? ` · ${String(event.entity_id).slice(0, 8)}` : ''}
+              {event.entity_id ? ` • ${String(event.entity_id).slice(0, 8)}` : ''}
+            </span>
+          ) : null}
+          {event.request_id ? (
+            <span className="rounded-full bg-slate-800/50 px-2 py-1 font-mono text-[10px] text-slate-300">
+              req {event.request_id}
+            </span>
+          ) : null}
+          {event.correlation_id ? (
+            <span className="rounded-full bg-slate-800/50 px-2 py-1 font-mono text-[10px] text-slate-300">
+              corr {event.correlation_id}
             </span>
           ) : null}
         </div>
 
         {expanded && metaEntries.length > 0 ? (
-          <div className="mt-3 rounded-xl border border-slate-100 bg-slate-800/40 p-3">
+          <div className="mt-3 rounded-xl border border-slate-700 bg-slate-800/40 p-3">
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Metadata</p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
               {metaEntries.map(({ key, value }) => (

@@ -94,15 +94,15 @@ export default function FinanceTable({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="text-crisp space-y-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-slate-50">Visão Geral</h2>
-          <p className="text-sm text-slate-300">
+          <p className="text-sm text-slate-200">
             {allRows.length} registros totais · {representatives.length} representantes cadastrados
           </p>
           {globalMode ? (
-            <p className="mt-1 text-xs text-amber-700">
+            <p className="mt-1 text-xs text-amber-300">
               Modo global ativo. Selecione uma empresa específica para cadastrar representantes.
             </p>
           ) : null}
@@ -113,7 +113,7 @@ export default function FinanceTable({
             <button
               type="button"
               onClick={() => onCreateRepresentative(null)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
+              className="notice-success inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium"
             >
               <UserPlus size={14} /> Novo representante
             </button>
@@ -122,7 +122,7 @@ export default function FinanceTable({
           {!!selectedRows.size && canDelete ? (
             <button
               onClick={() => deleteSelectedRows()}
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+              className="notice-danger inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium"
             >
               <Trash2 size={14} /> Excluir ({selectedRows.size})
             </button>
@@ -132,7 +132,7 @@ export default function FinanceTable({
             <button
               type="button"
               onClick={() => onWhatsAppCharge(selectedRows)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
             >
               <MessageSquare size={14} />
               Cobrar WhatsApp ({selectedRows.size})
@@ -142,7 +142,7 @@ export default function FinanceTable({
           {showPrimaryActions && canExport ? (
             <button
               onClick={() => exportRows('csv')}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm hover:bg-slate-800/40"
+              className="control-surface inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-slate-100"
             >
               <Download size={14} /> CSV
             </button>
@@ -151,7 +151,7 @@ export default function FinanceTable({
           {showPrimaryActions && canExport ? (
             <button
               onClick={() => exportRows('xls')}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm hover:bg-slate-800/40"
+              className="control-surface inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-slate-100"
             >
               <FileSpreadsheet size={14} /> Excel
             </button>
@@ -160,7 +160,7 @@ export default function FinanceTable({
           {showPrimaryActions && canClearView ? (
             <button
               onClick={clearOverview}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-slate-900/60 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm font-medium text-red-300 hover:bg-red-500/15"
             >
               <Trash2 size={14} /> Limpar visão
             </button>
@@ -168,7 +168,7 @@ export default function FinanceTable({
         </div>
       </div>
 
-      <div className="surface-card rounded-xl p-3">
+      <div className="surface-card sticky-toolbar rounded-xl p-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -190,10 +190,10 @@ export default function FinanceTable({
         </div>
       </div>
 
-      <div className="surface-card overflow-hidden rounded-xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-[#10213B]">
+      <div className="surface-card overflow-visible rounded-xl">
+        <div className="table-scroll max-h-[70vh]">
+          <table className="table-sticky-head w-full min-w-[1560px] text-sm">
+            <thead className="bg-[#10213B]/95">
               <tr>
                 <th className="w-10 border-r border-slate-700 px-3 py-2">
                   <input
@@ -202,7 +202,7 @@ export default function FinanceTable({
                     onChange={toggleAllPageRows}
                   />
                 </th>
-                <th className="w-12 border-r border-slate-700 px-2 py-2 text-center text-xs font-medium text-slate-500">
+                <th className="w-12 border-r border-slate-700 px-2 py-2 text-center text-xs font-medium text-slate-300">
                   #
                 </th>
                 {columns.map((column) => (
@@ -219,7 +219,7 @@ export default function FinanceTable({
                       {['juros', 'multa', 'valorAtualizado'].includes(column.campo) ? null : (
                         <button
                           onClick={() => setOpenFilterDropdown(openFilterDropdown === column.campo ? null : column.campo)}
-                          className={`ml-auto rounded p-1 hover:bg-slate-200 ${filters[column.campo]?.length ? 'text-emerald-600' : 'text-slate-400'}`}
+                          className={`ml-auto rounded p-1.5 hover:bg-slate-800/60 ${filters[column.campo]?.length ? 'text-emerald-600' : 'text-slate-400'}`}
                         >
                           <Filter size={12} />
                         </button>
@@ -227,8 +227,8 @@ export default function FinanceTable({
                     </div>
 
                     {openFilterDropdown === column.campo ? (
-                      <div className="absolute left-0 top-full z-20 mt-1 max-h-72 min-w-[220px] overflow-auto rounded-xl border border-slate-700 bg-slate-900/60 p-2 shadow-soft">
-                        <div className="mb-2 px-2 text-xs font-medium text-slate-500">Filtrar {column.label}</div>
+                      <div className="absolute left-0 top-full z-40 mt-1 max-h-72 min-w-[220px] overflow-auto rounded-xl border border-slate-700 bg-slate-950/95 p-2 shadow-soft">
+                        <div className="mb-2 px-2 text-xs font-medium text-slate-300">Filtrar {column.label}</div>
                         {getUniqueColumnValues(column.campo).map((value) => (
                           <label key={value} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-slate-800/40">
                             <input
@@ -250,7 +250,7 @@ export default function FinanceTable({
             <tbody>
               {!rows.length ? (
                 <tr>
-                  <td colSpan={columns.length + 3} className="py-16 text-center text-slate-400">
+                  <td colSpan={columns.length + 3} className="py-16 text-center text-slate-300">
                     Nenhum registro encontrado.
                   </td>
                 </tr>
@@ -262,12 +262,12 @@ export default function FinanceTable({
                   return (
                     <tr
                       key={row.id}
-                      className={`border-t border-slate-800 ${selectedRows.has(row.id) ? 'bg-blue-900/200/10' : 'hover:bg-slate-900/40'}`}
+                      className={`border-t border-slate-800 ${selectedRows.has(row.id) ? 'bg-blue-500/10' : 'hover:bg-slate-900/40'}`}
                     >
-                      <td className="border-r border-slate-100 px-3 py-2">
+                      <td className="border-r border-slate-800 px-3 py-2">
                         <input type="checkbox" checked={selectedRows.has(row.id)} onChange={() => toggleRowSelection(row.id)} />
                       </td>
-                      <td className="border-r border-slate-100 px-2 py-2 text-center text-xs text-slate-400">
+                      <td className="border-r border-slate-800 px-2 py-2 text-center text-xs text-slate-300">
                         {(page - 1) * itemsPerPage + index + 1}
                       </td>
 
@@ -276,7 +276,7 @@ export default function FinanceTable({
 
                         if (column.campo === 'representanteId') {
                           return (
-                            <td key={column.campo} className="border-r border-slate-100 px-2 py-1.5">
+                            <td key={column.campo} className="border-r border-slate-800 px-2 py-1.5">
                               <RepresentanteDropdown
                                 rowId={row.id}
                                 representative={representative}
@@ -302,7 +302,7 @@ export default function FinanceTable({
 
                         if (column.campo === 'status') {
                           return (
-                            <td key={column.campo} className="border-r border-slate-100 px-3 py-2">
+                            <td key={column.campo} className="border-r border-slate-800 px-3 py-2">
                               {isEditing ? (
                                 <select
                                   autoFocus
@@ -334,7 +334,7 @@ export default function FinanceTable({
 
                         if (column.campo === 'tipo') {
                           return (
-                            <td key={column.campo} className="border-r border-slate-100 px-3 py-2">
+                            <td key={column.campo} className="border-r border-slate-800 px-3 py-2">
                               {isEditing ? (
                                 <select
                                   autoFocus
@@ -359,7 +359,7 @@ export default function FinanceTable({
 
                         if (['juros', 'multa', 'valorAtualizado', 'valor'].includes(column.campo)) {
                           return (
-                            <td key={column.campo} className="border-r border-slate-100 px-3 py-2 text-right font-medium">
+                            <td key={column.campo} className="border-r border-slate-800 px-3 py-2 text-right font-medium">
                               {isEditing ? (
                                 <input
                                   autoFocus
@@ -395,7 +395,7 @@ export default function FinanceTable({
 
                         if (column.campo === 'dataVencimento') {
                           return (
-                            <td key={column.campo} className="border-r border-slate-100 px-3 py-2">
+                            <td key={column.campo} className="border-r border-slate-800 px-3 py-2">
                               {isEditing ? (
                                 <input
                                   autoFocus
@@ -426,7 +426,7 @@ export default function FinanceTable({
                         }
 
                         return (
-                          <td key={column.campo} className="border-r border-slate-100 px-3 py-2">
+                          <td key={column.campo} className="border-r border-slate-800 px-3 py-2">
                             {isEditing ? (
                               <input
                                 autoFocus
@@ -443,7 +443,7 @@ export default function FinanceTable({
                                 className={`w-full text-left ${column.campo === 'nome' ? 'font-medium text-slate-50' : ''}`}
                                 onDoubleClick={() => (canEdit ? startCellEdit(row.id, column.campo, row[column.campo]) : null)}
                               >
-                                {row[column.campo] || <span className="italic text-slate-400">vazio</span>}
+                                {row[column.campo] || <span className="italic text-slate-300">vazio</span>}
                               </button>
                             )}
                             {savingCell?.id === row.id && savingCell?.campo === column.campo ? (
@@ -460,7 +460,7 @@ export default function FinanceTable({
 
                       <td className="px-3 py-2 text-red-600">
                         {canDelete ? (
-                          <button onClick={() => deleteSelectedRows(new Set([row.id]))} className="rounded p-1.5 hover:bg-red-50">
+                          <button onClick={() => deleteSelectedRows(new Set([row.id]))} className="rounded p-1.5 text-red-300 transition hover:bg-red-500/10">
                             <Trash2 size={14} />
                           </button>
                         ) : null}
@@ -486,7 +486,7 @@ export default function FinanceTable({
                   <td className="border-r border-slate-700 px-3 py-2 text-right font-medium">
                     {formatCurrencyBRL(rows.reduce((sum, row) => sum + Number(row.valorAtualizado || 0), 0))}
                   </td>
-                  <td colSpan={6} className="px-3 py-2 text-xs text-slate-500">
+                  <td colSpan={6} className="px-3 py-2 text-xs text-slate-300">
                     Filtro total: <strong>{formatCurrencyBRL(allRows.reduce((sum, row) => sum + Number(row.valorAtualizado || 0), 0))}</strong>
                   </td>
                 </tr>
@@ -497,30 +497,20 @@ export default function FinanceTable({
 
         {totalPages > 1 ? (
           <div className="flex items-center justify-between border-t border-slate-700 bg-slate-800/40 px-4 py-3">
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-300">
               Pagina {page} de {totalPages} · {allRows.length} registros
             </p>
             <div className="flex items-center gap-1">
-              <button onClick={() => setPage(1)} disabled={page === 1} className="rounded border border-slate-700 px-2 py-1 text-xs disabled:opacity-40">
+              <button onClick={() => setPage(1)} disabled={page === 1} className="control-surface rounded px-2 py-1 text-xs disabled:opacity-40">
                 {'<<'}
               </button>
-              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="rounded border border-slate-700 px-2 py-1 text-xs disabled:opacity-40">
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="control-surface rounded px-2 py-1 text-xs disabled:opacity-40">
                 {'<'}
               </button>
-              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="rounded border border-slate-700 px-2 py-1 text-xs disabled:opacity-40">
+              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="control-surface rounded px-2 py-1 text-xs disabled:opacity-40">
                 {'>'}
               </button>
-              <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="rounded border border-slate-700 px-2 py-1 text-xs disabled:opacity-40">
-                {'>>'}
-              </button>
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-"rounded border border-slate-700 px-2 py-1 text-xs disabled:opacity-40">
+              <button onClick={() => setPage(totalPages)} disabled={page === totalPages} className="control-surface rounded px-2 py-1 text-xs disabled:opacity-40">
                 {'>>'}
               </button>
             </div>

@@ -14,6 +14,7 @@ import {
   Smartphone,
 } from 'lucide-react';
 import GoogleSheetsConfig from '../components/GoogleSheetsConfig';
+import DriveBoletoConfig from '../components/DriveBoletoConfig';
 import { getDriveBoletosConfig } from '../services/googleDriveService';
 import { normalizeUserRole } from '../security/permissions';
 import {
@@ -23,19 +24,6 @@ import {
   saveCompanyIntegration,
   validateCompanyIntegration,
 } from '../services/companyIntegrationService';
-
-function StepCard({ step, title, description, example = '' }) {
-  return (
-    <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Etapa {step}</p>
-      <p className="mt-2 text-sm font-semibold text-slate-50">{title}</p>
-      <p className="mt-2 text-sm text-slate-300">{description}</p>
-      {example ? (
-        <p className="mt-2 rounded-xl bg-slate-950 px-3 py-2 font-mono text-xs text-white">{example}</p>
-      ) : null}
-    </div>
-  );
-}
 
 function formatRelativeTimeLabel(value, emptyLabel = 'Nunca validado') {
   if (!value) return emptyLabel;
@@ -72,7 +60,7 @@ function CredentialSummaryItem({ label, value, sensitive = false, status }) {
         : 'border-slate-700 bg-slate-800/60 text-slate-300';
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-700 bg-slate-800/40/90 px-4 py-3 shadow-sm">
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-700 bg-slate-800/50 px-4 py-3 shadow-sm">
       <div className="min-w-0">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
         <p className="mt-1 truncate text-sm font-semibold text-slate-50">
@@ -361,7 +349,7 @@ function ZapiIntegrationCard({
   }
 
   return (
-    <section className="group rounded-[32px] border border-slate-700/90 bg-slate-900/60 p-7 shadow-[0_22px_70px_rgba(15,23,42,0.08)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_28px_90px_rgba(15,23,42,0.1)] lg:p-8">
+    <section className="text-crisp group rounded-[32px] border border-slate-700/90 bg-slate-900/60 p-7 shadow-[0_22px_70px_rgba(15,23,42,0.08)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_28px_90px_rgba(15,23,42,0.1)] lg:p-8">
       <div className="flex items-start gap-4">
         <div className="flex h-14 w-14 items-center justify-center rounded-[24px] bg-blue-900/20 text-blue-700 shadow-sm ring-1 ring-blue-100">
           <Smartphone size={22} />
@@ -373,17 +361,17 @@ function ZapiIntegrationCard({
               Canal oficial
             </span>
           </div>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-300">
             Conecte o WhatsApp da empresa <span className="font-semibold text-slate-50">{companyName || 'ativa'}</span> sem expor credenciais no frontend.
           </p>
         </div>
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-[28px] border border-slate-700 bg-slate-800/40/90 shadow-inner">
+      <div className="mt-5 overflow-hidden rounded-[28px] border border-slate-700 bg-slate-800/50 shadow-inner">
         <button
           type="button"
           onClick={() => setHelperOpen((current) => !current)}
-          className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-slate-900/60/60"
+          className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-slate-900/60"
         >
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900/60 text-slate-200 shadow-sm ring-1 ring-slate-700">
@@ -391,7 +379,7 @@ function ZapiIntegrationCard({
             </div>
             <div>
               <p className="text-sm font-semibold text-slate-50">Como conectar minha Z-API</p>
-              <p className="mt-1 text-xs text-slate-500">Passo a passo guiado para localizar credenciais e ativar o QR Code.</p>
+              <p className="mt-1 text-xs text-slate-400">Passo a passo guiado para localizar credenciais e ativar o QR Code.</p>
             </div>
           </div>
           <ChevronDown
@@ -468,13 +456,13 @@ function ZapiIntegrationCard({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-slate-50">Credenciais e status da integracao</p>
-            <p className="mt-1 text-sm text-slate-500">Visual executivo com status salvo, pendente ou nao informado.</p>
+            <p className="mt-1 text-sm text-slate-400">Visual executivo com status salvo, pendente ou nao informado.</p>
           </div>
           {canManage ? (
             <button
               type="button"
               onClick={() => setEditingCredentials((current) => !current)}
-              className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800/40"
+              className="control-surface inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-sm transition"
             >
               <PencilLine size={14} />
               {editingCredentials ? 'Fechar edicao' : 'Editar credenciais'}
@@ -509,7 +497,7 @@ function ZapiIntegrationCard({
         </div>
 
         {editingCredentials ? (
-          <div className="grid grid-cols-1 gap-4 rounded-[28px] border border-slate-700 bg-slate-800/40/80 p-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 rounded-[28px] border border-slate-700 bg-slate-800/50 p-5 md:grid-cols-2">
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-slate-200">Instance ID</span>
               <input
@@ -594,7 +582,7 @@ function ZapiIntegrationCard({
       ) : null}
 
       {qrCodeDataUrl ? (
-        <div className="mt-5 rounded-3xl border border-slate-700 bg-slate-800/40 p-5 shadow-sm">
+        <div className="mt-5 rounded-3xl border border-slate-700 bg-slate-800/50 p-5 shadow-sm">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-50">
             <QrCode size={16} />
             QR Code da instancia
@@ -784,6 +772,31 @@ export default function IntegracoesScreen({
           onStatusChange={setGoogleActive}
         />
       </section>
+
+      {!globalMode && companyId ? (
+        <section className="rounded-[32px] border border-slate-700/90 bg-slate-900/60 p-7 shadow-card">
+          <div className="mb-5 flex items-start gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-[20px] bg-amber-500/10 text-amber-400 shadow-soft">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold tracking-tight text-slate-50">Boletos no Google Drive</h3>
+              <p className="mt-1 text-sm leading-relaxed text-slate-400">
+                Configure a pasta do Drive para localizar e enviar PDFs de boleto automaticamente via WhatsApp.
+              </p>
+            </div>
+          </div>
+          <DriveBoletoConfig
+            empresaId={companyId}
+            canManage={canManageIntegrations}
+            onToast={onToast}
+            onSaved={onGoogleSheetsSaved}
+          />
+        </section>
+      ) : null}
     </div>
   );
 }

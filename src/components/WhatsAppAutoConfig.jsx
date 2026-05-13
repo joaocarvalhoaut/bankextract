@@ -18,9 +18,9 @@ import {
 function StatusNotice({ status }) {
   if (!status) return null;
   const palette = {
-    success: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-    error: 'border-red-200 bg-red-50 text-red-700',
-    info: 'border-blue-700/40 bg-blue-900/20 text-blue-700',
+    success: 'notice-success',
+    error: 'notice-danger',
+    info: 'notice-info',
   };
   const Icon = status.type === 'success' ? CheckCircle2 : status.type === 'error' ? AlertCircle : Sparkles;
   return (
@@ -51,7 +51,7 @@ function SimulationDebug({ summary }) {
   const exemplos = Array.isArray(debug.exemplos_descartados) ? debug.exemplos_descartados : [];
 
   return (
-    <div className="mt-4 space-y-4 rounded-[28px] border border-slate-700 bg-slate-900/70 p-4 shadow-sm">
+    <div className="surface-panel mt-4 space-y-4 rounded-[28px] p-4 shadow-sm">
       <div>
         <p className="text-sm font-semibold text-slate-50">Debug da simulacao</p>
         <p className="mt-1 text-xs text-slate-500">Visibilidade completa para entender por que cada titulo entrou ou ficou fora da regra.</p>
@@ -77,7 +77,7 @@ function SimulationDebug({ summary }) {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Amostra de registros</p>
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             {debug.amostra_registros_sem_filtro.map((item) => (
-              <div key={item.id} className="rounded-2xl border border-slate-700/50 bg-slate-800/40/80 px-4 py-3 text-xs text-slate-300">
+              <div key={item.id} className="surface-panel-muted rounded-2xl px-4 py-3 text-xs text-slate-300">
                 <p className="font-semibold text-slate-50">{item.nome || 'Registro sem nome'}</p>
                 <p className="mt-1">ID: {item.id}</p>
                 <p>company_id: {item.company_id || '-'} - empresa_id: {item.empresa_id || '-'}</p>
@@ -93,7 +93,7 @@ function SimulationDebug({ summary }) {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Exemplos descartados</p>
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             {exemplos.map((item) => (
-              <div key={`${item.registro_id}-${item.motivo}`} className="rounded-2xl border border-slate-700/50 bg-slate-800/40/80 px-4 py-3 text-xs text-slate-300">
+              <div key={`${item.registro_id}-${item.motivo}`} className="surface-panel-muted rounded-2xl px-4 py-3 text-xs text-slate-300">
                 <p className="font-semibold text-slate-50">{item.nome || 'Registro sem nome'} - {item.motivo}</p>
                 <p className="mt-1">ID: {item.registro_id} - Status: {item.status || '-'} - Telefone: {item.telefone || '-'}</p>
                 <p>Vencimento: {item.data_vencimento || '-'} - Empresa: {item.company_id || '-'}</p>
@@ -214,9 +214,9 @@ export default function WhatsAppAutoConfig({ empresaId, empresaNome, globalMode 
 
   if (blockedMessage) {
     return (
-      <div className="card-hover rounded-[30px] border border-white/70 bg-slate-900/70 p-5 shadow-soft backdrop-blur">
+      <div className="surface-card rounded-[30px] p-5 shadow-soft">
         <div className="mb-3 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-300">
             <MessageSquare size={18} />
           </div>
           <div>
@@ -224,7 +224,7 @@ export default function WhatsAppAutoConfig({ empresaId, empresaNome, globalMode 
             <p className="text-sm text-slate-500">Esse painel precisa de uma empresa especifica.</p>
           </div>
         </div>
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow-sm">
+        <div className="notice-warning rounded-2xl px-4 py-3 text-sm shadow-sm">
           {blockedMessage}
         </div>
       </div>
@@ -232,15 +232,15 @@ export default function WhatsAppAutoConfig({ empresaId, empresaNome, globalMode 
   }
 
   return (
-    <div className="card-hover overflow-hidden rounded-[32px] border border-white/70 bg-slate-900/70 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur">
+    <div className="surface-card overflow-hidden rounded-[32px] shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
       <div className="hero-mesh border-b border-slate-700/50 px-5 py-5 sm:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 shadow-sm">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-300 shadow-sm">
               <MessageSquare size={18} />
             </div>
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-slate-900/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-700">
+              <div className="notice-success inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em]">
                 <FlaskConical size={12} />
                 Modo teste
               </div>
@@ -252,8 +252,8 @@ export default function WhatsAppAutoConfig({ empresaId, empresaNome, globalMode 
           <span
             className={`inline-flex self-start rounded-full border px-3 py-2 text-xs font-semibold shadow-sm ${
               config.ativo
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                : 'border-slate-700 bg-slate-900/60 text-slate-300'
+                ? 'notice-success'
+                : 'surface-panel-muted text-slate-300'
             }`}
           >
             {config.ativo ? 'Automacao ativa' : 'Automacao desativada'}
@@ -271,11 +271,11 @@ export default function WhatsAppAutoConfig({ empresaId, empresaNome, globalMode 
           </div>
         ) : (
           <>
-            <div className="rounded-2xl border border-blue-700/40 bg-blue-900/20 px-4 py-3 text-sm text-blue-800 shadow-sm">
+            <div className="notice-info rounded-2xl px-4 py-3 text-sm shadow-sm">
               A cobranca automatica nunca fica ativa por padrao. Revise a cadencia e o template antes de ligar o envio.
             </div>
 
-            <label className="flex items-center justify-between gap-4 rounded-3xl border border-slate-700/50 bg-slate-900/60 px-4 py-4 shadow-sm">
+            <label className="surface-panel flex items-center justify-between gap-4 rounded-3xl px-4 py-4 shadow-sm">
               <div>
                 <p className="text-sm font-semibold text-slate-50">Ativar cobranca automatica</p>
                 <p className="text-xs text-slate-500">O cron considera as regras somente quando esta chave estiver ligada.</p>
@@ -344,7 +344,7 @@ export default function WhatsAppAutoConfig({ empresaId, empresaNome, globalMode 
               </label>
             </div>
 
-            <label className="flex items-center justify-between gap-4 rounded-3xl border border-slate-700/50 bg-slate-900/60 px-4 py-4 shadow-sm">
+            <label className="surface-panel flex items-center justify-between gap-4 rounded-3xl px-4 py-4 shadow-sm">
               <div>
                 <p className="text-sm font-semibold text-slate-50">Aplicar aviso de protesto após 5 dias</p>
                 <p className="text-xs text-slate-500">Inclui o aviso comercial no texto padrão da cobrança.</p>
@@ -373,7 +373,7 @@ export default function WhatsAppAutoConfig({ empresaId, empresaNome, globalMode 
             {status ? <StatusNotice status={status} /> : null}
 
             {lastTestSummary ? (
-              <div className="rounded-[28px] border border-slate-700 bg-slate-800/40/80 px-4 py-4 text-sm text-slate-200 shadow-sm">
+              <div className="surface-panel-muted rounded-[28px] px-4 py-4 text-sm text-slate-200 shadow-sm">
                 <p className="font-semibold text-slate-50">Resultado da simulacao</p>
                 <p className="mt-1">
                   Empresas processadas: {lastTestSummary.processed_companies ?? 0} - Enviaria: {lastTestSummary.sent ?? 0} - Ignorados: {lastTestSummary.skipped ?? 0} - Erros: {lastTestSummary.errors ?? 0}
@@ -402,7 +402,7 @@ export default function WhatsAppAutoConfig({ empresaId, empresaNome, globalMode 
                 type="button"
                 onClick={handleTest}
                 disabled={saving || testing}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800/40 disabled:cursor-not-allowed disabled:opacity-50"
+                className="btn-secondary inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
               >
                 {testing ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />}
                 {testing ? 'Simulando...' : 'Testar regras / Simular elegiveis'}

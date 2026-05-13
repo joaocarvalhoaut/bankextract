@@ -68,13 +68,7 @@ const normalizeBillingPayload = (payload = {}) => {
   const numeroBoletoEfetivo = getNumeroBoletoEfetivo(payload);
   const clienteEfetivo = getClienteEfetivo(payload);
   const boletoEncontrado = temBoletoEncontrado(payload);
-  console.log(
-    '[COBRANCA]',
-    'cliente=', clienteEfetivo,
-    'documento=', payload?.documento || '',
-    'numero_nf=', payload?.numero_nf || '',
-    'usando=', numeroBoletoEfetivo
-  );
+
 
   return {
     ...payload,
@@ -92,9 +86,7 @@ const normalizeBillingPayload = (payload = {}) => {
 };
 
 const normalizeBillingCenterResponse = (data) => {
-  console.log('[COBRANCA RAW]', data?.items?.slice?.(0, 5));
   const mapped = Array.isArray(data?.items) ? data.items.map((item) => normalizeBillingPayload(item)) : [];
-  console.log('[COBRANCA MAPPED]', mapped?.slice?.(0, 5));
   return {
     ...data,
     items: mapped,
@@ -149,14 +141,12 @@ export async function runBillingAutomationNow(companyId, options = {}) {
     simulate,
   };
 
-  console.log('[BILLING RUN NOW REQUEST]', { companyId, simulate });
 
   if (!supabase) {
     throw new Error('Supabase nao configurado.');
   }
 
   const { data, error } = await supabase.functions.invoke('billing-automation', { body });
-  console.log('[BILLING RUN NOW RESPONSE]', data, error);
 
   if (error) {
     throw buildError(error, 'Falha ao executar a regua de cobranca.');
@@ -207,7 +197,6 @@ export async function sendSingleCharge(companyId, registroId, options = {}) {
     ...(customMessage ? { custom_message: customMessage, message: customMessage } : {}),
   };
 
-  console.log('[SEND SINGLE CHARGE REQUEST]', payload);
 
   if (!supabase) {
     throw new Error('Supabase nao configurado.');
@@ -222,7 +211,6 @@ export async function sendSingleCharge(companyId, registroId, options = {}) {
   });
 
   const { data, error } = await supabase.functions.invoke('billing-automation', { body: payload });
-  console.log('[SEND SINGLE CHARGE RESPONSE]', data, error);
 
   if (error) {
     logger.error('send_single_failed_transport', error, { company_id: companyId, registro_id: registroId });
@@ -433,6 +421,21 @@ export async function saveDriveConfig(companyId, driveRootFolderId) {
   );
 }
 
+export async function saveDriveConfigFull(companyId, config = {}) {
+  return invokeBillingAutomation(
+    {
+      action: 'save_drive_config',
+      company_id: companyId,
+      drive_root_folder_id: config.drive_root_folder_id || '',
+      drive_recursive_scan: config.drive_recursive_scan ?? false,
+      drive_matching_strategy: config.drive_matching_strategy || 'auto',
+      drive_max_depth: config.drive_max_depth ?? 2,
+      drive_folder_name: config.drive_folder_name || '',
+    },
+    'Falha ao salvar a configuracao do Google Drive.'
+  );
+}
+
 export async function testDriveConnection(companyId) {
   return invokeBillingAutomation(
     {
@@ -440,6 +443,38 @@ export async function testDriveConnection(companyId) {
       company_id: companyId,
     },
     'Falha ao testar a conexao com o Google Drive.'
+  );
+}
+
+export async function testBoletoLookup(companyId, query) {
+  return invokeBillingAutomation(
+    {
+      action: 'test_boleto_lookup',
+      company_id: companyId,
+      query,
+    },
+    'Falha ao testar a busca de boleto no Drive.'
+  );
+}
+
+export async function getDriveFolderStructure(companyId) {
+  return invokeBillingAutomation(
+    {
+      action: 'get_drive_folder_structure',
+      company_id: companyId,
+    },
+    'Falha ao carregar a estrutura de pastas do Drive.'
+  );
+}
+
+export async function extractFolderIdFromUrl(companyId, url) {
+  return invokeBillingAutomation(
+    {
+      action: 'extract_folder_id',
+      company_id: companyId,
+      url,
+    },
+    'Falha ao extrair o ID da pasta do Drive.'
   );
 }
 

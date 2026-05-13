@@ -16,20 +16,43 @@ export default function ClearOverviewModal({
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const currentLockCount = Number(document.body.dataset.modalLockCount || '0');
+    if (currentLockCount === 0) {
+      document.body.dataset.modalPreviousOverflow = document.body.style.overflow || '';
+    }
+    document.body.dataset.modalLockCount = String(currentLockCount + 1);
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      const nextLockCount = Math.max(0, Number(document.body.dataset.modalLockCount || '1') - 1);
+      if (nextLockCount === 0) {
+        document.body.style.overflow = document.body.dataset.modalPreviousOverflow || '';
+        delete document.body.dataset.modalPreviousOverflow;
+        delete document.body.dataset.modalLockCount;
+        return;
+      }
+
+      document.body.dataset.modalLockCount = String(nextLockCount);
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const isValid = confirmationText.trim() === String(companyName || '').trim();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm">
-      <div className="card-hover w-full max-w-2xl overflow-hidden rounded-[34px] border border-white/70 bg-slate-900/60/95 shadow-[0_40px_120px_rgba(15,23,42,0.2)] backdrop-blur">
+    <div className="modal-overlay fixed inset-0 z-[140] flex items-center justify-center px-4 py-6">
+      <div className="modal-shell w-full max-w-2xl overflow-hidden rounded-[34px]">
         <div className="hero-mesh border-b border-slate-700/50 px-6 py-6">
           <div className="flex items-start gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-red-50 text-red-600 shadow-sm">
+            <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-red-500/10 text-red-300 shadow-sm">
               <ShieldAlert size={22} />
             </div>
             <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-slate-900/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-red-600">
+              <div className="inline-flex items-center gap-2 rounded-full border border-red-500/30 bg-slate-900/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-red-400">
                 <AlertTriangle size={12} />
                 Acao destrutiva
               </div>
@@ -42,10 +65,10 @@ export default function ClearOverviewModal({
         </div>
 
         <div className="space-y-5 px-6 py-6">
-          <div className="rounded-[26px] border border-red-200 bg-red-50/95 p-5 shadow-sm">
+          <div className="notice-danger rounded-[26px] p-5 shadow-sm">
             <div className="flex items-start gap-3">
               <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-600" />
-              <div className="space-y-2 text-sm text-red-900">
+              <div className="space-y-2 text-sm">
                 <p>
                   <span className="font-semibold">Empresa:</span> {companyName || 'Empresa selecionada'}
                 </p>
@@ -55,7 +78,7 @@ export default function ClearOverviewModal({
             </div>
           </div>
 
-          <div className="rounded-2xl border border-blue-700/40 bg-blue-900/20 px-4 py-3 text-sm text-blue-800 shadow-sm">
+          <div className="notice-info rounded-2xl px-4 py-3 text-sm shadow-sm">
             <div className="flex items-start gap-2">
               <Sparkles size={15} className="mt-0.5 shrink-0" />
               <p>Use esta limpeza apenas quando quiser substituir completamente a carteira atual por uma nova importacao.</p>
@@ -75,12 +98,12 @@ export default function ClearOverviewModal({
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-slate-700/50 bg-slate-800/40/80 px-6 py-4 sm:flex-row sm:justify-end">
+        <div className="flex flex-col gap-3 border-t border-slate-700/50 bg-slate-800/50 px-6 py-4 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm font-medium text-slate-200 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800/40 disabled:cursor-not-allowed disabled:opacity-60"
+            className="control-surface rounded-2xl px-4 py-3 text-sm font-medium text-slate-200 shadow-sm transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Cancelar
           </button>

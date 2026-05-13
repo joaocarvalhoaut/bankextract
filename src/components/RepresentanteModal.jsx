@@ -1,11 +1,35 @@
+import { useEffect } from 'react';
 import { Mail, MessageSquare, PencilLine, Phone, ToggleLeft, ToggleRight, Trash2, User, UserPlus, X } from 'lucide-react';
 
 export default function RepresentanteModal({ modalData, companyName, onClose, onChange, onSave, onDelete }) {
+  useEffect(() => {
+    if (!modalData) return undefined;
+
+    const currentLockCount = Number(document.body.dataset.modalLockCount || '0');
+    if (currentLockCount === 0) {
+      document.body.dataset.modalPreviousOverflow = document.body.style.overflow || '';
+    }
+    document.body.dataset.modalLockCount = String(currentLockCount + 1);
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      const nextLockCount = Math.max(0, Number(document.body.dataset.modalLockCount || '1') - 1);
+      if (nextLockCount === 0) {
+        document.body.style.overflow = document.body.dataset.modalPreviousOverflow || '';
+        delete document.body.dataset.modalPreviousOverflow;
+        delete document.body.dataset.modalLockCount;
+        return;
+      }
+
+      document.body.dataset.modalLockCount = String(nextLockCount);
+    };
+  }, [modalData]);
+
   if (!modalData) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onClick={(event) => event.target === event.currentTarget && onClose()}>
-      <div className="w-full max-w-md overflow-hidden rounded-2xl bg-slate-900/60 shadow-2xl">
+    <div className="modal-overlay fixed inset-0 z-[140] flex items-center justify-center overflow-y-auto p-4" onClick={(event) => event.target === event.currentTarget && onClose()}>
+      <div className="modal-shell w-full max-w-md overflow-hidden rounded-[28px]">
         <div className="flex items-center justify-between border-b border-slate-700 px-5 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400">
@@ -16,7 +40,7 @@ export default function RepresentanteModal({ modalData, companyName, onClose, on
               <p className="text-xs text-slate-500">{companyName}</p>
             </div>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"><X size={18} /></button>
+          <button onClick={onClose} className="control-surface rounded-lg p-2 text-slate-300"><X size={18} /></button>
         </div>
 
         <div className="space-y-4 p-5">
@@ -45,7 +69,7 @@ export default function RepresentanteModal({ modalData, companyName, onClose, on
               className="w-full resize-none rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-50 placeholder-slate-500 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30" />
           </label>
 
-          <button onClick={() => onChange('ativo', !modalData.rep.ativo)} className="flex w-full items-center justify-between rounded-xl border border-slate-700 px-4 py-3 text-left hover:bg-slate-800/40">
+          <button onClick={() => onChange('ativo', !modalData.rep.ativo)} className="panel-subtle flex w-full items-center justify-between rounded-xl px-4 py-3 text-left hover:bg-slate-800/60">
             <div>
               <p className="text-sm font-medium text-slate-50">Representante ativo</p>
               <p className="text-xs text-slate-500">Inativos continuam visiveis, mas marcados.</p>
@@ -61,8 +85,8 @@ export default function RepresentanteModal({ modalData, companyName, onClose, on
             </button>
           ) : <div />}
           <div className="flex items-center gap-2">
-            <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/60">Cancelar</button>
-            <button onClick={onSave} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
+            <button onClick={onClose} className="control-surface rounded-lg px-4 py-2.5 text-sm text-slate-200">Cancelar</button>
+            <button onClick={onSave} className="inline-flex min-h-11 items-center rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700">
               {modalData.modo === 'novo' ? 'Cadastrar e selecionar' : 'Salvar alteracoes'}
             </button>
           </div>

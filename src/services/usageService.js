@@ -74,21 +74,9 @@ const writeMockStore = (nextValue) => {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextValue));
 };
 
-const addDays = (baseDate, days) => {
-  const next = new Date(baseDate);
-  next.setDate(next.getDate() + days);
-  return next;
-};
-
 const startOfToday = () => {
   const date = new Date();
   date.setHours(0, 0, 0, 0);
-  return date;
-};
-
-const endOfToday = () => {
-  const date = new Date();
-  date.setHours(23, 59, 59, 999);
   return date;
 };
 
@@ -142,9 +130,8 @@ const buildMetricSummary = (key, used, limit, periodStart, periodEnd) => {
   const remaining = normalizedLimit > 0 ? Math.max(0, normalizedLimit - normalizedUsed) : 0;
 
   const start = new Date(periodStart);
-  const end = new Date(periodEnd);
   const today = new Date();
-  const totalDays = Math.max(1, Math.ceil((endOfToday().getTime() - start.getTime()) / 86400000));
+  const totalDays = Math.max(1, Math.ceil((new Date(periodEnd).getTime() - start.getTime()) / 86400000));
   const elapsedDays = Math.max(1, Math.min(totalDays, Math.ceil((today.getTime() - start.getTime()) / 86400000)));
   const projected = Math.round((normalizedUsed / elapsedDays) * totalDays);
 

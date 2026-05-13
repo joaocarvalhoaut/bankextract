@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
-  CheckCircle2,
   Copy,
   ExternalLink,
   FileSpreadsheet,

@@ -1,4 +1,4 @@
-import { Clock3, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import PlanLimitNotice from '../components/PlanLimitNotice';
 import { getUsageSummary } from '../services/usageService';

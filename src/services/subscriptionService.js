@@ -126,18 +126,6 @@ const getCurrentPeriodRange = (subscription = null) => {
 const resolveMonthlyLimit = (planMeta, limitsJson = {}) =>
   Number(limitsJson?.charges_month || limitsJson?.monthly_charges || planMeta.monthly_send_limit || 0);
 
-const buildCompanyCommercialFields = (planCode) => {
-  const normalizedPlan = normalizePlanId(planCode);
-  const planMeta = getPlanMeta(normalizedPlan);
-
-  return {
-    subscription_plan: normalizedPlan,
-    subscription_status: normalizedPlan === 'starter' ? 'trialing' : 'active',
-    monthly_send_limit: Number(planMeta.monthly_send_limit || 0),
-    automatic_send_enabled: Boolean(planMeta.capabilities?.automatic_send),
-  };
-};
-
 const normalizeSubscriptionStatus = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'trial') return 'trialing';

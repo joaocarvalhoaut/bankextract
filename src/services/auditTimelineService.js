@@ -148,6 +148,9 @@ function buildDescription(action, metadata = {}) {
 function normalizeEvent(raw = {}) {
   const meta = ACTION_META[raw.action] || { label: raw.action || 'Evento', color: 'slate', group: 'sistema' };
   const md = raw.metadata && typeof raw.metadata === 'object' ? raw.metadata : {};
+  const severity = raw.severity || md.severity || 'info';
+  const requestId = raw.request_id || md.request_id || md.requestId || '';
+  const correlationId = raw.correlation_id || md.correlation_id || md.correlationId || '';
 
   return {
     id: raw.id,
@@ -158,11 +161,13 @@ function normalizeEvent(raw = {}) {
     metadata: md,
     title: raw.title || md.title || meta.label,
     description: raw.description || md.description || buildDescription(raw.action, md),
-    severity: raw.severity || md.severity || 'info',
+    severity,
     color: meta.color,
     group: meta.group,
     user_id: raw.user_id || null,
     user_email: raw.user_email || md.user_email || null,
+    request_id: requestId,
+    correlation_id: correlationId,
     created_at: raw.created_at || new Date().toISOString(),
     favorited: Boolean(md._favorited),
   };
@@ -252,7 +257,28 @@ export async function getAuditEvents(companyId, filters = {}, options = {}) {
         String(event.title || '').toLowerCase().includes(term) ||
         String(event.description || '').toLowerCase().includes(term) ||
         String(event.user_email || '').toLowerCase().includes(term) ||
-        String(event.entity || '').toLowerCase().includes(term)
+        String(event.entity || '').toLowerCase().includes(term) ||
+        String(event.request_id || '').toLowerCase().includes(term) ||
+        String(event.correlation_id || '').toLowerCase().includes(term) ||
+        String(event.company_id || '').toLowerCase().includes(term)
+    );
+  }
+
+  if (filters.severity && filters.severity !== 'todos') {
+    events = events.filter((event) => String(event.severity || 'info').toLowerCase() === String(filters.severity).toLowerCase());
+  }
+
+  if (filters.tenant && filters.tenant !== 'todos') {
+    const tenantTerm = String(filters.tenant).toLowerCase();
+    events = events.filter((event) => String(event.company_id || '').toLowerCase().includes(tenantTerm));
+  }
+
+  if (filters.requestQuery) {
+    const requestTerm = String(filters.requestQuery).toLowerCase();
+    events = events.filter(
+      (event) =>
+        String(event.request_id || '').toLowerCase().includes(requestTerm) ||
+        String(event.correlation_id || '').toLowerCase().includes(requestTerm)
     );
   }
 
@@ -331,6 +357,31 @@ export function groupAuditByDay(events = []) {
   return Array.from(map.values());
 }
 
+export function groupAuditByRequest(events = []) {
+  const requestMap = new Map();
+
+  for (const event of events) {
+    const requestKey = event.request_id || event.correlation_id || `event:${event.id}`;
+    const current = requestMap.get(requestKey) || {
+      key: requestKey,
+      label: requestKey.startsWith('event:') ? 'Sem request/correlation id' : requestKey,
+      created_at: event.created_at,
+      severity: event.severity || 'info',
+      company_id: event.company_id || '',
+      events: [],
+    };
+
+    current.events.push(event);
+    current.created_at = current.created_at > event.created_at ? current.created_at : event.created_at;
+    if (String(event.severity || '').toLowerCase() === 'danger') current.severity = 'danger';
+    requestMap.set(requestKey, current);
+  }
+
+  return Array.from(requestMap.values()).sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+}
+
 export default {
   ACTION_META,
   GROUP_LABELS,
@@ -338,4 +389,5 @@ export default {
   getRecentAudit,
   createAuditEvent,
   groupAuditByDay,
+  groupAuditByRequest,
 };

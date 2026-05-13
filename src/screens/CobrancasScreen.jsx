@@ -82,14 +82,11 @@ export default function CobrancasScreen({
         simulate: simulationMode,
       };
 
-      console.log('[SEND SINGLE CHARGE REQUEST - COBRANCAS]', payload);
 
       try {
         const data = await onSend?.(row, { simulate: simulationMode });
         if (data?.cancelled) return;
-        console.log('[SEND SINGLE CHARGE RESPONSE - COBRANCAS]', data, null);
       } catch (error) {
-        console.log('[SEND SINGLE CHARGE RESPONSE - COBRANCAS]', null, error);
         onToast?.('erro', error.message || 'Falha ao enviar cobranca via WhatsApp.');
       }
     },

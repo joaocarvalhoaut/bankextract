@@ -1059,6 +1059,171 @@ async function listPdfFilesInFolder(token: string, folderId: string, limit = 50)
   return files.slice(0, limit);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Recursive Drive scanning — lists subfolders and PDFs across nested levels
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function listSubfolders(token: string, parentId: string): Promise<Array<{ id: string; name: string }>> {
+  const query = encodeURIComponent(
+    `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+  );
+  const data = await googleJson<{ files?: Array<{ id: string; name: string }> }>(
+    `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&pageSize=50`,
+    token,
+  );
+  return data.files || [];
+}
+
+// Recursively collect all folder IDs under a root (BFS, capped at maxDepth and maxFolders)
+async function collectFolderIds(
+  token: string,
+  rootId: string,
+  maxDepth: number,
+  maxFolders = 40,
+): Promise<string[]> {
+  const visited = new Set<string>([rootId]);
+  const queue: Array<{ id: string; depth: number }> = [{ id: rootId, depth: 0 }];
+
+  while (queue.length > 0 && visited.size < maxFolders) {
+    const item = queue.shift();
+    if (!item || item.depth >= maxDepth) continue;
+    const children = await listSubfolders(token, item.id).catch(() => []);
+    for (const child of children) {
+      if (!visited.has(child.id) && visited.size < maxFolders) {
+        visited.add(child.id);
+        queue.push({ id: child.id, depth: item.depth + 1 });
+      }
+    }
+  }
+
+  return Array.from(visited);
+}
+
+async function listPdfFilesRecursive(
+  token: string,
+  rootFolderId: string,
+  maxDepth: number,
+  limit = 200,
+): Promise<DriveCandidate[]> {
+  const folderIds = await collectFolderIds(token, rootFolderId, maxDepth);
+  const allFiles: DriveCandidate[] = [];
+
+  for (const folderId of folderIds) {
+    if (allFiles.length >= limit) break;
+    const files = await listPdfFilesInFolder(token, folderId, Math.min(100, limit - allFiles.length));
+    allFiles.push(...files);
+  }
+
+  return allFiles.slice(0, limit);
+}
+
+// Search Drive files across all folders (recursive when enabled)
+async function searchDriveFilesWithConfig(
+  token: string,
+  rootFolderId: string,
+  record: FinancialRow,
+  config: { recursive?: boolean; maxDepth?: number; strategy?: string } = {},
+): Promise<DriveCandidate[]> {
+  const recursive = Boolean(config.recursive);
+  const maxDepth = Math.min(5, Math.max(1, Number(config.maxDepth || 2)));
+  const folderIds = recursive
+    ? await collectFolderIds(token, rootFolderId, maxDepth)
+    : [rootFolderId];
+
+  // Try each folder in order — stop early on confident match
+  for (const folderId of folderIds) {
+    const results = await searchDriveFiles(token, folderId, record);
+    if (results.length > 0) return results;
+  }
+
+  return [];
+}
+
+// Get folder structure (tree) for admin preview
+async function getDriveFolderStructure(
+  token: string,
+  rootFolderId: string,
+  maxDepth = 2,
+): Promise<unknown> {
+  async function buildNode(id: string, name: string, depth: number): Promise<unknown> {
+    const pdfCount = await countPdfFilesInFolder(token, id).catch(() => 0);
+    const node: Record<string, unknown> = { id, name, pdf_count: pdfCount };
+    if (depth < maxDepth) {
+      const children = await listSubfolders(token, id).catch(() => []);
+      if (children.length > 0) {
+        node.subfolders = await Promise.all(
+          children.slice(0, 20).map((child) => buildNode(child.id, child.name, depth + 1)),
+        );
+      }
+    }
+    return node;
+  }
+
+  const root = await getDriveFileMetadata(token, rootFolderId);
+  return buildNode(rootFolderId, root.name || 'Root', 0);
+}
+
+// Test boleto lookup — finds PDFs matching a free-form search term
+async function testBoletoLookup(
+  token: string,
+  rootFolderId: string,
+  query: string,
+  config: { recursive?: boolean; maxDepth?: number } = {},
+): Promise<Array<{ file: DriveCandidate; score: number; reasons: string[] }>> {
+  const recursive = Boolean(config.recursive);
+  const maxDepth = Math.min(5, Math.max(1, Number(config.maxDepth || 2)));
+  const folderIds = recursive
+    ? await collectFolderIds(token, rootFolderId, maxDepth)
+    : [rootFolderId];
+
+  const term = normalizeText(String(query || '').trim());
+  if (!term) return [];
+
+  const candidates: DriveCandidate[] = [];
+
+  for (const folderId of folderIds) {
+    if (candidates.length >= 10) break;
+
+    // Exact filename search
+    const escapedTerm = term.replace(/'/g, "\'");
+    const nameQuery = encodeURIComponent(
+      `name contains '${escapedTerm}' and '${folderId}' in parents and mimeType='application/pdf' and trashed=false`,
+    );
+    const nameData = await googleJson<{ files?: DriveCandidate[] }>(
+      `https://www.googleapis.com/drive/v3/files?q=${nameQuery}&fields=files(id,name,mimeType,webViewLink,webContentLink)&pageSize=5`,
+      token,
+    ).catch(() => ({ files: [] as DriveCandidate[] }));
+
+    for (const f of nameData.files || []) {
+      if (!candidates.find((c) => c.id === f.id)) candidates.push(f);
+    }
+
+    // Full-text search
+    if (candidates.length < 5) {
+      const ftQuery = encodeURIComponent(
+        `fullText contains '${escapedTerm}' and '${folderId}' in parents and mimeType='application/pdf' and trashed=false`,
+      );
+      const ftData = await googleJson<{ files?: DriveCandidate[] }>(
+        `https://www.googleapis.com/drive/v3/files?q=${ftQuery}&fields=files(id,name,mimeType,webViewLink,webContentLink)&pageSize=5`,
+        token,
+      ).catch(() => ({ files: [] as DriveCandidate[] }));
+
+      for (const f of ftData.files || []) {
+        if (!candidates.find((c) => c.id === f.id)) candidates.push(f);
+      }
+    }
+  }
+
+  // Score candidates
+  return candidates.slice(0, 5).map((file) => {
+    const nameLower = normalizeText(file.name || '');
+    const score = nameLower.includes(term) ? 80 : 50;
+    const reasons: string[] = nameLower.includes(term) ? ['filename_match'] : ['fulltext_match'];
+    return { file, score, reasons };
+  });
+}
+
+
 async function searchDriveFiles(token: string, folderId: string, record: FinancialRow) {
   if (record.drive_file_id) {
     const file = await getDriveFileMetadata(token, record.drive_file_id).catch(() => null);
@@ -1282,7 +1447,7 @@ async function syncSheetForCompany(supabaseAdmin: AdminClient, companyId: string
 async function getSheetsDriveConfig(supabaseAdmin: AdminClient, companyId: string) {
   const { data, error } = await supabaseAdmin
     .from('google_sheets_config')
-    .select('empresa_id, spreadsheet_id, sheet_name, source_spreadsheet_id, source_sheet_name, drive_root_folder_id, last_source_sync_at, last_source_sync_status, last_source_sync_error')
+    .select('empresa_id, spreadsheet_id, sheet_name, source_spreadsheet_id, source_sheet_name, drive_root_folder_id, drive_recursive_scan, drive_matching_strategy, drive_max_depth, drive_folder_name, last_source_sync_at, last_source_sync_status, last_source_sync_error')
     .eq('empresa_id', companyId)
     .maybeSingle();
 
@@ -1290,15 +1455,38 @@ async function getSheetsDriveConfig(supabaseAdmin: AdminClient, companyId: strin
   return data as SheetsConfigRow | null;
 }
 
+// ── Extracts folder ID from a Google Drive URL or returns raw ID as-is ──────
+function extractFolderIdFromUrl(input: string): string {
+  const str = String(input || '').trim();
+  // /drive/folders/FOLDER_ID or /folders/FOLDER_ID
+  const m1 = str.match(/\/folders\/([a-zA-Z0-9_-]{10,})/);
+  if (m1) return m1[1];
+  // open?id=FOLDER_ID or ?id=FOLDER_ID
+  const m2 = str.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+  if (m2) return m2[1];
+  // /d/FILE_ID/ pattern (file, not folder — still extract for validation)
+  const m3 = str.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
+  if (m3) return m3[1];
+  // Already a raw ID (no slashes/dots)
+  if (/^[a-zA-Z0-9_-]{10,}$/.test(str)) return str;
+  return str;
+}
+
 async function saveDriveConfigForCompany(
   supabaseAdmin: AdminClient,
   companyId: string,
   driveRootFolderId: string,
+  extraConfig: {
+    drive_recursive_scan?: boolean;
+    drive_matching_strategy?: string;
+    drive_max_depth?: number;
+    drive_folder_name?: string;
+  } = {},
 ) {
   requireCompanyId(companyId);
-  const folderId = String(driveRootFolderId || '').trim();
+  const folderId = extractFolderIdFromUrl(String(driveRootFolderId || '').trim());
   if (!folderId) {
-    throw new Error('Informe o ID da pasta do Google Drive.');
+    throw new Error('Informe o ID ou URL da pasta do Google Drive.');
   }
 
   const existingConfig = await getSheetsDriveConfig(supabaseAdmin, companyId);
@@ -1306,6 +1494,10 @@ async function saveDriveConfigForCompany(
   const payload = {
     empresa_id: companyId,
     drive_root_folder_id: folderId,
+    drive_recursive_scan: extraConfig.drive_recursive_scan ?? existingConfig?.drive_recursive_scan ?? false,
+    drive_matching_strategy: extraConfig.drive_matching_strategy ?? existingConfig?.drive_matching_strategy ?? 'auto',
+    drive_max_depth: Math.min(5, Math.max(1, Number(extraConfig.drive_max_depth ?? existingConfig?.drive_max_depth ?? 2))),
+    drive_folder_name: extraConfig.drive_folder_name ?? existingConfig?.drive_folder_name ?? null,
     spreadsheet_id: existingConfig?.spreadsheet_id ?? null,
     sheet_name: existingConfig?.sheet_name ?? null,
     source_spreadsheet_id: existingConfig?.source_spreadsheet_id ?? null,
@@ -4297,7 +4489,7 @@ Deno.serve(async (req: Request) => {
       },
     });
 
-    if (action === 'get_drive_config' || action === 'save_drive_config' || action === 'test_drive_connection' || action === 'sync_drive' || action === 'sync_boleto_drive_intelligent' || action === 'reprocess_boleto_drive_single') {
+    if (action === 'get_drive_config' || action === 'save_drive_config' || action === 'test_drive_connection' || action === 'sync_drive' || action === 'sync_boleto_drive_intelligent' || action === 'reprocess_boleto_drive_single' || action === 'test_boleto_lookup' || action === 'get_drive_folder_structure' || action === 'scan_folder_recursive') {
       requireCompanyId(companyId);
       requireEnvSecret('GOOGLE_CLIENT_EMAIL');
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
@@ -4315,6 +4507,9 @@ Deno.serve(async (req: Request) => {
       'test_drive_connection',
       'sync_drive',
       'sync_sheet',
+      'test_boleto_lookup',
+      'get_drive_folder_structure',
+      'scan_folder_recursive',
       'sync_boleto_drive_intelligent',
       'reprocess_boleto_drive_single',
       'run',
@@ -4417,9 +4612,23 @@ Deno.serve(async (req: Request) => {
 
     if (action === 'save_drive_config') {
       requireCompanyId(companyId);
-      const driveRootFolderId = String(body?.drive_root_folder_id || '').trim();
-      const savedConfig = await saveDriveConfigForCompany(admin, companyId || '', driveRootFolderId);
+      const driveRootFolderIdRaw = String(body?.drive_root_folder_id || '').trim();
+      const driveRootFolderId = extractFolderIdFromUrl(driveRootFolderIdRaw);
+      const savedConfig = await saveDriveConfigForCompany(admin, companyId || '', driveRootFolderId, {
+        drive_recursive_scan: body?.drive_recursive_scan === true,
+        drive_matching_strategy: String(body?.drive_matching_strategy || 'auto'),
+        drive_max_depth: Number(body?.drive_max_depth || 2),
+      });
       const connection = await testDriveConnectionForCompany(admin, companyId || '', googleToken);
+      // Cache folder name from connection test
+      if (connection.folder_name) {
+        await admin.from('google_sheets_config')
+          .update({ drive_folder_name: connection.folder_name,
+                    drive_last_test_at: new Date().toISOString(),
+                    drive_last_test_status: connection.status,
+                    drive_last_test_pdf_count: connection.quantidade_arquivos_pdf })
+          .eq('empresa_id', companyId).then(() => {}).catch(() => {});
+      }
 
       await admin.from('audit_logs').insert({
         company_id: companyId,
@@ -5504,7 +5713,80 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    return jsonResponse({ ok: false, error: 'Acao nao suportada.' }, 400);
+    if (action === 'extract_folder_id') {
+      const raw = String(body?.url || body?.folder_id || '').trim();
+      const extracted = extractFolderIdFromUrl(raw);
+      return jsonResponse({ ok: true, folder_id: extracted, original: raw });
+    }
+
+    if (action === 'get_drive_folder_structure') {
+      requireCompanyId(companyId);
+      const config = await getSheetsDriveConfig(admin, companyId || '');
+      const folderId = requireDriveFolderId(config?.drive_root_folder_id);
+      const maxDepth = Math.min(5, Math.max(1, Number(body?.max_depth ?? config?.drive_max_depth ?? 2)));
+      const structure = await getDriveFolderStructure(googleToken, folderId, maxDepth);
+      return jsonResponse({ ok: true, company_id: companyId, folder_id: folderId, structure });
+    }
+
+    if (action === 'test_boleto_lookup') {
+      requireCompanyId(companyId);
+      const config = await getSheetsDriveConfig(admin, companyId || '');
+      const folderId = requireDriveFolderId(config?.drive_root_folder_id);
+      const query = String(body?.query || body?.documento || body?.numero_boleto || body?.cliente_nome || '').trim();
+      if (!query) {
+        return jsonResponse({ ok: false, error: 'Informe um termo de busca (documento, boleto, nome).' }, 400);
+      }
+      const recursive = Boolean(body?.recursive ?? config?.drive_recursive_scan ?? false);
+      const maxDepth = Math.min(5, Math.max(1, Number(body?.max_depth ?? config?.drive_max_depth ?? 2)));
+      const results = await testBoletoLookup(googleToken, folderId, query, { recursive, maxDepth });
+      await admin.from('audit_logs').insert({
+        company_id: companyId,
+        user_id: auth.userId,
+        action: 'drive_boleto_test_lookup',
+        entity: 'google_sheets_config',
+        metadata: { query, recursive, results_found: results.length, folder_id: folderId },
+      }).then(() => {}).catch(() => {});
+      return jsonResponse({
+        ok: true,
+        company_id: companyId,
+        query,
+        folder_id: folderId,
+        recursive,
+        results_found: results.length,
+        results: results.map((r) => ({
+          file_id: r.file.id,
+          file_name: r.file.name,
+          score: r.score,
+          reasons: r.reasons,
+          view_url: r.file.webViewLink || `https://drive.google.com/file/d/${r.file.id}/view`,
+        })),
+      });
+    }
+
+    if (action === 'scan_folder_recursive') {
+      requireCompanyId(companyId);
+      const config = await getSheetsDriveConfig(admin, companyId || '');
+      const folderId = requireDriveFolderId(config?.drive_root_folder_id);
+      const maxDepth = Math.min(5, Math.max(1, Number(body?.max_depth ?? config?.drive_max_depth ?? 2)));
+      const limit = Math.min(500, Math.max(1, Number(body?.limit || 100)));
+      const files = await listPdfFilesRecursive(googleToken, folderId, maxDepth, limit);
+      const folderIds = await collectFolderIds(googleToken, folderId, maxDepth);
+      return jsonResponse({
+        ok: true,
+        company_id: companyId,
+        folder_id: folderId,
+        max_depth: maxDepth,
+        folders_scanned: folderIds.length,
+        pdf_count: files.length,
+        files: files.slice(0, 50).map((f) => ({
+          id: f.id,
+          name: f.name,
+          view_url: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`,
+        })),
+      });
+    }
+
+        return jsonResponse({ ok: false, error: 'Acao nao suportada.' }, 400);
   } catch (error) {
     return errorResponse(runtime, error, {
       status: 500,
