@@ -92,13 +92,6 @@ function temBoleto(registro = {}) {
 function logCobrancaMapping(registro = {}) {
   const numeroBoletoEfetivo = getNumeroBoletoEfetivo(registro);
   const clienteEfetivo = getClienteEfetivo(registro);
-  console.log(
-    '[COBRANCA]',
-    'cliente=', clienteEfetivo,
-    'documento=', registro?.documento || '',
-    'numero_nf=', registro?.numero_nf || '',
-    'usando=', numeroBoletoEfetivo
-  );
   return { numeroBoletoEfetivo, clienteEfetivo };
 }
 
@@ -360,7 +353,6 @@ export default function CentralCobrancaScreen({
       return;
     }
 
-    console.log('[MENSAGEM TEMPLATE]', finalMessage);
     setSavingTemplate(true);
     try {
       const currentConfigResponse = await getBillingConfig(resolvedCompanyId);
@@ -459,7 +451,6 @@ export default function CentralCobrancaScreen({
     setSendingRealKeys(activeKeys);
     try {
       const result = await sendRealCharge(resolvedCompanyId, payload);
-      console.log('[ENVIO REAL] resultado', result);
       setManualResult((current) => applyRealSendSummary(current, result));
       await loadCenter();
       await createAuditEvent(resolvedCompanyId, {
@@ -548,8 +539,6 @@ export default function CentralCobrancaScreen({
   }, []);
 
   const handlePrepareSelected = useCallback(async (options = {}) => {
-    console.log('[PREPARAR COBRANCA] click');
-    console.log('[PREPARAR COBRANCA] selecionados', Array.from(selectedRows));
     const fallbackToEligible = options?.fallbackToEligible !== false;
     const selectedIds = Array.from(selectedRows).slice(0, 20);
     const eligibleRows = rows.filter((row) => isChargeRowEligible(row)).slice(0, 20);
@@ -618,7 +607,6 @@ export default function CentralCobrancaScreen({
         errorItems: errorsList,
         warning: 'Envio real nao realizado. Copie as mensagens e envie manualmente pelo WhatsApp.',
       };
-      console.log('[PREPARAR COBRANCA] resultado', result);
       setManualResult(result);
       if (preparedItems.length) {
         createAuditEvent(resolvedCompanyId, {
@@ -1043,7 +1031,6 @@ export default function CentralCobrancaScreen({
                   restoreMessage={simulationResult.mensagem_gerada || ''}
                   onMessageChange={(value) =>
                     {
-                      console.log('[MENSAGEM TEMPLATE]', value);
                       setSimulationResult((current) => (current ? { ...current, mensagem_gerada: value } : current));
                     }
                   }
@@ -1240,8 +1227,7 @@ export default function CentralCobrancaScreen({
                       restoreMessage={item.message || ''}
                       onMessageChange={(value) =>
                         {
-                          console.log('[MENSAGEM TEMPLATE]', value);
-                          setManualResult((current) =>
+                              setManualResult((current) =>
                             current
                               ? {
                                   ...current,

@@ -738,7 +738,6 @@ export default function App() {
       }
 
       const result = await financeService.processImportFile(selectedFile, importType, currentCompanyId);
-      console.log('[IMPORTACAO] resposta OCR', result);
       const hasKnownArray =
         Array.isArray(result?.rows) ||
         Array.isArray(result?.data) ||
@@ -802,14 +801,12 @@ export default function App() {
 
     try {
       const selectedRows = (preview?.rows || []).filter((row) => row.selected !== false);
-      console.log('[IMPORT] selecionados', selectedRows.length);
       const batchId = makeUuid();
-      const result = await financeService.importSelectedRows(preview?.rows || [], batchId, currentCompanyId, {
+      await financeService.importSelectedRows(preview?.rows || [], batchId, currentCompanyId, {
         fileName: preview.fileName,
         tipo: importType,
         companyName: currentCompanyName,
       });
-      console.log('[IMPORT] resultado', result);
       await auditLog.importConfirmed(currentCompanyId, {
         arquivo: preview.fileName,
         registros: selectedRows.length,
@@ -1249,10 +1246,8 @@ export default function App() {
         customMessage: nextRow.mensagem || '',
       });
       if (data?.cancelled) return;
-      console.log('[SEND MODAL WHATSAPP RESPONSE]', data, null);
       setChargePreviewModal(null);
     } catch (error) {
-      console.log('[SEND MODAL WHATSAPP RESPONSE]', null, error);
       showToast('erro', error.message || 'Falha ao enviar cobranca via WhatsApp.');
     } finally {
       setChargePreviewSending(false);

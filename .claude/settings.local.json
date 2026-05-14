@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(grep -E \"\\\\.js$|\\\\.ts$\")",
+      "Bash(npm run *)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:v for k,v in d.items\\(\\) if k in ['scripts','devDependencies','dependencies']}, indent=2\\)\\)\")",
+      "Bash(node -e \"const d=require\\('./package.json'\\); console.log\\(JSON.stringify\\({scripts:d.scripts,test:d.devDependencies?.vitest||d.devDependencies?.jest},null,2\\)\\)\")",
+      "Bash(node --input-type=module)",
+      "Read(//c/c/Users/ACIRLEIDE FERREIRA/Documents/New project/.claude/worktrees/silly-sinoussi-79c686/src/services/**)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('scripts',{}\\), indent=2\\)\\)\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")",
+      "Bash(grep -v \"//.*token\\\\|//.*secret\\\\|//.*key\")",
+      "Bash(grep -v \"node_modules\\\\|//.*stack\\\\|sentry\\\\|Sentry\\\\|captureException\")",
+      "Bash(git push *)",
+      "Bash(gh pr create --title 'RC: Observability Platform + Auditoria Segurança + Lint Zero' --body ' *)",
+      "PowerShell(Get-Command gh -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-ChildItem \"C:\\\\Program Files\\\\GitHub CLI\\\\\" -ErrorAction SilentlyContinue; Get-ChildItem \"$env:LOCALAPPDATA\\\\Programs\\\\GitHub CLI\\\\\" -ErrorAction SilentlyContinue)",
+      "mcp__Claude_in_Chrome__list_connected_browsers",
+      "mcp__Claude_in_Chrome__select_browser",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(Start-Process -NoNewWindow npm -ArgumentList \"run\",\"dev\" -RedirectStandardOutput \"C:\\\\Users\\\\ACIRLEIDE FERREIRA\\\\AppData\\\\Local\\\\Temp\\\\dev-server.log\")",
+      "Bash(Start-Sleep -Seconds 5)",
+      "Bash(Get-Content \"C:\\\\Users\\\\ACIRLEIDE FERREIRA\\\\AppData\\\\Local\\\\Temp\\\\dev-server.log\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -First 20)"
+    ]
+  }
+}

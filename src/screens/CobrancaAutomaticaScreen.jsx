@@ -441,8 +441,6 @@ export default function CobrancaAutomaticaScreen({
 
   const handleSendSingleCharge = useCallback(
     async (row) => {
-      console.log('[SEND BUTTON CLICKED]', row);
-
       if (!resolvedCompanyId || globalMode) {
         onToast?.('erro', 'Selecione uma empresa especifica para enviar a cobranca.');
         return;
