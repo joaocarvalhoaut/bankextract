@@ -576,7 +576,7 @@ export const financeService = {
             registro_id: record.id,
             batch_id: record.batchId ?? record.batch_id ?? null,
             cliente: record.nome,
-            documento: record.numeroBoleto ?? record.numero_boleto ?? '',
+            documento: (record.numeroBoleto || record.numero_boleto || record.documento || '').trim(),
             valor: Number(record.valor || 0),
             vencimento: record.dataVencimento ?? record.data_vencimento ?? '',
             telefone: latest?.telefone || record.telefone || '',
@@ -788,7 +788,7 @@ export const financeService = {
         delete clone.id;
         clone.documento = documentoFinal;
         // [DEBUG-DOC] non-PII: confirm documento/numero_boleto saved
-        if (process.env.NODE_ENV !== 'production') {
+        if (import.meta.env.DEV) {
           console.debug('[insertRegistros] doc=%s boleto=%s', clone.documento || '(empty)', clone.numero_boleto || '(empty)');
         }
         return clone;
@@ -1203,7 +1203,7 @@ export const financeService = {
     }));
 
     // [DEBUG-DOC] non-PII: confirm documento resolved before insert
-    if (process.env.NODE_ENV !== 'production') {
+    if (import.meta.env.DEV) {
       payload.forEach((r, i) => console.debug('[importSelectedRows] row=%d doc=%s boleto=%s', i, r.documento || '(empty)', r.numeroBoleto || '(empty)'));
     }
     const inserted = await this.insertRegistros(payload, {
