@@ -531,13 +531,19 @@ async function validateZapiConnection(config: {
   clientToken: string;
 }) {
   const url = `https://api.z-api.io/instances/${config.instanceId}/token/${config.token}/status`;
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Client-token': String(config.clientToken || '').trim(),
-      'Content-Type': 'application/json',
-    },
-  });
+
+  const response = await withTimeout(
+    (signal) => fetch(url, {
+      method: 'GET',
+      signal,
+      headers: {
+        'Client-Token': String(config.clientToken || '').trim(),
+        'Content-Type': 'application/json',
+      },
+    }),
+    15000,
+    'Tempo limite excedido ao validar conexao Z-API.',
+  );
 
   const data = await response.json().catch(() => ({}));
   console.log('[ZAPI COMPANY REQUEST]', {
@@ -545,10 +551,32 @@ async function validateZapiConnection(config: {
     ok: response.ok,
     status: response.status,
   });
-  console.log('[ZAPI COMPANY RESPONSE]', data);
+  console.log('[ZAPI COMPANY RESPONSE]', {
+    ok: response.ok,
+    status: response.status,
+    connected: data?.connected,
+    hasPhone: Boolean(
+      String(data?.phone || data?.mobile || data?.connectedPhone || data?.phoneNumber || '').trim(),
+    ),
+  });
 
   if (!response.ok) {
-    throw new Error(`Z-API validacao erro ${response.status}: ${JSON.stringify(data)}`);
+    const zapiMsg = String(data?.message || data?.error || '').trim();
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(
+        `Client Token invalido ou expirado (HTTP ${response.status}). Atualize o Client Token em Integracoes.`,
+      );
+    }
+    if (response.status === 404) {
+      throw new Error(
+        `Instancia Z-API nao encontrada (HTTP 404). Verifique o Instance ID.`,
+      );
+    }
+    throw new Error(
+      zapiMsg
+        ? `Z-API erro (HTTP ${response.status}): ${zapiMsg}`
+        : `Z-API validacao erro ${response.status}.`,
+    );
   }
 
   return data as Record<string, unknown>;
@@ -727,29 +755,51 @@ async function getZapiQrCodeData(
   const token = String(config.token || '').trim();
   const clientToken = String(config.clientToken || '').trim();
   const url = `https://api.z-api.io/instances/${instanceId}/token/${token}/qr-code/image`;
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Client-token': clientToken,
-      'Content-Type': 'application/json',
-    },
-  });
 
-  const contentType = response.headers.get('content-type') || '';
   console.log('[ZAPI QR REQUEST]', {
-    instanceId,
+    instanceId: maskSecret(instanceId),
     hasToken: Boolean(token),
     hasClientToken: Boolean(clientToken),
   });
 
+  const response = await withTimeout(
+    (signal) => fetch(url, {
+      method: 'GET',
+      signal,
+      headers: {
+        'Client-Token': clientToken,
+      },
+    }),
+    20000,
+    'Tempo limite excedido ao carregar QR Code da Z-API. Verifique a instancia e tente novamente.',
+  );
+
+  const contentType = response.headers.get('content-type') || '';
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    console.log('[ZAPI QR RESPONSE]', {
-      status: response.status,
-      ok: response.ok,
-      data: errorData,
-    });
-    throw new Error('Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
+    const zapiMsg = String(errorData?.message || errorData?.error || errorData?.reason || '').trim();
+    const httpStatus = response.status;
+    console.log('[ZAPI QR RESPONSE]', { status: httpStatus, ok: false });
+
+    if (httpStatus === 401 || httpStatus === 403) {
+      throw new Error(
+        `Client Token invalido ou expirado (HTTP ${httpStatus}). Acesse a Z-API, gere um novo Client Token e atualize em Integracoes.`,
+      );
+    }
+    if (httpStatus === 404) {
+      throw new Error(
+        `Instancia Z-API nao encontrada (HTTP 404). Verifique se o Instance ID esta correto.`,
+      );
+    }
+    if (httpStatus === 429) {
+      throw new Error('Rate limit da Z-API atingido. Aguarde alguns segundos e tente novamente.');
+    }
+    throw new Error(
+      zapiMsg
+        ? `Z-API erro (HTTP ${httpStatus}): ${zapiMsg}`
+        : `Z-API indisponivel (HTTP ${httpStatus}). Tente novamente em instantes.`,
+    );
   }
 
   if (contentType.includes('application/json')) {
@@ -5407,7 +5457,6 @@ Deno.serve(async (req: Request) => {
           success: false,
           action,
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
     }
@@ -5443,7 +5492,6 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'get_qr_code',
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
     }
@@ -5481,7 +5529,6 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'get_connection_status',
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
     }
