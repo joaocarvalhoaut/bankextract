@@ -804,18 +804,6 @@ export default function App() {
       const selectedRows = (preview?.rows || []).filter((row) => row.selected !== false);
       console.log('[IMPORT] selecionados', selectedRows.length);
       const batchId = makeUuid();
-      const payload = selectedRows.map((row) => ({
-        company_id: currentCompanyId,
-        created_by: currentUserId,
-        cliente_fornecedor: row.cliente_fornecedor || row.nome || '',
-        documento: row.documento ?? row.numero_boleto ?? '',
-        vencimento: row.data_vencimento ?? '',
-        valor: Number(row.valor || 0),
-        status: row.status || 'pendente',
-        telefone: row.telefone || '',
-        observacoes: row.observacoes ?? row.observacao ?? '',
-        tipo_importacao: importType,
-      }));
       const result = await financeService.importSelectedRows(preview?.rows || [], batchId, currentCompanyId, {
         fileName: preview.fileName,
         tipo: importType,
@@ -1248,19 +1236,7 @@ export default function App() {
       ...chargePreviewModal.row,
       mensagem: chargePreviewModal.message,
     };
-    const registroId = String(nextRow.registro_id || nextRow.financeiro_id || nextRow.id || '').trim();
     const simulate = billingExecutionMode !== 'real';
-    const payload = {
-      action: 'send_single_charge',
-      companyId: nextRow.company_id || currentCompanyId,
-      company_id: nextRow.company_id || currentCompanyId,
-      registro_id: registroId,
-      charge_id: registroId,
-      simulate,
-      custom_message: nextRow.mensagem || '',
-      message: nextRow.mensagem || '',
-    };
-
 
     setChargePreviewSending(true);
     setChargeRows((prev) =>

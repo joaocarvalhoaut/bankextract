@@ -81,10 +81,7 @@ export default function AuditTimelineScreen({ companyId, companyName, onToast, a
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [groupMode, setGroupMode] = useState('day');
-  const [page, setPage] = useState(1);
   const mountedRef = useRef(true);
-  const pageSize = 50;
-
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -114,16 +111,9 @@ export default function AuditTimelineScreen({ companyId, companyName, onToast, a
     load();
   }, [load]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [filters, groupMode]);
-
   const grouped = useMemo(() => (groupMode === 'request' ? groupAuditByRequest(events) : groupAuditByDay(events)), [events, groupMode]);
   const totalEvents = events.length;
   const totalGroups = grouped.length;
-  const paginatedGroups = grouped.slice((page - 1) * pageSize, page * pageSize);
-  const totalPages = Math.max(1, Math.ceil(grouped.length / pageSize));
-
   const byGroup = useMemo(() => {
     const counts = {};
     for (const event of events) {

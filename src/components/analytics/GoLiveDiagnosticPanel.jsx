@@ -220,7 +220,7 @@ export default function GoLiveDiagnosticPanel({ companyId }) {
       {!running && !results && (
         <div className="rounded-2xl border border-dashed border-slate-700 p-10 text-center text-slate-500 text-sm">
           <Play size={20} className="mx-auto mb-2 text-slate-600" />
-          Clique em "Executar Diagnóstico" para validar o sistema
+          Clique em &quot;Executar Diagnóstico&quot; para validar o sistema
         </div>
       )}
     </div>

@@ -165,7 +165,7 @@ export default function AuditFilters({ filters, onChange, onClear, resultCount }
           ) : (
             <div className="sm:col-span-3">
               <div className="rounded-xl border border-dashed border-slate-700 bg-slate-800/30 px-3 py-3 text-sm text-slate-400">
-                Selecione "Personalizado" para definir um intervalo manual.
+                Selecione &quot;Personalizado&quot; para definir um intervalo manual.
               </div>
             </div>
           )}

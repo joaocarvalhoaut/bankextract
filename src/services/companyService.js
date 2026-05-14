@@ -454,7 +454,7 @@ export const companyService = {
       membershipsResult.companies.find((item) => item.id === resolvedCompanyId) && membershipsResult.memberships.find((item) => item.companyId === resolvedCompanyId)
         ? {
             company: membershipsResult.companies.find((item) => item.id === resolvedCompanyId),
-            membership: memberships.find((item) => item.companyId === resolvedCompanyId),
+            membership: membershipsResult.memberships.find((item) => item.companyId === resolvedCompanyId),
           }
         : {
             company: mapCompanyToApp(companyData, { role: companyData.role || 'operador' }),

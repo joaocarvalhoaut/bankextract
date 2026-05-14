@@ -99,6 +99,8 @@ interface ExtractedBoletoData {
   vencimento: string | null;
   nome_cliente: string | null;
   match_strategy: string;
+  ocr_used?: boolean;
+  ocr_source?: string | null;
 }
 
 interface MatchCandidate {
@@ -539,7 +541,7 @@ async function validateZapiConnection(config: {
 
   const data = await response.json().catch(() => ({}));
   console.log('[ZAPI COMPANY REQUEST]', {
-    url,
+    url: url.replace(/\/token\/[^/]+\//, '/token/****/'),
     ok: response.ok,
     status: response.status,
   });
@@ -1263,6 +1265,7 @@ async function searchDriveFiles(token: string, folderId: string, record: Financi
 
   for (const queryParts of fuzzySearches) {
     queryParts.push(`'${folderId}' in parents`);
+    queryParts.push("mimeType='application/pdf'");
     queryParts.push('trashed=false');
     const data = await googleJson<{ files?: DriveCandidate[] }>(
       `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(queryParts.join(' and '))}&fields=files(id,name,mimeType)&pageSize=10`,
@@ -1275,6 +1278,83 @@ async function searchDriveFiles(token: string, folderId: string, record: Financi
   }
 
   return results;
+}
+
+// ── ETAPA 1: Scored live search — returns candidates with confidence scores ──
+// Used at send-time to gate PDF attachment behind a minimum score of 80.
+// Tiers: prelinked(95) > exact_filename(90) > combined_name_boleto(85)
+//        > fulltext_boleto(65) > fulltext_name(50)
+interface ScoredDriveFile {
+  file: DriveCandidate;
+  score: number;
+  strategy: string;
+}
+
+async function searchDriveFilesScored(
+  token: string,
+  folderId: string,
+  record: FinancialRow,
+): Promise<ScoredDriveFile[]> {
+  const results: ScoredDriveFile[] = [];
+
+  // Tier 1: pre-linked file_id (highest confidence)
+  if (record.drive_file_id) {
+    const linked = await getDriveFileMetadata(token, record.drive_file_id).catch(() => null);
+    if (linked?.id && linked.mimeType === 'application/pdf') {
+      return [{ file: linked, score: 95, strategy: 'prelinked_file_id' }];
+    }
+  }
+
+  const { numeroBoletoEfetivo, clienteEfetivo } = logCobrancaMapping(record);
+  const boleto = String(numeroBoletoEfetivo || '').trim();
+  const normalizedName = normalizeDriveName(clienteEfetivo || record.nome || '');
+
+  // Tier 2: exact filename match
+  const exactCandidates: Array<[string, number, string]> = [];
+  if (boleto) exactCandidates.push([`${boleto}.pdf`, 90, 'exact_filename_boleto']);
+  if (boleto && normalizedName) exactCandidates.push([`${normalizedName}_${boleto}.pdf`, 85, 'combined_name_boleto']);
+
+  for (const [name, score, strategy] of exactCandidates) {
+    const q = encodeURIComponent(`name='${name.replace(/'/g, "\\'")}' and '${folderId}' in parents and mimeType='application/pdf' and trashed=false`);
+    const data = await googleJson<{ files?: DriveCandidate[] }>(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,parents,webViewLink,webContentLink)&pageSize=5`,
+      token,
+    ).catch(() => ({ files: [] as DriveCandidate[] }));
+    for (const f of data.files || []) {
+      if (!results.find((r) => r.file.id === f.id)) results.push({ file: f, score, strategy });
+    }
+  }
+
+  // Return early if we already have a confident exact match
+  if (results.some((r) => r.score >= 80)) {
+    return results.sort((a, b) => b.score - a.score);
+  }
+
+  // Tier 3: fullText search on boleto number
+  if (boleto) {
+    const q = encodeURIComponent(`fullText contains '${boleto.replace(/'/g, "\\'")}' and '${folderId}' in parents and mimeType='application/pdf' and trashed=false`);
+    const data = await googleJson<{ files?: DriveCandidate[] }>(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,parents,webViewLink,webContentLink)&pageSize=10`,
+      token,
+    ).catch(() => ({ files: [] as DriveCandidate[] }));
+    for (const f of data.files || []) {
+      if (!results.find((r) => r.file.id === f.id)) results.push({ file: f, score: 65, strategy: 'fulltext_boleto' });
+    }
+  }
+
+  // Tier 4: fullText search on client name (weakest signal)
+  if (normalizedName && results.length < 3) {
+    const q = encodeURIComponent(`fullText contains '${normalizedName.replace(/'/g, "\\'")}' and '${folderId}' in parents and mimeType='application/pdf' and trashed=false`);
+    const data = await googleJson<{ files?: DriveCandidate[] }>(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,parents,webViewLink,webContentLink)&pageSize=10`,
+      token,
+    ).catch(() => ({ files: [] as DriveCandidate[] }));
+    for (const f of data.files || []) {
+      if (!results.find((r) => r.file.id === f.id)) results.push({ file: f, score: 50, strategy: 'fulltext_name' });
+    }
+  }
+
+  return results.sort((a, b) => b.score - a.score);
 }
 
 async function downloadDriveFileBase64(token: string, fileId: string) {
@@ -1668,6 +1748,70 @@ async function syncDriveForCompany(supabaseAdmin: AdminClient, companyId: string
   return { linked, not_found: notFound, folder_id: folderId };
 }
 
+// ── ETAPA 3: Google Vision OCR fallback for scanned / image-only PDFs ────────
+// Requires ENABLE_GOOGLE_VISION_OCR=true env var and the service account having
+// Cloud Vision API enabled in Google Cloud Console.
+async function attemptVisionOCR(token: string, bytes: Uint8Array): Promise<{ text: string; source: string } | null> {
+  const enableOcr = String(Deno.env.get('ENABLE_GOOGLE_VISION_OCR') || '').trim();
+  if (enableOcr !== 'true') return null;
+
+  try {
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    const base64Content = btoa(binary);
+
+    const requestBody = {
+      requests: [{
+        inputConfig: {
+          content: base64Content,
+          mimeType: 'application/pdf',
+        },
+        features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
+        pages: [1, 2, 3],
+      }],
+    };
+
+    const response = await withTimeout(
+      (signal) =>
+        fetch('https://vision.googleapis.com/v1/files:annotate', {
+          method: 'POST',
+          signal,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        }),
+      20000,
+      'Tempo limite excedido ao chamar Google Vision OCR.',
+    );
+
+    if (!response.ok) {
+      console.warn('[OCR] Vision API error', response.status, await response.text().catch(() => ''));
+      return null;
+    }
+
+    const data = await response.json().catch(() => null);
+    const pages: Array<{ fullTextAnnotation?: { text?: string } }> = data?.responses || [];
+    const combinedText = pages
+      .map((p) => String(p?.fullTextAnnotation?.text || ''))
+      .join('\n')
+      .trim();
+
+    if (!combinedText) return null;
+    return { text: combinedText, source: 'google_vision' };
+  } catch (error) {
+    console.warn('[OCR] Vision fallback failed', error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+// Threshold: if extracted text has fewer meaningful chars than this, try OCR
+const OCR_TEXT_THRESHOLD = 40;
+
 function buildBoletoStatus(value: string | null | undefined) {
   const normalized = normalizeText(value).replace(/[^\w]/g, '_');
   if (BOLETO_STATUS_VALUES.has(normalized)) return normalized;
@@ -1676,13 +1820,41 @@ function buildBoletoStatus(value: string | null | undefined) {
 
 async function extractBoletoDataFromDriveFile(token: string, file: DriveCandidate): Promise<ExtractedBoletoData> {
   const bytes = await downloadDriveFileBytes(token, file.id);
-  if (bytes.length < 10) {
+  if (bytes.length < 100) {
     console.log(JSON.stringify({ event: 'drive_empty_pdf', file_id: file.id, file_name: file.name, bytes: bytes.length }));
     throw new Error(`PDF vazio ou ilegivel: ${file.name} (${bytes.length} bytes).`);
   }
-  const text = extractReadableTextFromBytes(bytes);
+  // Validate PDF magic bytes — rejects non-PDF and corrupted files early
+  const pdfHeader = new TextDecoder('latin1').decode(bytes.slice(0, 5));
+  if (!pdfHeader.startsWith('%PDF')) {
+    console.log(JSON.stringify({ event: 'drive_invalid_pdf_header', file_id: file.id, file_name: file.name, header: pdfHeader.slice(0, 5) }));
+    throw new Error(`Arquivo nao e um PDF valido: ${file.name} (header invalido).`);
+  }
+  // Validate PDF EOF marker — truncated PDFs lack %%EOF at the end
+  const tailBytes = bytes.slice(Math.max(0, bytes.length - 1024));
+  const tail = new TextDecoder('latin1').decode(tailBytes);
+  if (!tail.includes('%%EOF')) {
+    console.log(JSON.stringify({ event: 'drive_truncated_pdf', file_id: file.id, file_name: file.name, bytes: bytes.length }));
+    throw new Error(`PDF truncado ou corrompido: ${file.name} (marcador %%EOF ausente).`);
+  }
+  let rawText = extractReadableTextFromBytes(bytes);
+  let ocrUsed = false;
+  let ocrSource: string | null = null;
+
+  // ETAPA 3: OCR fallback — if native text extraction yields too little content
+  const meaningfulChars = rawText.replace(/\s/g, '').length;
+  if (meaningfulChars < OCR_TEXT_THRESHOLD) {
+    const ocrResult = await attemptVisionOCR(token, bytes);
+    if (ocrResult && ocrResult.text.replace(/\s/g, '').length > meaningfulChars) {
+      rawText = ocrResult.text;
+      ocrUsed = true;
+      ocrSource = ocrResult.source;
+      console.log(JSON.stringify({ event: 'ocr_used', file_id: file.id, file_name: file.name, source: ocrSource, chars: rawText.replace(/\s/g, '').length }));
+    }
+  }
+
   const filenameText = String(file.name || '').replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ');
-  const mergedText = `${filenameText}\n${text}`;
+  const mergedText = `${filenameText}\n${rawText}`;
   const documento = extractDocumento(mergedText);
   const linhaDigitavel = extractLinhaDigitavel(mergedText);
   const codigoBarras = extractCodigoBarras(mergedText);
@@ -1701,7 +1873,9 @@ async function extractBoletoDataFromDriveFile(token: string, file: DriveCandidat
     valor: extractCurrencyValue(mergedText),
     vencimento: extractDate(mergedText),
     nome_cliente: extractNames(mergedText) || null,
-    match_strategy: 'regex_texto_pdf',
+    match_strategy: ocrUsed ? `ocr_${ocrSource || 'unknown'}` : 'regex_texto_pdf',
+    ocr_used: ocrUsed,
+    ocr_source: ocrSource,
   };
 }
 
@@ -1839,6 +2013,9 @@ async function upsertBoletoMatchResult(
     boleto_status: buildBoletoStatus(status),
     boleto_match_strategy: strategy,
     boleto_erro: errorMessage,
+    boleto_ocr_used: pdfData.ocr_used ?? false,
+    boleto_ocr_source: pdfData.ocr_source || null,
+    pdf_validation_reason: 'ok',
     updated_at: new Date().toISOString(),
   };
 
@@ -1930,6 +2107,17 @@ async function syncBoletoDriveIntelligentForCompany(
           second_score: second.score,
           duration_ms: Date.now() - fileStart,
         }));
+        await insertAutomationAuditLog(supabaseAdmin, {
+          company_id: companyId,
+          request_id: requestId,
+          action: 'drive_sync_conflict',
+          registro_id: best.record.id,
+          boleto_file_id: file.id,
+          boleto_score: confidence,
+          boleto_strategy: strategy,
+          boleto_second_score: second.score,
+          blocked_reason: 'conflict_high_score',
+        });
       } else if (best && best.score >= 80) {
         status = 'encontrado';
         matchedRecord = best.record;
@@ -1963,6 +2151,16 @@ async function syncBoletoDriveIntelligentForCompany(
           reasons: best.reasons,
           duration_ms: Date.now() - fileStart,
         }));
+        await insertAutomationAuditLog(supabaseAdmin, {
+          company_id: companyId,
+          request_id: requestId,
+          action: 'drive_sync_low_confidence',
+          registro_id: best.record.id,
+          boleto_file_id: file.id,
+          boleto_score: confidence,
+          boleto_strategy: strategy,
+          blocked_reason: `baixa_confianca_score_${confidence}`,
+        });
       } else {
         strategy = 'no_match';
 
@@ -2800,6 +2998,124 @@ async function sendZapiText(
   };
 }
 
+// ── ETAPA 5: Z-API Circuit Breaker ───────────────────────────────────────────
+// Opens after 3 consecutive failures within 5 minutes. Auto-resets after 15 min.
+async function checkZapiCircuit(supabaseAdmin: AdminClient, companyId: string): Promise<{ open: boolean; reason?: string }> {
+  try {
+    const { data } = await supabaseAdmin
+      .from('zapi_circuit_state')
+      .select('circuit_open, circuit_opened_at, consecutive_failures, last_failure_at')
+      .eq('company_id', companyId)
+      .maybeSingle();
+    if (!data) return { open: false };
+    if (!data.circuit_open) return { open: false };
+    // Auto-reset after 15 minutes
+    const openedAt = data.circuit_opened_at ? new Date(data.circuit_opened_at).getTime() : 0;
+    if (Date.now() - openedAt > 15 * 60 * 1000) {
+      await supabaseAdmin.from('zapi_circuit_state').update({
+        circuit_open: false, consecutive_failures: 0, updated_at: new Date().toISOString(),
+      }).eq('company_id', companyId);
+      return { open: false };
+    }
+    return { open: true, reason: `Z-API circuit aberto: ${data.consecutive_failures} falhas consecutivas.` };
+  } catch {
+    return { open: false };
+  }
+}
+
+async function recordZapiSuccess(supabaseAdmin: AdminClient, companyId: string) {
+  try {
+    await supabaseAdmin.from('zapi_circuit_state').upsert({
+      company_id: companyId,
+      consecutive_failures: 0,
+      circuit_open: false,
+      last_success_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'company_id' });
+  } catch { /* non-critical */ }
+}
+
+async function recordZapiFailure(supabaseAdmin: AdminClient, companyId: string, error: string) {
+  try {
+    const { data: current } = await supabaseAdmin
+      .from('zapi_circuit_state')
+      .select('consecutive_failures')
+      .eq('company_id', companyId)
+      .maybeSingle();
+    const newCount = Number(current?.consecutive_failures || 0) + 1;
+    const circuitOpen = newCount >= 3;
+    await supabaseAdmin.from('zapi_circuit_state').upsert({
+      company_id: companyId,
+      consecutive_failures: newCount,
+      circuit_open: circuitOpen,
+      circuit_opened_at: circuitOpen ? new Date().toISOString() : null,
+      last_failure_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'company_id' });
+    if (circuitOpen) {
+      console.warn(JSON.stringify({ event: 'zapi_circuit_opened', company_id: companyId, consecutive_failures: newCount, error }));
+    }
+  } catch { /* non-critical */ }
+}
+
+// ── ETAPA 6: Forensic audit log ───────────────────────────────────────────────
+async function insertAutomationAuditLog(
+  supabaseAdmin: AdminClient,
+  payload: {
+    company_id: string;
+    request_id?: string | null;
+    action: string;
+    registro_id?: string | null;
+    charge_id?: string | null;
+    telefone?: string | null;
+    boleto_file_id?: string | null;
+    boleto_score?: number | null;
+    boleto_strategy?: string | null;
+    boleto_second_score?: number | null;
+    template_used?: string | null;
+    pdf_hash?: string | null;
+    zapi_status?: string | null;
+    provider_message_id?: string | null;
+    request_payload?: Record<string, unknown> | null;
+    response_payload?: Record<string, unknown> | null;
+    duration_ms?: number | null;
+    blocked_reason?: string | null;
+    ocr_used?: boolean;
+    ocr_source?: string | null;
+    pdf_validation_reason?: string | null;
+    user_id?: string | null;
+  },
+) {
+  try {
+    await supabaseAdmin.from('automation_audit_logs').insert({
+      company_id: payload.company_id,
+      request_id: payload.request_id || null,
+      action: payload.action,
+      registro_id: payload.registro_id || null,
+      charge_id: payload.charge_id || null,
+      telefone: payload.telefone || null,
+      boleto_file_id: payload.boleto_file_id || null,
+      boleto_score: payload.boleto_score ?? null,
+      boleto_strategy: payload.boleto_strategy || null,
+      boleto_second_score: payload.boleto_second_score ?? null,
+      template_used: payload.template_used || null,
+      pdf_hash: payload.pdf_hash || null,
+      zapi_status: payload.zapi_status || null,
+      provider_message_id: payload.provider_message_id || null,
+      request_payload: payload.request_payload || null,
+      response_payload: payload.response_payload || null,
+      duration_ms: payload.duration_ms ?? null,
+      blocked_reason: payload.blocked_reason || null,
+      ocr_used: payload.ocr_used ?? false,
+      ocr_source: payload.ocr_source || null,
+      pdf_validation_reason: payload.pdf_validation_reason || null,
+      user_id: payload.user_id || null,
+    });
+  } catch (error) {
+    console.warn('[AUDIT_LOG] insert warning', error instanceof Error ? error.message : error);
+  }
+}
+
 async function insertLog(
   supabaseAdmin: AdminClient,
   payload: Record<string, unknown>,
@@ -2872,17 +3188,18 @@ async function reserveAutomationDispatch(
     ].join('|'));
     const payloadHash = await sha256Hex(JSON.stringify(payload.body || {}));
 
-    // Only block if: (a) there's an active concurrent processing record, OR
+    // Block only if: (a) concurrent processing lock is FRESH (< 10 min), OR
     // (b) a completed dispatch happened within the last 5 minutes.
-    // Failed or older records must allow retry.
+    // Stale processing rows (> 10 min) and failed records allow retry.
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const tenMinutesAgo  = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const { data: existing } = await supabaseAdmin
       .from('automation_dispatches')
       .select('id, status, created_at')
       .eq('company_id', payload.companyId)
       .eq('operation_hash', operationHash)
       .eq('dispatch_type', payload.dispatchType)
-      .or(`status.eq.processing,and(status.eq.completed,created_at.gte.${fiveMinutesAgo})`)
+      .or(`and(status.eq.processing,created_at.gte.${tenMinutesAgo}),and(status.eq.completed,created_at.gte.${fiveMinutesAgo})`)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -3115,9 +3432,69 @@ async function processChargeForRecord(
     }
   }
 
+  // ETAPA 1: Scored live search with blocking rules
   if (!file) {
-    const candidates = await searchDriveFiles(token, folderId, record);
-    file = candidates[0] || null;
+    const scoredCandidates = await searchDriveFilesScored(token, folderId, record);
+    const best = scoredCandidates[0];
+    const second = scoredCandidates[1];
+
+    if (best) {
+      // Conflict: two candidates both >= 80 and within 5 points of each other
+      if (best.score >= 80 && second && second.score >= 80 && Math.abs(best.score - second.score) <= 5) {
+        await tryInsertLog(supabaseAdmin, {
+          financeiro_id: record.id,
+          company_id: record.company_id,
+          cliente_nome: clienteEfetivo || record.nome,
+          cliente_numero: record.cliente_numero,
+          telefone: phone,
+          documento: record.documento,
+          numero_boleto: numeroBoletoEfetivo || null,
+          numero_nf: record.numero_nf,
+          valor: record.valor,
+          vencimento: record.data_vencimento,
+          tipo_cobranca: tipo,
+          dias_atraso: diasAtraso,
+          arquivo_encontrado: false,
+          drive_file_id: best.file.id,
+          status_envio: 'erro',
+          erro: 'boleto_conflito_live_search',
+          payload: {
+            winner_score: best.score, winner_file_id: best.file.id, winner_file_name: best.file.name,
+            second_score: second.score, second_file_id: second.file.id, company_id: record.company_id,
+          },
+          envio_hash: hash,
+        });
+        await insertAutomationAuditLog(supabaseAdmin, {
+          company_id: record.company_id, action: 'live_search_conflict_blocked',
+          registro_id: record.id, charge_id: record.id,
+          boleto_file_id: best.file.id, boleto_score: best.score, boleto_strategy: best.strategy,
+          boleto_second_score: second.score, blocked_reason: 'conflict_live_search',
+        });
+        await finalizeAutomationDispatch(supabaseAdmin, {
+          companyId: record.company_id, dispatchType, operationHash: dispatch.operationHash,
+          status: 'failed', metadata: { reason: 'boleto_conflito_live_search', winner_score: best.score, second_score: second.score },
+        });
+        return { status: 'erro', reason: 'boleto_conflito_live_search' };
+      }
+      // Low confidence: block attachment if score < 80
+      if (best.score < 80) {
+        await insertAutomationAuditLog(supabaseAdmin, {
+          company_id: record.company_id, action: 'live_search_low_confidence_blocked',
+          registro_id: record.id, charge_id: record.id,
+          boleto_file_id: best.file.id, boleto_score: best.score, boleto_strategy: best.strategy,
+          blocked_reason: `baixa_confianca_score_${best.score}`,
+        });
+        // file stays null — will be handled by the !file check below
+      } else {
+        file = best.file;
+        await insertAutomationAuditLog(supabaseAdmin, {
+          company_id: record.company_id, action: 'live_search_matched',
+          registro_id: record.id, boleto_file_id: best.file.id,
+          boleto_score: best.score, boleto_strategy: best.strategy,
+          boleto_second_score: second?.score ?? null,
+        });
+      }
+    }
   }
 
   if (!file?.id && !permitirEnvioSemBoleto) {
@@ -3188,6 +3565,21 @@ async function processChargeForRecord(
       status: 'completed',
       metadata: { simulated: true, file_name: file?.name || null },
     });
+    // Forensic audit for simulated sends — allows BoletoMatchStatus panel to show them
+    await insertAutomationAuditLog(supabaseAdmin, {
+      company_id: record.company_id,
+      action: 'whatsapp_charge_simulated',
+      registro_id: record.id,
+      charge_id: record.id,
+      telefone: phone,
+      boleto_file_id: file?.id || null,
+      boleto_score: Number(record.boleto_match_confidence || 0) || null,
+      boleto_strategy: record.boleto_match_strategy || null,
+      template_used: tipo,
+      zapi_status: 'simulated',
+      request_payload: { tipo, dias_atraso: diasAtraso, simulate: true, document: record.documento, phone },
+      response_payload: { simulated: true, file_name: file?.name || null, message_preview: message },
+    });
 
     return {
       status: 'sucesso',
@@ -3210,21 +3602,39 @@ async function processChargeForRecord(
     return { status: 'erro', reason: 'boleto_nao_encontrado' };
   }
 
+  // ETAPA 5: Circuit breaker check before Z-API call
+  const circuit = await checkZapiCircuit(supabaseAdmin, record.company_id);
+  if (circuit.open) {
+    await tryInsertLog(supabaseAdmin, {
+      financeiro_id: record.id, company_id: record.company_id,
+      cliente_nome: clienteEfetivo || record.nome, cliente_numero: record.cliente_numero,
+      telefone: phone, documento: record.documento, numero_boleto: numeroBoletoEfetivo || null,
+      valor: record.valor, vencimento: record.data_vencimento, tipo_cobranca: tipo,
+      dias_atraso: diasAtraso, arquivo_encontrado: Boolean(file?.id), drive_file_id: file?.id || null,
+      status_envio: 'erro', erro: 'zapi_circuit_open', envio_hash: hash,
+      payload: { company_id: record.company_id, record_id: record.id, circuit_reason: circuit.reason },
+    });
+    await finalizeAutomationDispatch(supabaseAdmin, {
+      companyId: record.company_id, dispatchType, operationHash: dispatch.operationHash,
+      status: 'failed', metadata: { reason: 'zapi_circuit_open' },
+    });
+    return { status: 'erro', reason: 'zapi_circuit_open' };
+  }
+
   const zapiConfig = await resolveCompanyZapiConfig(supabaseAdmin, record.company_id, { allowTestMode: false });
   const base64 = await downloadDriveFileBase64(token, file.id);
   let sendResult: { provider_id: string; raw: unknown };
+  const sendStartedAt = Date.now();
   try {
     sendResult = await sendZapiDocument(zapiConfig, phone, message, file.name || `${numeroBoletoEfetivo || record.documento || record.id}.pdf`, base64);
+    await recordZapiSuccess(supabaseAdmin, record.company_id);
   } catch (sendErr) {
+    const errMsg = sendErr instanceof Error ? sendErr.message : String(sendErr);
+    await recordZapiFailure(supabaseAdmin, record.company_id, errMsg);
     console.log(JSON.stringify({
-      event: 'attachment_failed',
-      company_id: record.company_id,
-      financial_record_id: record.id,
-      file_id: file.id,
-      file_name: file.name,
-      tipo,
-      phone,
-      error: sendErr instanceof Error ? sendErr.message : String(sendErr),
+      event: 'attachment_failed', company_id: record.company_id,
+      financial_record_id: record.id, file_id: file.id, file_name: file.name,
+      tipo, phone, error: errMsg,
     }));
     throw sendErr;
   }
@@ -3308,6 +3718,24 @@ async function processChargeForRecord(
       provider_message_id: providerMessageId,
       sent_at: sentAt,
     },
+  });
+
+  // ETAPA 6: Forensic audit — record full send evidence
+  await insertAutomationAuditLog(supabaseAdmin, {
+    company_id: record.company_id,
+    action: 'whatsapp_charge_sent',
+    registro_id: record.id,
+    charge_id: record.id,
+    telefone: phone,
+    boleto_file_id: file.id,
+    boleto_score: Number(record.boleto_match_confidence || 0) || null,
+    boleto_strategy: record.boleto_match_strategy || null,
+    template_used: tipo,
+    zapi_status: 'sent',
+    provider_message_id: providerMessageId,
+    duration_ms: Date.now() - sendStartedAt,
+    request_payload: { tipo, dias_atraso: diasAtraso, document: record.documento, phone },
+    response_payload: { provider_message_id: providerMessageId, sent_at: sentAt },
   });
 
   console.log(JSON.stringify({
@@ -4489,13 +4917,13 @@ Deno.serve(async (req: Request) => {
       },
     });
 
-    if (action === 'get_drive_config' || action === 'save_drive_config' || action === 'test_drive_connection' || action === 'sync_drive' || action === 'sync_boleto_drive_intelligent' || action === 'reprocess_boleto_drive_single' || action === 'test_boleto_lookup' || action === 'get_drive_folder_structure' || action === 'scan_folder_recursive') {
+    if (action === 'get_drive_config' || action === 'save_drive_config' || action === 'test_drive_connection' || action === 'test_drive_health' || action === 'sync_drive' || action === 'sync_boleto_drive_intelligent' || action === 'reprocess_boleto_drive_single' || action === 'test_boleto_lookup' || action === 'get_drive_folder_structure' || action === 'scan_folder_recursive') {
       requireCompanyId(companyId);
       requireEnvSecret('GOOGLE_CLIENT_EMAIL');
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
     }
 
-    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission' || action === 'get_boleto_sync_report' || action === 'preview_charge_payload' || action === 'prepare_manual_charge' || action === 'send_real' || action === 'send_single_charge' || action === 'validate_company_integration' || action === 'validate_connection' || action === 'get_qr_code' || action === 'get_connection_status') {
+    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission' || action === 'get_boleto_sync_report' || action === 'preview_charge_payload' || action === 'prepare_manual_charge' || action === 'send_real' || action === 'send_single_charge' || action === 'validate_company_integration' || action === 'validate_connection' || action === 'get_qr_code' || action === 'get_connection_status' || action === 'test_zapi_health' || action === 'test_drive_health') {
       requireCompanyId(companyId);
     }
 
@@ -4505,6 +4933,7 @@ Deno.serve(async (req: Request) => {
       'get_drive_config',
       'save_drive_config',
       'test_drive_connection',
+      'test_drive_health',
       'sync_drive',
       'sync_sheet',
       'test_boleto_lookup',
@@ -5784,6 +6213,69 @@ Deno.serve(async (req: Request) => {
           view_url: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`,
         })),
       });
+    }
+
+    // ETAPA 7: Z-API health check
+    if (action === 'test_zapi_health') {
+      requireCompanyId(companyId);
+      const healthStart = Date.now();
+      try {
+        const zapiCfg = await resolveCompanyZapiConfig(admin, companyId || '', { allowTestMode: true });
+        const statusData = await validateZapiConnection(zapiCfg);
+        const connected = isZapiConnected(statusData);
+        const phone = extractZapiPhoneNumber(statusData);
+        const circuit = await checkZapiCircuit(admin, companyId || '');
+        return jsonResponse({
+          ok: true,
+          company_id: companyId,
+          zapi_connected: connected,
+          zapi_phone: phone || null,
+          circuit_open: circuit.open,
+          circuit_reason: circuit.reason || null,
+          source: zapiCfg.source,
+          duration_ms: Date.now() - healthStart,
+        });
+      } catch (healthErr) {
+        const errMsg = healthErr instanceof Error ? healthErr.message : String(healthErr);
+        return jsonResponse({
+          ok: false,
+          company_id: companyId,
+          zapi_connected: false,
+          error: errMsg,
+          circuit_open: false,
+          duration_ms: Date.now() - healthStart,
+        });
+      }
+    }
+
+    // ETAPA 7: Drive health check (enhanced)
+    if (action === 'test_drive_health') {
+      requireCompanyId(companyId);
+      const healthStart = Date.now();
+      try {
+        const result = await testDriveConnectionForCompany(admin, companyId || '', googleToken);
+        const hasGoogleCreds = Boolean(Deno.env.get('GOOGLE_CLIENT_EMAIL') && Deno.env.get('GOOGLE_PRIVATE_KEY'));
+        const ocrEnabled = String(Deno.env.get('ENABLE_GOOGLE_VISION_OCR') || '') === 'true';
+        return jsonResponse({
+          ok: true,
+          company_id: companyId,
+          drive_status: result.status,
+          folder_name: result.folder_name,
+          pdf_count: result.quantidade_arquivos_pdf,
+          service_account: result.service_account_email,
+          google_creds_configured: hasGoogleCreds,
+          ocr_enabled: ocrEnabled,
+          duration_ms: Date.now() - healthStart,
+        });
+      } catch (healthErr) {
+        return jsonResponse({
+          ok: false,
+          company_id: companyId,
+          drive_status: 'erro',
+          error: healthErr instanceof Error ? healthErr.message : String(healthErr),
+          duration_ms: Date.now() - healthStart,
+        });
+      }
     }
 
         return jsonResponse({ ok: false, error: 'Acao nao suportada.' }, 400);

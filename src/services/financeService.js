@@ -758,13 +758,6 @@ export const financeService = {
 
     if (tenant.useSupabase) {
       const client = requireSupabase();
-      const payload = items.map((item) =>
-        mapRegistroToDb({
-          ...item,
-          company_id: tenant.companyId,
-          user_id: tenant.userId
-        })
-      );
       const cleanPayload = items.map((item) => {
         const normalizedStatus = normalizeStatus(item?.status);
           const documentoFinal =

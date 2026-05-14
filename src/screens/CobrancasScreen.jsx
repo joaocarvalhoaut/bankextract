@@ -55,8 +55,6 @@ export default function CobrancasScreen({
 
   const handleSendSingleCharge = useCallback(
     async (row) => {
-      console.log('[SEND BUTTON CLICKED - COBRANCAS]', row);
-
       if (!companyId) {
         onToast?.('erro', 'Selecione uma empresa especifica para enviar a cobranca.');
         return;
@@ -72,16 +70,6 @@ export default function CobrancasScreen({
         onToast?.('erro', 'Esta cobranca nao possui um titulo financeiro associado.');
         return;
       }
-
-      const payload = {
-        action: 'send_single_charge',
-        companyId,
-        company_id: companyId,
-        registro_id: registroId,
-        charge_id: registroId,
-        simulate: simulationMode,
-      };
-
 
       try {
         const data = await onSend?.(row, { simulate: simulationMode });

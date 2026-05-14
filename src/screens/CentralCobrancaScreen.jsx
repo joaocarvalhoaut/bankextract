@@ -552,23 +552,6 @@ export default function CentralCobrancaScreen({
       return;
     }
 
-    const debugPayload = targetIds.map((rowId) => {
-      const row = rows.find((item) => item.id === rowId) || {};
-      return {
-        id: rowId,
-        cliente: getClienteEfetivo(row),
-        telefone: row?.telefone || '',
-        documento: row?.documento || '',
-        numero_nf: row?.numero_nf || '',
-        numero_boleto: getNumeroBoletoEfetivo(row),
-        vencimento: row?.vencimento || null,
-        valor: row?.valor || 0,
-        status: row?.status || '',
-        temBoleto: temBoleto(row),
-        elegivel: isChargeRowEligible(row),
-      };
-    });
-
     setRunningAction('prepare-selected');
     try {
       const preparedItems = [];
@@ -576,16 +559,6 @@ export default function CentralCobrancaScreen({
       for (const rowId of targetIds) {
         const row = rows.find((item) => item.id === rowId) || {};
         const elegivel = isChargeRowEligible(row);
-        console.log('[PREVIEW ITEM]', {
-          cliente: row?.cliente_nome,
-          telefone: row?.telefone,
-          documento: row?.documento,
-          numero_nf: row?.numero_nf,
-          numero_boleto: row?.numero_boleto,
-          numeroEfetivo: getNumeroBoletoEfetivo(row),
-          temBoleto: temBoleto(row),
-          elegivel,
-        });
 
         if (!elegivel) {
           errorsList.push({
