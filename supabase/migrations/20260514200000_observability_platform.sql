@@ -9,23 +9,26 @@ create table if not exists public.billing_events (
   id               uuid        primary key default gen_random_uuid(),
   company_id       uuid        not null,
   event_type       text        not null,
-  correlation_id   text,
-  trace_id         text,
-  request_id       text,
-  registro_id      uuid,
-  charge_id        text,
-  actor_id         uuid,
-  actor_type       text        not null default 'system',
-  payload          jsonb       not null default '{}',
-  metadata         jsonb       not null default '{}',
-  status           text        not null default 'published',
-  retry_count      integer     not null default 0,
-  dead_letter      boolean     not null default false,
-  dead_letter_at   timestamptz,
-  dead_letter_reason text,
-  processed_at     timestamptz,
   created_at       timestamptz not null default now()
 );
+
+-- Back-fill columns that may be absent if the table was created in an earlier form
+alter table public.billing_events
+  add column if not exists correlation_id    text,
+  add column if not exists trace_id          text,
+  add column if not exists request_id        text,
+  add column if not exists registro_id       uuid,
+  add column if not exists charge_id         text,
+  add column if not exists actor_id          uuid,
+  add column if not exists actor_type        text        not null default 'system',
+  add column if not exists payload           jsonb       not null default '{}',
+  add column if not exists metadata          jsonb       not null default '{}',
+  add column if not exists status            text        not null default 'published',
+  add column if not exists retry_count       integer     not null default 0,
+  add column if not exists dead_letter       boolean     not null default false,
+  add column if not exists dead_letter_at    timestamptz,
+  add column if not exists dead_letter_reason text,
+  add column if not exists processed_at      timestamptz;
 
 comment on table public.billing_events is
   'Internal event bus: boleto_match_found, whatsapp_sent, circuit_opened, ocr_used, payment_detected, etc.';
@@ -59,41 +62,36 @@ end $$;
 
 -- ── 2. billing_metrics_daily — pré-agregação diária por empresa ───────────────
 create table if not exists public.billing_metrics_daily (
-  id                       uuid        primary key default gen_random_uuid(),
-  company_id               uuid        not null,
-  metric_date              date        not null,
-  -- envio
-  total_sent               integer     not null default 0,
-  total_delivered          integer     not null default 0,
-  total_read               integer     not null default 0,
-  total_failed             integer     not null default 0,
-  total_simulated          integer     not null default 0,
-  -- pagamentos
-  total_paid               integer     not null default 0,
-  total_recovered_value    numeric(15,2) not null default 0,
-  -- boleto matching
-  total_found              integer     not null default 0,
-  total_conflict           integer     not null default 0,
-  total_low_confidence     integer     not null default 0,
-  total_ocr_used           integer     not null default 0,
-  -- circuit breaker / retries
-  total_retries            integer     not null default 0,
-  total_circuit_activations integer    not null default 0,
-  -- latência (ms)
-  avg_send_latency_ms      integer,
-  avg_read_latency_ms      integer,
-  p95_send_latency_ms      integer,
-  -- taxas calculadas (0–100)
-  recovery_rate            numeric(5,2),
-  conversion_rate          numeric(5,2),
-  error_rate               numeric(5,2),
-  conflict_rate            numeric(5,2),
-  ocr_usage_rate           numeric(5,2),
-  -- metadata
-  computed_at              timestamptz not null default now(),
-  created_at               timestamptz not null default now(),
+  id          uuid  primary key default gen_random_uuid(),
+  company_id  uuid  not null,
+  metric_date date  not null,
+  created_at  timestamptz not null default now(),
   unique (company_id, metric_date)
 );
+
+alter table public.billing_metrics_daily
+  add column if not exists total_sent               integer     not null default 0,
+  add column if not exists total_delivered          integer     not null default 0,
+  add column if not exists total_read               integer     not null default 0,
+  add column if not exists total_failed             integer     not null default 0,
+  add column if not exists total_simulated          integer     not null default 0,
+  add column if not exists total_paid               integer     not null default 0,
+  add column if not exists total_recovered_value    numeric(15,2) not null default 0,
+  add column if not exists total_found              integer     not null default 0,
+  add column if not exists total_conflict           integer     not null default 0,
+  add column if not exists total_low_confidence     integer     not null default 0,
+  add column if not exists total_ocr_used           integer     not null default 0,
+  add column if not exists total_retries            integer     not null default 0,
+  add column if not exists total_circuit_activations integer    not null default 0,
+  add column if not exists avg_send_latency_ms      integer,
+  add column if not exists avg_read_latency_ms      integer,
+  add column if not exists p95_send_latency_ms      integer,
+  add column if not exists recovery_rate            numeric(5,2),
+  add column if not exists conversion_rate          numeric(5,2),
+  add column if not exists error_rate               numeric(5,2),
+  add column if not exists conflict_rate            numeric(5,2),
+  add column if not exists ocr_usage_rate           numeric(5,2),
+  add column if not exists computed_at              timestamptz not null default now();
 
 comment on table public.billing_metrics_daily is
   'Pre-aggregated daily metrics per company for fast dashboard queries';
@@ -115,46 +113,42 @@ end $$;
 
 -- ── 3. customer_financial_profiles — inteligência de pagamento ────────────────
 create table if not exists public.customer_financial_profiles (
-  id                        uuid        primary key default gen_random_uuid(),
-  company_id                uuid        not null,
-  cliente_id                text        not null,
-  cliente_nome              text,
-  documento                 text,
-  -- comportamento de pagamento
-  total_invoices            integer     not null default 0,
-  total_paid                integer     not null default 0,
-  total_defaulted           integer     not null default 0,
-  total_recovered           integer     not null default 0,
-  avg_days_to_pay           numeric(6,2),
-  max_days_overdue          integer,
-  broken_promises           integer     not null default 0,
-  -- valores
-  total_value               numeric(15,2) not null default 0,
-  total_recovered_value     numeric(15,2) not null default 0,
-  total_open_value          numeric(15,2) not null default 0,
-  -- scores (0–100)
-  payment_score             integer     not null default 50,
-  default_risk_score        integer     not null default 50,
-  response_probability      integer     not null default 50,
-  payment_probability       integer     not null default 50,
-  -- timing intelligence
-  best_send_hour            smallint,
-  best_send_day_of_week     smallint,
-  best_template             text,
-  seasonality_pattern       jsonb       default '{}',
-  -- flags
-  is_recurrent_defaulter    boolean     not null default false,
-  is_critical               boolean     not null default false,
-  is_high_risk              boolean     not null default false,
-  trend                     text        not null default 'stable',
-  -- metadata
-  last_charge_at            timestamptz,
-  last_payment_at           timestamptz,
-  computed_at               timestamptz not null default now(),
-  created_at                timestamptz not null default now(),
-  updated_at                timestamptz not null default now(),
+  id          uuid  primary key default gen_random_uuid(),
+  company_id  uuid  not null,
+  cliente_id  text  not null,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
   unique (company_id, cliente_id)
 );
+
+alter table public.customer_financial_profiles
+  add column if not exists cliente_nome              text,
+  add column if not exists documento                 text,
+  add column if not exists total_invoices            integer     not null default 0,
+  add column if not exists total_paid                integer     not null default 0,
+  add column if not exists total_defaulted           integer     not null default 0,
+  add column if not exists total_recovered           integer     not null default 0,
+  add column if not exists avg_days_to_pay           numeric(6,2),
+  add column if not exists max_days_overdue          integer,
+  add column if not exists broken_promises           integer     not null default 0,
+  add column if not exists total_value               numeric(15,2) not null default 0,
+  add column if not exists total_recovered_value     numeric(15,2) not null default 0,
+  add column if not exists total_open_value          numeric(15,2) not null default 0,
+  add column if not exists payment_score             integer     not null default 50,
+  add column if not exists default_risk_score        integer     not null default 50,
+  add column if not exists response_probability      integer     not null default 50,
+  add column if not exists payment_probability       integer     not null default 50,
+  add column if not exists best_send_hour            smallint,
+  add column if not exists best_send_day_of_week     smallint,
+  add column if not exists best_template             text,
+  add column if not exists seasonality_pattern       jsonb       default '{}',
+  add column if not exists is_recurrent_defaulter    boolean     not null default false,
+  add column if not exists is_critical               boolean     not null default false,
+  add column if not exists is_high_risk              boolean     not null default false,
+  add column if not exists trend                     text        not null default 'stable',
+  add column if not exists last_charge_at            timestamptz,
+  add column if not exists last_payment_at           timestamptz,
+  add column if not exists computed_at               timestamptz not null default now();
 
 comment on table public.customer_financial_profiles is
   'Customer financial intelligence: payment score, risk, best timing, seasonality';
@@ -183,20 +177,22 @@ end $$;
 
 -- ── 4. collection_intelligence_scores — priorização automática ───────────────
 create table if not exists public.collection_intelligence_scores (
-  id                   uuid        primary key default gen_random_uuid(),
-  company_id           uuid        not null,
-  registro_id          uuid        not null,
-  priority_score       integer     not null default 50,
-  urgency_level        text        not null default 'normal',
-  recommended_template text,
-  recommended_hour     smallint,
-  predicted_payment_prob integer   not null default 50,
-  strategy_notes       text[],
-  factors              jsonb       not null default '{}',
-  expires_at           timestamptz not null default (now() + interval '24 hours'),
-  computed_at          timestamptz not null default now(),
+  id          uuid  primary key default gen_random_uuid(),
+  company_id  uuid  not null,
+  registro_id uuid  not null,
+  computed_at timestamptz not null default now(),
   unique (company_id, registro_id)
 );
+
+alter table public.collection_intelligence_scores
+  add column if not exists priority_score          integer     not null default 50,
+  add column if not exists urgency_level           text        not null default 'normal',
+  add column if not exists recommended_template    text,
+  add column if not exists recommended_hour        smallint,
+  add column if not exists predicted_payment_prob  integer     not null default 50,
+  add column if not exists strategy_notes          text[],
+  add column if not exists factors                 jsonb       not null default '{}',
+  add column if not exists expires_at              timestamptz not null default (now() + interval '24 hours');
 
 comment on table public.collection_intelligence_scores is
   'Daily-computed charge prioritization and strategy recommendations';
@@ -219,20 +215,22 @@ end $$;
 
 -- ── 5. operational_alerts — alertas com estado ───────────────────────────────
 create table if not exists public.operational_alerts (
-  id             uuid        primary key default gen_random_uuid(),
-  company_id     uuid,
-  alert_type     text        not null,
-  severity       text        not null default 'warning',
-  title          text        not null,
-  message        text        not null,
-  context        jsonb       not null default '{}',
-  acknowledged   boolean     not null default false,
-  acknowledged_by uuid,
-  acknowledged_at timestamptz,
-  auto_resolved  boolean     not null default false,
-  resolved_at    timestamptz,
-  created_at     timestamptz not null default now()
+  id         uuid  primary key default gen_random_uuid(),
+  company_id uuid,
+  alert_type text  not null,
+  created_at timestamptz not null default now()
 );
+
+alter table public.operational_alerts
+  add column if not exists severity         text        not null default 'warning',
+  add column if not exists title            text        not null default '',
+  add column if not exists message          text        not null default '',
+  add column if not exists context          jsonb       not null default '{}',
+  add column if not exists acknowledged     boolean     not null default false,
+  add column if not exists acknowledged_by  uuid,
+  add column if not exists acknowledged_at  timestamptz,
+  add column if not exists auto_resolved    boolean     not null default false,
+  add column if not exists resolved_at      timestamptz;
 
 create index if not exists idx_oa_company_active
   on public.operational_alerts(company_id, created_at desc)
@@ -276,13 +274,13 @@ create index if not exists idx_aal_correlation
 
 -- ── 7. Colunas adicionais em registros_financeiros (intelligence) ─────────────
 alter table public.registros_financeiros
-  add column if not exists intelligence_score     integer,
-  add column if not exists intelligence_priority  text,
-  add column if not exists intelligence_template  text,
-  add column if not exists intelligence_hour      smallint,
+  add column if not exists intelligence_score       integer,
+  add column if not exists intelligence_priority    text,
+  add column if not exists intelligence_template    text,
+  add column if not exists intelligence_hour        smallint,
   add column if not exists intelligence_computed_at timestamptz,
-  add column if not exists payment_probability    integer,
-  add column if not exists default_risk           integer;
+  add column if not exists payment_probability      integer,
+  add column if not exists default_risk             integer;
 
 -- ── 8. Índices estratégicos para performance ──────────────────────────────────
 create index if not exists idx_rf_company_status_venc
@@ -312,20 +310,22 @@ create index if not exists idx_ad_company_status_created
 
 -- ── 9. security_sessions — rastreamento de sessão auditada ───────────────────
 create table if not exists public.security_sessions (
-  id               uuid        primary key default gen_random_uuid(),
-  user_id          uuid        not null,
-  company_id       uuid,
-  session_token    text,
-  ip_address       text,
-  user_agent       text,
-  device_fingerprint text,
-  started_at       timestamptz not null default now(),
-  last_active_at   timestamptz not null default now(),
-  ended_at         timestamptz,
-  anomaly_flags    jsonb       not null default '{}',
-  actions_count    integer     not null default 0,
-  created_at       timestamptz not null default now()
+  id         uuid  primary key default gen_random_uuid(),
+  user_id    uuid  not null,
+  company_id uuid,
+  created_at timestamptz not null default now()
 );
+
+alter table public.security_sessions
+  add column if not exists session_token      text,
+  add column if not exists ip_address         text,
+  add column if not exists user_agent         text,
+  add column if not exists device_fingerprint text,
+  add column if not exists started_at         timestamptz not null default now(),
+  add column if not exists last_active_at     timestamptz not null default now(),
+  add column if not exists ended_at           timestamptz,
+  add column if not exists anomaly_flags      jsonb       not null default '{}',
+  add column if not exists actions_count      integer     not null default 0;
 
 create index if not exists idx_ss_user_started
   on public.security_sessions(user_id, started_at desc);
