@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, BarChart3 } from 'lucide-react';
+import { Activity, BarChart3, Brain, GitBranch, LayoutDashboard, Lock, Radio, Rocket, Users } from 'lucide-react';
 import PlanLimitNotice from '../components/PlanLimitNotice';
 import AnalyticsFiltersBar from '../components/analytics/AnalyticsFiltersBar';
 import AnalyticsMetricGrid from '../components/analytics/AnalyticsMetricGrid';
 import AnalyticsTimelineChart from '../components/analytics/AnalyticsTimelineChart';
 import OperationalAiPanel from '../components/analytics/OperationalAiPanel';
+import ExecutiveDashboard from '../components/analytics/ExecutiveDashboard';
+import RealtimeMonitorPanel from '../components/analytics/RealtimeMonitorPanel';
+import EventTimelinePanel from '../components/analytics/EventTimelinePanel';
+import CollectionIntelligencePanel from '../components/analytics/CollectionIntelligencePanel';
+import CustomerProfileCard from '../components/analytics/CustomerProfileCard';
+import EnterpriseAuditPanel from '../components/analytics/EnterpriseAuditPanel';
+import GoLiveDiagnosticPanel from '../components/analytics/GoLiveDiagnosticPanel';
 import { checkFeatureAccess } from '../services/subscriptionService';
 import { getCompanyAnalytics, getOperationalAnalytics } from '../services/analyticsService';
 import { getUsageSummary } from '../services/usageService';
@@ -20,7 +27,19 @@ function SummaryPill({ label, value }) {
   );
 }
 
+const TABS = [
+  { id: 'executive',    label: 'Dashboard',       icon: LayoutDashboard },
+  { id: 'realtime',     label: 'Monitor Live',     icon: Radio },
+  { id: 'events',       label: 'Event Bus',        icon: GitBranch },
+  { id: 'collection',   label: 'Cobrança IA',      icon: Brain },
+  { id: 'customers',    label: 'Clientes',         icon: Users },
+  { id: 'audit',        label: 'Auditoria',        icon: Lock },
+  { id: 'golive',       label: 'Go-Live',          icon: Rocket },
+  { id: 'operational',  label: 'Analytics',        icon: BarChart3 },
+];
+
 export default function AnalyticsScreen({ companyId, companyName, onToast }) {
+  const [activeTab, setActiveTab] = useState('executive');
   const [loading, setLoading] = useState(false);
   const [analytics, setAnalytics] = useState(null);
   const [operational, setOperational] = useState(null);
@@ -161,6 +180,42 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
         </div>
       </section>
 
+      {/* Tab navigation — scrollável no mobile */}
+      <div className="overflow-x-auto -mx-1 px-1 pb-0.5">
+        <div className="flex gap-1 rounded-2xl border border-slate-800 bg-slate-900/60 p-1 w-max min-w-full sm:w-fit sm:min-w-0">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
+                activeTab === id
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              <Icon size={13} />
+              <span className="hidden sm:inline">{label}</span>
+              <span className="sm:hidden">{label.split(' ')[0]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {activeTab === 'executive' && <ExecutiveDashboard companyId={companyId} />}
+
+      {activeTab === 'realtime' && <RealtimeMonitorPanel companyId={companyId} />}
+
+      {activeTab === 'events' && <EventTimelinePanel companyId={companyId} />}
+
+      {activeTab === 'collection' && <CollectionIntelligencePanel companyId={companyId} />}
+
+      {activeTab === 'customers' && <CustomerProfileCard companyId={companyId} />}
+
+      {activeTab === 'audit' && <EnterpriseAuditPanel companyId={companyId} />}
+
+      {activeTab === 'golive' && <GoLiveDiagnosticPanel companyId={companyId} />}
+
+      {activeTab === 'operational' && <>
       <AnalyticsFiltersBar filters={filters} onChange={setFilters} onRefresh={load} loading={loading} />
 
       <AnalyticsMetricGrid cards={operational?.cards || []} />
@@ -259,6 +314,7 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
           </div>
         </article>
       </section>
+      </>}
     </div>
   );
 }
