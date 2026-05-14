@@ -591,7 +591,7 @@ export async function runGoLiveDiagnostic(companyId) {
     db.from('company_integrations').select('company_id, connected, phone_number, provider').eq('company_id', companyId).eq('provider', 'zapi').maybeSingle(),
     db.from('registros_financeiros').select('id', { count: 'exact', head: true }).eq('company_id', companyId),
     db.from('cobrancas_whatsapp').select('id, status, created_at').eq('company_id', companyId).order('created_at', { ascending: false }).limit(5),
-    db.from('zapi_circuit_state').select('circuit_open, consecutive_failures').eq('company_id', companyId).maybeSingle(),
+    db.from('zapi_circuit_state').select('state, failure_count, last_failure_at').eq('company_id', companyId).maybeSingle(),
   ]);
 
   const cfg = cfgRes.status === 'fulfilled' ? cfgRes.value?.data : null;
@@ -600,12 +600,12 @@ export async function runGoLiveDiagnostic(companyId) {
   const recentWp = wpRes.status === 'fulfilled' ? wpRes.value?.data || [] : [];
   const circuit = circuitRes.status === 'fulfilled' ? circuitRes.value?.data : null;
 
-  const circuitOpen = Boolean(circuit?.circuit_open);
+  const circuitOpen = circuit?.state === 'open';
   const zapiConnected = Boolean(zapi?.connected);
   const zapiPhonePaired = Boolean(String(zapi?.phone_number || '').trim());
   const zapiOk = zapiConnected && zapiPhonePaired && !circuitOpen;
   const zapiMsg = circuitOpen
-    ? `Circuit breaker aberto (${circuit?.consecutive_failures ?? 0} falhas consecutivas)`
+    ? `Circuit breaker aberto (${circuit?.failure_count ?? 0} falhas consecutivas)`
     : !zapiConnected
       ? (zapi === null ? 'Integração Z-API não encontrada' : 'Instância Z-API não conectada')
       : !zapiPhonePaired

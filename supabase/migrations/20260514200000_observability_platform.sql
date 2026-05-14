@@ -312,8 +312,9 @@ create table if not exists public.security_sessions (
   started_at       timestamptz not null default now(),
   last_active_at   timestamptz not null default now(),
   ended_at         timestamptz,
-  anomaly_flags    text[],
-  actions_count    integer     not null default 0
+  anomaly_flags    jsonb       not null default '{}',
+  actions_count    integer     not null default 0,
+  created_at       timestamptz not null default now()
 );
 
 create index if not exists idx_ss_user_started

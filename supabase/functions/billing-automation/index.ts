@@ -3065,20 +3065,20 @@ async function checkZapiCircuit(supabaseAdmin: AdminClient, companyId: string): 
   try {
     const { data } = await supabaseAdmin
       .from('zapi_circuit_state')
-      .select('circuit_open, circuit_opened_at, consecutive_failures, last_failure_at')
+      .select('state, opened_at, failure_count, last_failure_at')
       .eq('company_id', companyId)
       .maybeSingle();
     if (!data) return { open: false };
-    if (!data.circuit_open) return { open: false };
+    if (data.state !== 'open') return { open: false };
     // Auto-reset after 15 minutes
-    const openedAt = data.circuit_opened_at ? new Date(data.circuit_opened_at).getTime() : 0;
+    const openedAt = data.opened_at ? new Date(data.opened_at).getTime() : 0;
     if (Date.now() - openedAt > 15 * 60 * 1000) {
       await supabaseAdmin.from('zapi_circuit_state').update({
-        circuit_open: false, consecutive_failures: 0, updated_at: new Date().toISOString(),
+        state: 'closed', failure_count: 0, updated_at: new Date().toISOString(),
       }).eq('company_id', companyId);
       return { open: false };
     }
-    return { open: true, reason: `Z-API circuit aberto: ${data.consecutive_failures} falhas consecutivas.` };
+    return { open: true, reason: `Z-API circuit aberto: ${data.failure_count} falhas consecutivas.` };
   } catch {
     return { open: false };
   }
@@ -3088,8 +3088,8 @@ async function recordZapiSuccess(supabaseAdmin: AdminClient, companyId: string) 
   try {
     await supabaseAdmin.from('zapi_circuit_state').upsert({
       company_id: companyId,
-      consecutive_failures: 0,
-      circuit_open: false,
+      state: 'closed',
+      failure_count: 0,
       last_success_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }, { onConflict: 'company_id' });
@@ -3100,21 +3100,21 @@ async function recordZapiFailure(supabaseAdmin: AdminClient, companyId: string, 
   try {
     const { data: current } = await supabaseAdmin
       .from('zapi_circuit_state')
-      .select('consecutive_failures')
+      .select('failure_count')
       .eq('company_id', companyId)
       .maybeSingle();
-    const newCount = Number(current?.consecutive_failures || 0) + 1;
+    const newCount = Number(current?.failure_count || 0) + 1;
     const circuitOpen = newCount >= 3;
     await supabaseAdmin.from('zapi_circuit_state').upsert({
       company_id: companyId,
-      consecutive_failures: newCount,
-      circuit_open: circuitOpen,
-      circuit_opened_at: circuitOpen ? new Date().toISOString() : null,
+      failure_count: newCount,
+      state: circuitOpen ? 'open' : 'closed',
+      opened_at: circuitOpen ? new Date().toISOString() : null,
       last_failure_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }, { onConflict: 'company_id' });
     if (circuitOpen) {
-      console.warn(JSON.stringify({ event: 'zapi_circuit_opened', company_id: companyId, consecutive_failures: newCount, error }));
+      console.warn(JSON.stringify({ event: 'zapi_circuit_opened', company_id: companyId, failure_count: newCount, error }));
     }
   } catch { /* non-critical */ }
 }
