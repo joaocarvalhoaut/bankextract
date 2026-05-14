@@ -612,6 +612,35 @@ function safeError(label: string, payload?: unknown) {
   console.error(label, sanitizeLogValue(payload));
 }
 
+function sanitizeChargeLogPayload(payload: unknown) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return {} as Record<string, unknown>;
+  }
+
+  const sanitized = { ...(sanitizeLogValue(payload) as Record<string, unknown>) };
+  const previewSource =
+    sanitized.message ||
+    sanitized.mensagem ||
+    sanitized.caption ||
+    sanitized.generated_message ||
+    sanitized.mensagem_gerada;
+
+  if (typeof previewSource === 'string' && previewSource.trim()) {
+    sanitized.message_preview = previewSource.slice(0, 240);
+  }
+
+  delete sanitized.message;
+  delete sanitized.mensagem;
+  delete sanitized.caption;
+  delete sanitized.generated_message;
+  delete sanitized.mensagem_gerada;
+  delete sanitized.zapi_raw;
+  delete sanitized.raw;
+  delete sanitized.response;
+
+  return sanitized;
+}
+
 const ZAPI_CIRCUIT_FAILURE_THRESHOLD = 3;
 const ZAPI_CIRCUIT_COOLDOWN_MS = 10 * 60 * 1000;
 
@@ -2614,6 +2643,21 @@ async function sendRealChargesData(
     };
 
     if (dispatch.duplicate && !Boolean(item?.force_resend)) {
+      await tryInsertLog(supabaseAdmin, {
+        ...logBase,
+        status_envio: 'ignorado',
+        erro: 'duplicado_idempotencia',
+        payload: {
+          message,
+          canal: 'whatsapp_real',
+          envio_real: true,
+          force_resend: Boolean(item?.force_resend),
+          simulated: false,
+          duplicate: true,
+          duplicate_source: 'automation_dispatch',
+          sent_at: new Date().toISOString(),
+        },
+      });
       await finalizeAutomationDispatch(supabaseAdmin, {
         companyId,
         dispatchType,
@@ -2912,8 +2956,42 @@ async function sendSingleChargeData(
   const preview = await buildChargePayloadPreview(supabaseAdmin, companyId, registroId);
   const finalMessage = String(customMessage || preview.message || '').trim();
   const recentCharge = await findRecentSuccessfulWhatsappCharge(supabaseAdmin, companyId, registroId);
+  const duplicateLogBase = {
+    financeiro_id: registroId,
+    company_id: companyId,
+    data_hora: new Date().toISOString(),
+    cliente_nome: String(preview.payload?.cliente || 'Cliente'),
+    cliente_numero: String(preview.payload?.cliente_numero || '') || null,
+    telefone: String(preview.payload?.telefone || '') || null,
+    documento: String(preview.payload?.documento || '') || null,
+    numero_boleto: String(preview.payload?.numero_boleto || '') || null,
+    numero_nf: String(preview.payload?.numero_nf || '') || null,
+    valor: Number(preview.payload?.valor || 0),
+    vencimento: String(preview.payload?.vencimento || '') || null,
+    tipo_cobranca: 'manual',
+    dias_atraso: 0,
+    arquivo_encontrado: Boolean(preview.payload?.arquivo_encontrado),
+    drive_file_id: preview.payload?.drive_file_id || null,
+  };
 
   if (recentCharge && !forceResend) {
+    await tryInsertLog(supabaseAdmin, {
+      ...duplicateLogBase,
+      status_envio: 'ignorado',
+      erro: 'duplicado_recente',
+      payload: {
+        ...preview.payload,
+        message: finalMessage,
+        canal: simulate ? 'whatsapp_simulado' : 'whatsapp_real',
+        envio_real: simulate !== true,
+        simulated: simulate === true,
+        force_resend: forceResend,
+        duplicate: true,
+        duplicate_source: 'recent_successful_charge',
+        duplicate_charge_id: recentCharge.id || null,
+        duplicate_provider_message_id: recentCharge.provider_message_id || recentCharge.zapi_message_id || null,
+      },
+    });
     return {
       success: false,
       duplicate: true,
@@ -3191,8 +3269,12 @@ async function insertLog(
   supabaseAdmin: AdminClient,
   payload: Record<string, unknown>,
 ) {
-  safeInfo('[LOG_COBRANCA] payload', payload);
-  const { error } = await supabaseAdmin.from('logs_cobranca').insert(payload);
+  const data = {
+    ...payload,
+    payload: sanitizeChargeLogPayload(payload?.payload),
+  };
+  safeInfo('[LOG_COBRANCA] payload', data);
+  const { error } = await supabaseAdmin.from('logs_cobranca').insert(data);
   if (error) throw new Error(error.message);
 }
 

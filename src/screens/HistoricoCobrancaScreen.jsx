@@ -56,7 +56,7 @@ function statusTone(status) {
 
 function getPayloadMessage(payload) {
   if (!payload || typeof payload !== 'object') return '';
-  return payload.message || payload.mensagem || payload.caption || payload.generated_message || payload.mensagem_gerada || '';
+  return payload.message_preview || payload.message || payload.mensagem || payload.caption || payload.generated_message || payload.mensagem_gerada || '';
 }
 
 function toCsvValue(value) {
