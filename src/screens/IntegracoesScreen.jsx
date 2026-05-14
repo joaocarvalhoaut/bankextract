@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  AlertTriangle,
   ChevronDown,
   CircleCheck,
   CircleDashed,
@@ -290,14 +291,21 @@ function ZapiIntegrationCard({
     try {
       const result = await getCompanyIntegrationStatus(companyId, form);
       const connected = Boolean(result?.connected);
+      const phoneNumber = String(result?.phone_number || '').trim();
       setForm((current) => ({
         ...current,
         connected,
-        phone_number: result?.phone_number || current.phone_number,
+        phone_number: phoneNumber || current.phone_number,
       }));
       setStatus(connected ? 'conectado' : 'aguardando_qr');
       setIntegrationMessage(String(result?.message || ''));
       setLastValidatedAt(new Date().toISOString());
+      // Auto-persist phone_number when live check returns it
+      if (connected && phoneNumber) {
+        await saveCompanyIntegration(companyId, { ...form, connected, phone_number: phoneNumber }, 'zapi').catch(() => {});
+      } else if (!connected) {
+        await saveCompanyIntegration(companyId, { ...form, connected: false }, 'zapi').catch(() => {});
+      }
       onToast?.('sucesso', result?.message || 'Status da integracao atualizado.');
     } catch (error) {
       setStatus('erro');
@@ -556,10 +564,35 @@ function ZapiIntegrationCard({
         </span>
       </div>
 
+      {form.connected && !form.phone_number && (
+        <div className="mt-4 rounded-2xl border border-amber-700/50 bg-amber-950/30 px-4 py-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-amber-300">Credenciais válidas, mas WhatsApp ainda não pareado</p>
+              <p className="text-xs text-amber-400/80 mt-1">
+                A instância Z-API está acessível, mas nenhum número foi vinculado. Gere o QR Code abaixo e escaneie com o WhatsApp para ativar os envios.
+              </p>
+              <button
+                type="button"
+                onClick={handleRefreshStatus}
+                disabled={statusLoading}
+                className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-amber-300 hover:text-amber-200 disabled:opacity-50"
+              >
+                <RefreshCw size={11} className={statusLoading ? 'animate-spin' : ''} />
+                Atualizar status agora
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-4 text-sm text-slate-300 shadow-sm">
+        <div className={`rounded-2xl border px-4 py-4 text-sm shadow-sm ${form.connected && !form.phone_number ? 'border-amber-700/40 bg-amber-950/10' : 'border-slate-700 bg-slate-800/40'} text-slate-300`}>
           <span className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Numero conectado</span>
-          <span className="mt-2 block font-semibold text-slate-50">{form.phone_number || 'Aguardando conexao'}</span>
+          <span className={`mt-2 block font-semibold ${form.phone_number ? 'text-slate-50' : 'text-amber-300'}`}>
+            {form.phone_number || 'Aguardando pareamento QR Code'}
+          </span>
         </div>
         <div className="rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-4 text-sm text-slate-300 shadow-sm">
           <span className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ultima validacao</span>

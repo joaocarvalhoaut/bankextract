@@ -629,6 +629,63 @@ function isZapiConnected(data: Record<string, unknown> | null | undefined) {
   return ['connected', 'conectado', 'online', 'open', 'ready'].some((item) => value.includes(item));
 }
 
+// ── Z-API pairing gate ────────────────────────────────────────────────────────
+// Called before every send path (simulate + real). Throws if the WhatsApp
+// session is not actually paired — prevents false-positive sends when
+// company_integrations.connected=true but QR Code was never scanned.
+async function assertZapiPaired(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  options: { allowTestMode?: boolean } = {},
+): Promise<void> {
+  let config: { instanceId: string; token: string; clientToken: string };
+  try {
+    config = await resolveCompanyZapiConfig(supabaseAdmin, companyId, options);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Z-API nao configurada para esta empresa: ${msg}`);
+  }
+
+  let liveStatus: Record<string, unknown> | null = null;
+  try {
+    liveStatus = await validateZapiConnection(config);
+  } catch {
+    // If live check itself fails (network, invalid credentials), block the send.
+    const auditErr: Error & { code?: string } = new Error(
+      'Nao foi possivel validar a conexao Z-API. Verifique as credenciais em Integracoes.',
+    );
+    auditErr.code = 'zapi_not_paired';
+    await supabaseAdmin.from('automation_audit_logs').insert({
+      company_id: companyId,
+      action: 'send_blocked',
+      blocked_reason: 'zapi_validation_failed',
+      zapi_status: 'unreachable',
+    }).then(() => {}).catch(() => {});
+    throw auditErr;
+  }
+
+  const liveConnected = isZapiConnected(liveStatus);
+  const livePhone = extractZapiPhoneNumber(liveStatus);
+
+  if (!liveConnected || !livePhone) {
+    const reason = !liveConnected
+      ? 'WhatsApp nao conectado na instancia Z-API. Acesse Integracoes, gere o QR Code e escaneie com o WhatsApp.'
+      : 'Numero WhatsApp nao vinculado na instancia Z-API. Acesse Integracoes e escaneie o QR Code para parear o dispositivo.';
+
+    await supabaseAdmin.from('automation_audit_logs').insert({
+      company_id: companyId,
+      action: 'send_blocked',
+      blocked_reason: 'zapi_not_paired',
+      zapi_status: liveConnected ? 'connected_no_phone' : 'disconnected',
+      request_payload: { live_connected: liveConnected, live_phone: Boolean(livePhone) },
+    }).then(() => {}).catch(() => {});
+
+    const pairingErr: Error & { code?: string } = new Error(reason);
+    pairingErr.code = 'zapi_not_paired';
+    throw pairingErr;
+  }
+}
+
 function bytesToBase64(bytes: Uint8Array) {
   let binary = '';
   const chunkSize = 0x8000;
@@ -2392,6 +2449,8 @@ async function sendRealChargesData(
   items: Array<Record<string, unknown>>,
   options: { allowTestMode?: boolean } = {},
 ) {
+  await assertZapiPaired(supabaseAdmin, companyId, options);
+
   const sent: Array<Record<string, unknown>> = [];
   const failed: Array<Record<string, unknown>> = [];
 
@@ -2748,6 +2807,8 @@ async function sendSingleChargeData(
   forceResend: boolean,
   options: { allowTestMode?: boolean } = {},
 ) {
+  await assertZapiPaired(supabaseAdmin, companyId, options);
+
   const preview = await buildChargePayloadPreview(supabaseAdmin, companyId, registroId);
   const finalMessage = String(customMessage || preview.message || '').trim();
   const recentCharge = await findRecentSuccessfulWhatsappCharge(supabaseAdmin, companyId, registroId);

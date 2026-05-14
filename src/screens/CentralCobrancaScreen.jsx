@@ -143,6 +143,7 @@ export default function CentralCobrancaScreen({
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [sendingReal, setSendingReal] = useState(false);
   const [sendingRealKeys, setSendingRealKeys] = useState(() => new Set());
+  const [zapiBlockedError, setZapiBlockedError] = useState(null);
 
   const canManageCharges = canUserPerformAction(userRole, 'manage_charges');
 
@@ -477,8 +478,15 @@ export default function CentralCobrancaScreen({
         `${Array.isArray(result?.sent) ? result.sent.length : 0} envio(s) real(is) concluido(s).`
       );
     } catch (error) {
-      console.error('[ENVIO REAL] erro', error);
-      onToast?.('erro', error.message || 'Falha ao enviar cobranca real pelo WhatsApp.');
+      const msg = error?.message || '';
+      const isZapiPairing = msg.toLowerCase().includes('nao pareado') ||
+        msg.toLowerCase().includes('nao conectado') ||
+        msg.toLowerCase().includes('qr code') ||
+        error?.code === 'zapi_not_paired';
+      if (isZapiPairing) {
+        setZapiBlockedError(msg);
+      }
+      onToast?.('erro', msg || 'Falha ao enviar cobranca real pelo WhatsApp.');
     } finally {
       setSendingReal(false);
       setSendingRealKeys(new Set());
@@ -932,6 +940,25 @@ export default function CentralCobrancaScreen({
   return (
     <div className="text-crisp space-y-6">
       {limitNotice ? <PlanLimitNotice {...limitNotice} /> : null}
+
+      {zapiBlockedError && (
+        <div className="rounded-2xl border border-amber-700/50 bg-amber-950/30 px-5 py-4">
+          <div className="flex items-start gap-3">
+            <ShieldAlert size={16} className="text-amber-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-amber-300">WhatsApp não pareado — envio bloqueado</p>
+              <p className="text-xs text-amber-400/80 mt-1">{zapiBlockedError}</p>
+              <button
+                type="button"
+                onClick={() => setZapiBlockedError(null)}
+                className="mt-2 text-xs text-amber-400 hover:text-amber-200 underline underline-offset-2"
+              >
+                Fechar aviso
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>

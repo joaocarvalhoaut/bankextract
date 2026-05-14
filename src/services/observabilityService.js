@@ -588,7 +588,7 @@ export async function runGoLiveDiagnostic(companyId) {
 
   const [cfgRes, zapiRes, rfRes, wpRes, circuitRes] = await Promise.allSettled([
     db.from('google_sheets_config').select('empresa_id, drive_root_folder_id, ativo').eq('empresa_id', companyId).maybeSingle(),
-    db.from('company_integrations').select('company_id, connected, provider').eq('company_id', companyId).eq('provider', 'zapi').maybeSingle(),
+    db.from('company_integrations').select('company_id, connected, phone_number, provider').eq('company_id', companyId).eq('provider', 'zapi').maybeSingle(),
     db.from('registros_financeiros').select('id', { count: 'exact', head: true }).eq('company_id', companyId),
     db.from('cobrancas_whatsapp').select('id, status, created_at').eq('company_id', companyId).order('created_at', { ascending: false }).limit(5),
     db.from('zapi_circuit_state').select('circuit_open, consecutive_failures').eq('company_id', companyId).maybeSingle(),
@@ -601,14 +601,16 @@ export async function runGoLiveDiagnostic(companyId) {
   const circuit = circuitRes.status === 'fulfilled' ? circuitRes.value?.data : null;
 
   const circuitOpen = Boolean(circuit?.circuit_open);
-  const zapiOk = Boolean(zapi?.connected) && !circuitOpen;
+  const zapiConnected = Boolean(zapi?.connected);
+  const zapiPhonePaired = Boolean(String(zapi?.phone_number || '').trim());
+  const zapiOk = zapiConnected && zapiPhonePaired && !circuitOpen;
   const zapiMsg = circuitOpen
     ? `Circuit breaker aberto (${circuit?.consecutive_failures ?? 0} falhas consecutivas)`
-    : zapi?.connected
-      ? 'WhatsApp conectado'
-      : zapi === null
-        ? 'Integração Z-API não encontrada'
-        : 'Instância Z-API não conectada';
+    : !zapiConnected
+      ? (zapi === null ? 'Integração Z-API não encontrada' : 'Instância Z-API não conectada')
+      : !zapiPhonePaired
+        ? 'Credenciais válidas mas WhatsApp não pareado — escaneie o QR Code em Integrações'
+        : 'WhatsApp conectado e pareado';
 
   return {
     supabase: {
@@ -623,7 +625,7 @@ export async function runGoLiveDiagnostic(companyId) {
     },
     zapi: {
       ok: zapiOk,
-      warning: !circuitOpen && !zapi?.connected,
+      warning: !circuitOpen && zapiConnected && !zapiPhonePaired,
       message: zapiMsg,
     },
     financial_records: {
