@@ -198,8 +198,7 @@ comment on table public.collection_intelligence_scores is
   'Daily-computed charge prioritization and strategy recommendations';
 
 create index if not exists idx_cis_company_priority
-  on public.collection_intelligence_scores(company_id, priority_score desc)
-  where expires_at > now();
+  on public.collection_intelligence_scores(company_id, priority_score desc, expires_at desc);
 
 alter table public.collection_intelligence_scores enable row level security;
 
