@@ -39,9 +39,9 @@ export const mapRepresentanteToApp = (row) => ({
 });
 
 export const mapRepresentanteToDb = (row) => ({
-  id: row.id,
+  ...(row.id ? { id: row.id } : {}),
   company_id: row.company_id,
-  user_id: row.user_id,
+  ...(row.user_id ? { user_id: row.user_id } : {}),
   nome: row.nome,
   telefone: row.telefone || '',
   email: row.email || '',

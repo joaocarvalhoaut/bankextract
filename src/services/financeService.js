@@ -56,7 +56,11 @@ const ensureMockAllowed = () => {
 
 const buildError = (error, fallback) => {
   if (error instanceof Error) return error;
-  return new Error(error?.message || fallback);
+  const parts = [error?.message || fallback];
+  if (error?.details) parts.push(`(${error.details})`);
+  if (error?.hint) parts.push(`Dica: ${error.hint}`);
+  if (error?.code) parts.push(`[${error.code}]`);
+  return new Error(parts.join(' '));
 };
 
 function normalizeStatus(status) {
@@ -220,8 +224,9 @@ export async function saveRepresentative(companyId, representative = {}, tenantO
   try {
     const payload = {
       ...representative,
+      id: isUuid(representative.id) ? representative.id : crypto.randomUUID(),
       company_id: tenantOptions.companyId || companyId,
-      user_id: tenantOptions.userId || representative.user_id,
+      user_id: tenantOptions.userId || representative.user_id || null,
     };
     return await financeService.upsertRepresentante(payload, payload);
   } catch (error) {
