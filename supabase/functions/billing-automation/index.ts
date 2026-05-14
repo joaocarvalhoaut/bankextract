@@ -1,5 +1,6 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { createRequestContext, errorResponse, logRuntime, withTimeout } from '../_shared/runtime.ts';
+import { buildZapiErrorInfo } from '../../../src/shared/zapiErrorMapping.js';
 
 type AdminClient = ReturnType<typeof createClient>;
 
@@ -455,6 +456,106 @@ function maskPhoneForLog(value: string | null | undefined) {
   return `${digits.slice(0, 4)}***${digits.slice(-2)}`;
 }
 
+function sanitizeZapiEndpoint(endpoint: string | null | undefined) {
+  const raw = String(endpoint || '').trim();
+  if (!raw) return null;
+
+  const sanitizePath = (pathValue: string) =>
+    pathValue
+      .replace(/\/instances\/[^/]+/i, '/instances/:instance_id')
+      .replace(/\/token\/[^/]+/i, '/token/:token');
+
+  try {
+    const parsed = new URL(raw);
+    return `${parsed.origin}${sanitizePath(parsed.pathname)}`;
+  } catch (_error) {
+    return sanitizePath(raw);
+  }
+}
+
+function buildZapiEndpointMeta(
+  endpoint: string,
+  response: Response | null,
+  payload: Record<string, unknown> | null | undefined,
+) {
+  const requestId =
+    response?.headers.get('x-request-id') ||
+    response?.headers.get('request-id') ||
+    response?.headers.get('x-correlation-id') ||
+    response?.headers.get('cf-ray') ||
+    String(payload?.requestId || payload?.request_id || '').trim() ||
+    null;
+
+  const timestamp =
+    response?.headers.get('date') ||
+    String(payload?.timestamp || payload?.createdAt || payload?.created_at || '').trim() ||
+    null;
+
+  return {
+    endpoint: sanitizeZapiEndpoint(endpoint),
+    http_status: response?.status || null,
+    request_id: requestId || null,
+    timestamp: timestamp || null,
+  };
+}
+
+function createZapiProviderError(options: {
+  endpoint: string;
+  response?: Response | null;
+  payload?: Record<string, unknown> | null | undefined;
+  fallbackMessage?: string;
+  cause?: unknown;
+}) {
+  const providerMessage = String(
+    options.payload?.error ||
+    options.payload?.message ||
+    options.fallbackMessage ||
+    '',
+  ).trim();
+  const meta = buildZapiEndpointMeta(options.endpoint, options.response || null, options.payload);
+  const mapped = buildZapiErrorInfo({
+    status: options.response?.status,
+    message: providerMessage,
+    name: options.cause instanceof Error ? options.cause.name : '',
+  });
+  const error = new Error(mapped.userMessage);
+  (error as Error & Record<string, unknown>).name = 'ZapiProviderError';
+  (error as Error & Record<string, unknown>).cause = options.cause;
+  (error as Error & Record<string, unknown>).zapi = {
+    kind: mapped.kind,
+    provider_message: providerMessage || null,
+    ...meta,
+  };
+  return error;
+}
+
+function normalizeZapiRuntimeError(
+  error: unknown,
+  endpoint: string,
+  fallbackMessage: string,
+) {
+  if (error instanceof Error && (error as Error & { zapi?: unknown }).zapi) {
+    return error;
+  }
+
+  const mapped = buildZapiErrorInfo({
+    message: error instanceof Error ? error.message : String(error || ''),
+    name: error instanceof Error ? error.name : '',
+  });
+  const normalized = new Error(mapped.userMessage || fallbackMessage);
+  (normalized as Error & Record<string, unknown>).name = 'ZapiProviderError';
+  (normalized as Error & Record<string, unknown>).cause = error;
+  (normalized as Error & Record<string, unknown>).zapi = {
+    kind: mapped.kind,
+    provider_message: error instanceof Error ? error.message : String(error || ''),
+    endpoint: sanitizeZapiEndpoint(endpoint),
+    http_status: null,
+    request_id: null,
+    timestamp: new Date().toISOString(),
+  };
+  return normalized;
+}
+
 function sanitizeLogValue(value: unknown, parentKey = ''): unknown {
   if (value == null) return value;
   if (Array.isArray(value)) return value.map((item) => sanitizeLogValue(item, parentKey));
@@ -707,27 +808,44 @@ async function validateZapiConnection(config: {
   clientToken: string;
 }) {
   const url = `https://api.z-api.io/instances/${config.instanceId}/token/${config.token}/status`;
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Client-token': String(config.clientToken || '').trim(),
-      'Content-Type': 'application/json',
-    },
-  });
+  try {
+    const response = await withTimeout(
+      (signal) =>
+        fetch(url, {
+          method: 'GET',
+          signal,
+          headers: {
+            'Client-Token': String(config.clientToken || '').trim(),
+            'Content-Type': 'application/json',
+          },
+        }),
+      20_000,
+      'Tempo limite excedido ao validar a conexao com a Z-API.',
+    );
 
-  const data = await response.json().catch(() => ({}));
-  safeInfo('[ZAPI COMPANY REQUEST]', {
-    url,
-    ok: response.ok,
-    status: response.status,
-  });
-  safeInfo('[ZAPI COMPANY RESPONSE]', data);
+    const data = await response.json().catch(() => ({}));
+    safeInfo('[ZAPI COMPANY REQUEST]', {
+      endpoint: url,
+      ok: response.ok,
+      status: response.status,
+      request_id: response.headers.get('x-request-id') || response.headers.get('request-id') || response.headers.get('x-correlation-id') || response.headers.get('cf-ray') || null,
+      timestamp: response.headers.get('date') || null,
+    });
+    safeInfo('[ZAPI COMPANY RESPONSE]', data);
 
-  if (!response.ok) {
-    throw new Error(`Z-API validacao erro ${response.status}: ${JSON.stringify(data)}`);
+    if (!response.ok) {
+      throw createZapiProviderError({
+        endpoint: url,
+        response,
+        payload: data,
+        fallbackMessage: `Falha ao validar conexao com a Z-API (HTTP ${response.status}).`,
+      });
+    }
+
+    return data as Record<string, unknown>;
+  } catch (error) {
+    throw normalizeZapiRuntimeError(error, url, 'Z-API indisponivel no momento');
   }
-
-  return data as Record<string, unknown>;
 }
 
 function resolveInlineZapiConfig(config: Record<string, unknown> | null | undefined) {
@@ -846,77 +964,129 @@ async function getZapiQrCodeData(
   const token = String(config.token || '').trim();
   const clientToken = String(config.clientToken || '').trim();
   const url = `https://api.z-api.io/instances/${instanceId}/token/${token}/qr-code/image`;
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Client-token': clientToken,
-      'Content-Type': 'application/json',
-    },
-  });
+  try {
+    const response = await withTimeout(
+      (signal) =>
+        fetch(url, {
+          method: 'GET',
+          signal,
+          headers: {
+            'Client-Token': clientToken,
+            'Content-Type': 'application/json',
+          },
+        }),
+      20_000,
+      'Tempo limite excedido ao gerar o QR Code da Z-API.',
+    );
 
-  const contentType = response.headers.get('content-type') || '';
-  safeInfo('[ZAPI QR REQUEST]', {
-    instanceId,
-    hasToken: Boolean(token),
-    hasClientToken: Boolean(clientToken),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    safeInfo('[ZAPI QR RESPONSE]', {
+    const contentType = response.headers.get('content-type') || '';
+    safeInfo('[ZAPI QR REQUEST]', {
+      endpoint: url,
+      instanceId,
+      hasToken: Boolean(token),
+      hasClientToken: Boolean(clientToken),
       status: response.status,
-      ok: response.ok,
-      data: errorData,
+      request_id: response.headers.get('x-request-id') || response.headers.get('request-id') || response.headers.get('x-correlation-id') || response.headers.get('cf-ray') || null,
+      timestamp: response.headers.get('date') || null,
     });
-    throw new Error('Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
-  }
 
-  if (contentType.includes('application/json')) {
-    const data = await response.json().catch(() => ({}));
-    safeInfo('[ZAPI QR RESPONSE]', {
-      status: response.status,
-      ok: response.ok,
-      data,
-    });
-    if (data?.connected === true) {
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      safeInfo('[ZAPI QR RESPONSE]', {
+        status: response.status,
+        ok: response.ok,
+        data: errorData,
+      });
+      throw createZapiProviderError({
+        endpoint: url,
+        response,
+        payload: errorData,
+        fallbackMessage: `Nao foi possivel gerar o QR Code da Z-API (HTTP ${response.status}).`,
+      });
+    }
+
+    if (contentType.includes('application/json')) {
+      const data = await response.json().catch(() => ({}));
+      safeInfo('[ZAPI QR RESPONSE]', {
+        status: response.status,
+        ok: response.ok,
+        data,
+      });
+      if (data?.connected === true) {
+        return {
+          connected: true,
+          imageDataUrl: null,
+          raw: data,
+        };
+      }
+      const image = extractQrImageCandidate(data);
+      if (!image) {
+        throw createZapiProviderError({
+          endpoint: url,
+          response,
+          payload: data,
+          fallbackMessage: 'A Z-API respondeu sem QR Code utilizavel.',
+        });
+      }
+
+      if (image.startsWith('data:image/')) {
+        return { imageDataUrl: image, raw: data };
+      }
+
+      if (/^https?:\/\//i.test(image)) {
+        return { imageDataUrl: image, raw: data };
+      }
+
       return {
-        connected: true,
-        imageDataUrl: null,
+        imageDataUrl: `data:image/png;base64,${image}`,
         raw: data,
       };
     }
-    const image = extractQrImageCandidate(data);
-    if (!image) {
-      throw new Error('Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
-    }
 
-    if (image.startsWith('data:image/')) {
-      return { imageDataUrl: image, raw: data };
-    }
-
-    if (/^https?:\/\//i.test(image)) {
-      return { imageDataUrl: image, raw: data };
-    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const imageDataUrl = `data:${contentType || 'image/png'};base64,${bytesToBase64(bytes)}`;
+    safeInfo('[ZAPI QR RESPONSE]', {
+      status: response.status,
+      ok: response.ok,
+      data: { bytes: bytes.length, contentType },
+    });
 
     return {
-      imageDataUrl: `data:image/png;base64,${image}`,
-      raw: data,
+      imageDataUrl,
+      connected: false,
+      raw: { bytes: bytes.length },
+    };
+  } catch (error) {
+    throw normalizeZapiRuntimeError(error, url, 'Z-API indisponivel no momento');
+  }
+}
+
+function sanitizeActionErrorDetails(error: unknown) {
+  if (error instanceof Error) {
+    const zapiDetails = (error as Error & { zapi?: Record<string, unknown> }).zapi;
+    return {
+      message: error.message || 'Erro interno.',
+      ...(zapiDetails
+        ? {
+            kind: zapiDetails.kind || null,
+            http_status: zapiDetails.http_status || null,
+            endpoint: zapiDetails.endpoint || null,
+            request_id: zapiDetails.request_id || null,
+            timestamp: zapiDetails.timestamp || null,
+          }
+        : {}),
     };
   }
 
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  const imageDataUrl = `data:${contentType || 'image/png'};base64,${bytesToBase64(bytes)}`;
-  safeInfo('[ZAPI QR RESPONSE]', {
-    status: response.status,
-    ok: response.ok,
-    data: { bytes: bytes.length, contentType },
-  });
+  if (typeof error === 'object' && error) {
+    try {
+      return JSON.parse(JSON.stringify(error));
+    } catch {
+      return { message: String(error) };
+    }
+  }
 
-  return {
-    imageDataUrl,
-    connected: false,
-    raw: { bytes: bytes.length },
-  };
+  return { message: String(error || 'Erro interno.') };
 }
 
 function formatCurrency(value: number) {
@@ -1456,23 +1626,27 @@ async function searchDriveFiles(token: string, folderId: string, record: Financi
 }
 
 async function downloadDriveFileBase64(token: string, fileId: string) {
-  const response = await withTimeout(
-    (signal) =>
-      fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-        signal,
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-    30000,
-    'Tempo limite excedido ao baixar arquivo PDF do Google Drive (base64).',
-  );
+  try {
+    const response = await withTimeout(
+      (signal) =>
+        fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+          signal,
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      30000,
+      'Tempo limite excedido ao baixar arquivo PDF do Google Drive (base64).',
+    );
 
-  if (!response.ok) {
-    throw new Error(await response.text());
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+
+    const buffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    return bytesToBase64(bytes);
+  } catch (error) {
+    throw error;
   }
-
-  const buffer = await response.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  return bytesToBase64(bytes);
 }
 
 async function downloadDriveFileBytes(token: string, fileId: string) {
@@ -2867,47 +3041,59 @@ async function sendZapiDocument(
     throw new Error('WhatsApp API não configurada. Defina ZAPI_INSTANCE_ID, ZAPI_TOKEN, ZAPI_CLIENT_TOKEN e, se necessário, ZAPI_DOCUMENT_ENDPOINT.');
   }
 
-  const response = await withTimeout(
-    (signal) =>
-      fetch(documentEndpoint, {
-        method: 'POST',
-        signal,
-        headers: {
-          'Client-Token': clientToken,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          phone,
-          fileName,
-          mimeType: 'application/pdf',
-          caption,
-          base64,
+  try {
+    const response = await withTimeout(
+      (signal) =>
+        fetch(documentEndpoint, {
+          method: 'POST',
+          signal,
+          headers: {
+            'Client-Token': clientToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            phone,
+            fileName,
+            mimeType: 'application/pdf',
+            caption,
+            base64,
+          }),
         }),
-      }),
-    15000,
-    'Tempo limite excedido ao enviar documento pela Z-API.',
-  );
+      15000,
+      'Tempo limite excedido ao enviar documento pela Z-API.',
+    );
 
-  const data = await response.json().catch(() => ({}));
+    const data = await response.json().catch(() => ({}));
 
-  safeInfo('[ZAPI COMPANY REQUEST]', {
-    source: zapiConfig.source || 'company',
-    mode: 'document',
-    phone,
-    ok: response.ok,
-    status: response.status,
-  });
-  safeInfo('[ZAPI COMPANY RESPONSE]', data);
+    safeInfo('[ZAPI COMPANY REQUEST]', {
+      source: zapiConfig.source || 'company',
+      mode: 'document',
+      endpoint: documentEndpoint,
+      phone,
+      ok: response.ok,
+      status: response.status,
+      request_id: response.headers.get('x-request-id') || response.headers.get('request-id') || response.headers.get('x-correlation-id') || response.headers.get('cf-ray') || null,
+      timestamp: response.headers.get('date') || null,
+    });
+    safeInfo('[ZAPI COMPANY RESPONSE]', data);
 
-  if (!response.ok) {
-    safeError('[ZAPI ERROR]', data);
-    throw new Error(String(data?.message || data?.error || `HTTP ${response.status}`));
+    if (!response.ok) {
+      safeError('[ZAPI ERROR]', data);
+      throw createZapiProviderError({
+        endpoint: documentEndpoint,
+        response,
+        payload: data,
+        fallbackMessage: `Falha ao enviar documento pela Z-API (HTTP ${response.status}).`,
+      });
+    }
+
+    return {
+      provider_id: String(data?.zaapId || data?.messageId || ''),
+      raw: data,
+    };
+  } catch (error) {
+    throw normalizeZapiRuntimeError(error, documentEndpoint, 'Z-API indisponivel no momento');
   }
-
-  return {
-    provider_id: String(data?.zaapId || data?.messageId || ''),
-    raw: data,
-  };
 }
 
 async function sendZapiText(
@@ -2923,10 +3109,13 @@ async function sendZapiText(
     throw new Error('Telefone invalido para envio real.');
   }
 
-  const response = await withTimeout(
+  const endpoint = `https://api.z-api.io/instances/${zapiConfig.instanceId}/token/${zapiConfig.token}/send-text`;
+
+  try {
+    const response = await withTimeout(
     (signal) =>
       fetch(
-        `https://api.z-api.io/instances/${zapiConfig.instanceId}/token/${zapiConfig.token}/send-text`,
+        endpoint,
         {
           method: 'POST',
           signal,
@@ -2944,45 +3133,58 @@ async function sendZapiText(
     'Tempo limite excedido ao enviar mensagem pela Z-API.',
   );
 
-  const data = await response.json().catch(() => ({}));
-  safeInfo('[ZAPI REQUEST]', {
-    company_id: companyId,
-    source: zapiConfig.source,
-    phone: normalizedPhone,
-    ok: response.ok,
-    status: response.status,
-    data,
-  });
-  safeInfo('[ZAPI COMPANY REQUEST]', {
-    company_id: companyId,
-    source: zapiConfig.source,
-    mode: 'text',
-    phone: normalizedPhone,
-    ok: response.ok,
-    status: response.status,
-  });
-
-  if (!response.ok) {
-    safeError('[ZAPI ERROR]', {
+    const data = await response.json().catch(() => ({}));
+    safeInfo('[ZAPI REQUEST]', {
       company_id: companyId,
       source: zapiConfig.source,
+      endpoint,
       phone: normalizedPhone,
+      ok: response.ok,
       status: response.status,
+      request_id: response.headers.get('x-request-id') || response.headers.get('request-id') || response.headers.get('x-correlation-id') || response.headers.get('cf-ray') || null,
+      timestamp: response.headers.get('date') || null,
       data,
     });
-    throw new Error(`Z-API erro ${response.status}: ${JSON.stringify(data)}`);
+    safeInfo('[ZAPI COMPANY REQUEST]', {
+      company_id: companyId,
+      source: zapiConfig.source,
+      mode: 'text',
+      endpoint,
+      phone: normalizedPhone,
+      ok: response.ok,
+      status: response.status,
+    });
+
+    if (!response.ok) {
+      safeError('[ZAPI ERROR]', {
+        company_id: companyId,
+        source: zapiConfig.source,
+        endpoint,
+        phone: normalizedPhone,
+        status: response.status,
+        data,
+      });
+      throw createZapiProviderError({
+        endpoint,
+        response,
+        payload: data,
+        fallbackMessage: `Falha ao enviar mensagem pela Z-API (HTTP ${response.status}).`,
+      });
+    }
+
+    safeInfo('[ZAPI RESPONSE]', data);
+    safeInfo('[ZAPI COMPANY RESPONSE]', data);
+
+    return {
+      normalizedPhone,
+      raw: data,
+      zaapId: String(data?.zaapId || ''),
+      messageId: String(data?.messageId || data?.id || ''),
+      id: String(data?.id || ''),
+    };
+  } catch (error) {
+    throw normalizeZapiRuntimeError(error, endpoint, 'Z-API indisponivel no momento');
   }
-
-  safeInfo('[ZAPI RESPONSE]', data);
-  safeInfo('[ZAPI COMPANY RESPONSE]', data);
-
-  return {
-    normalizedPhone,
-    raw: data,
-    zaapId: String(data?.zaapId || ''),
-    messageId: String(data?.messageId || data?.id || ''),
-    id: String(data?.id || ''),
-  };
 }
 
 async function insertLog(
@@ -4899,7 +5101,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'sync_boleto_drive_intelligent',
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5000,7 +5202,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'get_boleto_sync_report',
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5031,7 +5233,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'preview_charge_payload',
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5064,7 +5266,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'prepare_manual_charge',
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5101,7 +5303,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action,
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5137,7 +5339,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'get_qr_code',
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5175,7 +5377,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'get_connection_status',
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5212,7 +5414,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'send_real',
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5272,7 +5474,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'send_single_charge',
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5311,7 +5513,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'get_billing_center',
           error: String(error?.message || error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5338,7 +5540,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'get_billing_history',
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5362,7 +5564,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'get_billing_inconsistencies',
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5386,7 +5588,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'get_real_send_checklist',
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5407,7 +5609,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'get_plan_capabilities',
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5428,7 +5630,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'get_usage_summary',
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5450,7 +5652,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'check_send_permission',
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5483,7 +5685,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'simulate_charge_batch',
           error: String(error instanceof Error ? error.message : error),
-          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
