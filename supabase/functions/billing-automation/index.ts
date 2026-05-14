@@ -448,6 +448,184 @@ function maskSecret(value: string | null | undefined) {
   return `${raw.slice(0, 4)}***${raw.slice(-4)}`;
 }
 
+function maskPhoneForLog(value: string | null | undefined) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length <= 4) return `${digits.slice(0, 1)}***`;
+  return `${digits.slice(0, 4)}***${digits.slice(-2)}`;
+}
+
+function sanitizeLogValue(value: unknown, parentKey = ''): unknown {
+  if (value == null) return value;
+  if (Array.isArray(value)) return value.map((item) => sanitizeLogValue(item, parentKey));
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => {
+        const normalizedKey = key.toLowerCase();
+        if (['token', 'clienttoken', 'client_token', 'authorization', 'private_key', 'secret'].some((item) => normalizedKey.includes(item))) {
+          return [key, maskSecret(String(nestedValue || ''))];
+        }
+        if (['phone', 'telefone', 'mobile', 'whatsapp'].some((item) => normalizedKey.includes(item))) {
+          return [key, maskPhoneForLog(String(nestedValue || ''))];
+        }
+        if (normalizedKey === 'message' || normalizedKey === 'mensagem') {
+          const text = String(nestedValue || '').trim();
+          return [key, text ? `${text.slice(0, 32)}...` : ''];
+        }
+        return [key, sanitizeLogValue(nestedValue, key)];
+      }),
+    );
+  }
+  if (typeof value === 'string') {
+    if (['token', 'clienttoken', 'client_token', 'authorization', 'private_key', 'secret'].some((item) => parentKey.toLowerCase().includes(item))) {
+      return maskSecret(value);
+    }
+    if (['phone', 'telefone', 'mobile', 'whatsapp'].some((item) => parentKey.toLowerCase().includes(item))) {
+      return maskPhoneForLog(value);
+    }
+  }
+  return value;
+}
+
+function safeInfo(label: string, payload?: unknown) {
+  if (payload === undefined) {
+    console.log(label);
+    return;
+  }
+  console.log(label, sanitizeLogValue(payload));
+}
+
+function safeWarn(label: string, payload?: unknown) {
+  if (payload === undefined) {
+    console.warn(label);
+    return;
+  }
+  console.warn(label, sanitizeLogValue(payload));
+}
+
+function safeError(label: string, payload?: unknown) {
+  if (payload === undefined) {
+    console.error(label);
+    return;
+  }
+  console.error(label, sanitizeLogValue(payload));
+}
+
+const ZAPI_CIRCUIT_FAILURE_THRESHOLD = 3;
+const ZAPI_CIRCUIT_COOLDOWN_MS = 10 * 60 * 1000;
+
+async function getZapiCircuitState(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from('zapi_circuit_state')
+    .select('company_id, provider, state, failure_count, success_count, retry_after, last_error, metadata')
+    .eq('company_id', companyId)
+    .eq('provider', 'zapi')
+    .maybeSingle();
+
+  if (error) throw new Error(`Falha ao consultar zapi_circuit_state: ${error.message}`);
+  return data || null;
+}
+
+async function upsertZapiCircuitState(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  patch: Record<string, unknown>,
+) {
+  const payload = {
+    company_id: companyId,
+    provider: 'zapi',
+    updated_at: new Date().toISOString(),
+    ...patch,
+  };
+
+  const { data, error } = await supabaseAdmin
+    .from('zapi_circuit_state')
+    .upsert(payload, { onConflict: 'company_id,provider' })
+    .select('company_id, provider, state, failure_count, success_count, retry_after, last_error, metadata')
+    .maybeSingle();
+
+  if (error) throw new Error(`Falha ao atualizar zapi_circuit_state: ${error.message}`);
+  return data || payload;
+}
+
+async function checkZapiCircuit(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  requestId: string,
+) {
+  const current = await getZapiCircuitState(supabaseAdmin, companyId);
+  if (!current || !current.state || current.state === 'closed') {
+    return { allowed: true, state: current?.state || 'closed' };
+  }
+
+  const retryAfter = current.retry_after ? new Date(String(current.retry_after)).getTime() : 0;
+  const now = Date.now();
+
+  if (current.state === 'open' && retryAfter && retryAfter > now) {
+    throw new Error(`Circuit breaker Z-API aberto ate ${new Date(retryAfter).toISOString()}.`);
+  }
+
+  if (current.state === 'open') {
+    await upsertZapiCircuitState(supabaseAdmin, companyId, {
+      state: 'half_open',
+      request_id: requestId,
+      metadata: {
+        transition: 'retry_after_elapsed',
+      },
+    });
+    return { allowed: true, state: 'half_open' };
+  }
+
+  return { allowed: true, state: String(current.state || 'closed') };
+}
+
+async function markZapiCircuitSuccess(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  requestId: string,
+) {
+  const current = await getZapiCircuitState(supabaseAdmin, companyId);
+  await upsertZapiCircuitState(supabaseAdmin, companyId, {
+    state: 'closed',
+    request_id: requestId,
+    failure_count: 0,
+    success_count: Number(current?.success_count || 0) + 1,
+    retry_after: null,
+    last_error: null,
+    opened_at: null,
+    last_success_at: new Date().toISOString(),
+    metadata: {
+      transition: 'success',
+    },
+  });
+}
+
+async function markZapiCircuitFailure(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  requestId: string,
+  errorMessage: string,
+) {
+  const current = await getZapiCircuitState(supabaseAdmin, companyId);
+  const nextFailureCount = Number(current?.failure_count || 0) + 1;
+  const shouldOpen = nextFailureCount >= ZAPI_CIRCUIT_FAILURE_THRESHOLD;
+  await upsertZapiCircuitState(supabaseAdmin, companyId, {
+    state: shouldOpen ? 'open' : 'closed',
+    request_id: requestId,
+    failure_count: nextFailureCount,
+    retry_after: shouldOpen ? new Date(Date.now() + ZAPI_CIRCUIT_COOLDOWN_MS).toISOString() : null,
+    opened_at: shouldOpen ? new Date().toISOString() : null,
+    last_error: errorMessage,
+    last_failure_at: new Date().toISOString(),
+    metadata: {
+      transition: shouldOpen ? 'failure_threshold_reached' : 'failure_recorded',
+    },
+  });
+}
+
 async function getCompanyZapiIntegration(
   supabaseAdmin: AdminClient,
   companyId: string,
@@ -490,7 +668,7 @@ async function resolveCompanyZapiConfig(
   const allowTestMode = options.allowTestMode === true;
   const testConfig = allowTestMode ? getTestZapiConfig() : null;
 
-  console.log('[ZAPI COMPANY CONFIG]', {
+  safeInfo('[ZAPI COMPANY CONFIG]', {
     company_id: companyId,
     provider: 'zapi',
     connected: Boolean(integration?.connected),
@@ -538,12 +716,12 @@ async function validateZapiConnection(config: {
   });
 
   const data = await response.json().catch(() => ({}));
-  console.log('[ZAPI COMPANY REQUEST]', {
+  safeInfo('[ZAPI COMPANY REQUEST]', {
     url,
     ok: response.ok,
     status: response.status,
   });
-  console.log('[ZAPI COMPANY RESPONSE]', data);
+  safeInfo('[ZAPI COMPANY RESPONSE]', data);
 
   if (!response.ok) {
     throw new Error(`Z-API validacao erro ${response.status}: ${JSON.stringify(data)}`);
@@ -584,7 +762,7 @@ async function resolveRequestedZapiConfig(
 
   if (hasInlineConfig) {
     const inlineConfig = resolveInlineZapiConfig(config);
-    console.log('[ZAPI COMPANY CONFIG]', {
+    safeInfo('[ZAPI COMPANY CONFIG]', {
       company_id: companyId,
       provider: 'zapi',
       connected: false,
@@ -677,7 +855,7 @@ async function getZapiQrCodeData(
   });
 
   const contentType = response.headers.get('content-type') || '';
-  console.log('[ZAPI QR REQUEST]', {
+  safeInfo('[ZAPI QR REQUEST]', {
     instanceId,
     hasToken: Boolean(token),
     hasClientToken: Boolean(clientToken),
@@ -685,7 +863,7 @@ async function getZapiQrCodeData(
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    console.log('[ZAPI QR RESPONSE]', {
+    safeInfo('[ZAPI QR RESPONSE]', {
       status: response.status,
       ok: response.ok,
       data: errorData,
@@ -695,7 +873,7 @@ async function getZapiQrCodeData(
 
   if (contentType.includes('application/json')) {
     const data = await response.json().catch(() => ({}));
-    console.log('[ZAPI QR RESPONSE]', {
+    safeInfo('[ZAPI QR RESPONSE]', {
       status: response.status,
       ok: response.ok,
       data,
@@ -728,7 +906,7 @@ async function getZapiQrCodeData(
 
   const bytes = new Uint8Array(await response.arrayBuffer());
   const imageDataUrl = `data:${contentType || 'image/png'};base64,${bytesToBase64(bytes)}`;
-  console.log('[ZAPI QR RESPONSE]', {
+  safeInfo('[ZAPI QR RESPONSE]', {
     status: response.status,
     ok: response.ok,
     data: { bytes: bytes.length, contentType },
@@ -2192,7 +2370,7 @@ async function sendRealChargesData(
   companyId: string,
   userId: string | null,
   items: Array<Record<string, unknown>>,
-  options: { allowTestMode?: boolean } = {},
+  options: { allowTestMode?: boolean; requestId?: string } = {},
 ) {
   const sent: Array<Record<string, unknown>> = [];
   const failed: Array<Record<string, unknown>> = [];
@@ -2382,9 +2560,13 @@ async function sendRealChargesData(
       continue;
     }
 
+    let transportAttempted = false;
     try {
+      await checkZapiCircuit(supabaseAdmin, companyId, String(options.requestId || ''));
+      transportAttempted = true;
       const sendResult = await sendZapiText(supabaseAdmin, companyId, { phone: normalizedPhone, message }, options);
-      console.log('[ZAPI RAW RESPONSE]', sendResult);
+      safeInfo('[ZAPI RAW RESPONSE]', sendResult);
+      await markZapiCircuitSuccess(supabaseAdmin, companyId, String(options.requestId || ''));
 
       const providerMessageId =
         sendResult?.messageId ||
@@ -2443,7 +2625,7 @@ async function sendRealChargesData(
         },
       });
 
-      console.log('[WHATSAPP TRACKING SAVED]', {
+      safeInfo('[WHATSAPP TRACKING SAVED]', {
         providerMessageId,
         initialStatus,
         sentAt,
@@ -2487,6 +2669,9 @@ async function sendRealChargesData(
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      if (transportAttempted) {
+        await markZapiCircuitFailure(supabaseAdmin, companyId, String(options.requestId || ''), errorMessage);
+      }
       const failedAt = new Date().toISOString();
       await insertWhatsappCharge(supabaseAdmin, {
         empresa_id: companyId,
@@ -2548,7 +2733,7 @@ async function sendSingleChargeData(
   simulate: boolean,
   customMessage: string,
   forceResend: boolean,
-  options: { allowTestMode?: boolean } = {},
+  options: { allowTestMode?: boolean; requestId?: string } = {},
 ) {
   const preview = await buildChargePayloadPreview(supabaseAdmin, companyId, registroId);
   const finalMessage = String(customMessage || preview.message || '').trim();
@@ -2705,17 +2890,17 @@ async function sendZapiDocument(
 
   const data = await response.json().catch(() => ({}));
 
-  console.log('[ZAPI COMPANY REQUEST]', {
+  safeInfo('[ZAPI COMPANY REQUEST]', {
     source: zapiConfig.source || 'company',
     mode: 'document',
     phone,
     ok: response.ok,
     status: response.status,
   });
-  console.log('[ZAPI COMPANY RESPONSE]', data);
+  safeInfo('[ZAPI COMPANY RESPONSE]', data);
 
   if (!response.ok) {
-    console.error('[ZAPI ERROR]', data);
+    safeError('[ZAPI ERROR]', data);
     throw new Error(String(data?.message || data?.error || `HTTP ${response.status}`));
   }
 
@@ -2760,7 +2945,7 @@ async function sendZapiText(
   );
 
   const data = await response.json().catch(() => ({}));
-  console.log('[ZAPI REQUEST]', {
+  safeInfo('[ZAPI REQUEST]', {
     company_id: companyId,
     source: zapiConfig.source,
     phone: normalizedPhone,
@@ -2768,7 +2953,7 @@ async function sendZapiText(
     status: response.status,
     data,
   });
-  console.log('[ZAPI COMPANY REQUEST]', {
+  safeInfo('[ZAPI COMPANY REQUEST]', {
     company_id: companyId,
     source: zapiConfig.source,
     mode: 'text',
@@ -2778,7 +2963,7 @@ async function sendZapiText(
   });
 
   if (!response.ok) {
-    console.error('[ZAPI ERROR]', {
+    safeError('[ZAPI ERROR]', {
       company_id: companyId,
       source: zapiConfig.source,
       phone: normalizedPhone,
@@ -2788,8 +2973,8 @@ async function sendZapiText(
     throw new Error(`Z-API erro ${response.status}: ${JSON.stringify(data)}`);
   }
 
-  console.log('[ZAPI RESPONSE]', data);
-  console.log('[ZAPI COMPANY RESPONSE]', data);
+  safeInfo('[ZAPI RESPONSE]', data);
+  safeInfo('[ZAPI COMPANY RESPONSE]', data);
 
   return {
     normalizedPhone,
@@ -2804,7 +2989,7 @@ async function insertLog(
   supabaseAdmin: AdminClient,
   payload: Record<string, unknown>,
 ) {
-  console.log('[LOG_COBRANCA] payload', payload);
+  safeInfo('[LOG_COBRANCA] payload', payload);
   const { error } = await supabaseAdmin.from('logs_cobranca').insert(payload);
   if (error) throw new Error(error.message);
 }
@@ -2816,7 +3001,7 @@ async function tryInsertLog(
   try {
     await insertLog(supabaseAdmin, payload);
   } catch (error) {
-    console.warn('[LOG_COBRANCA] warning', error instanceof Error ? error.message : error);
+    safeWarn('[LOG_COBRANCA] warning', error instanceof Error ? error.message : error);
   }
 }
 
@@ -3310,7 +3495,7 @@ async function processChargeForRecord(
     },
   });
 
-  console.log(JSON.stringify({
+  safeInfo('attachment_sent', {
     event: 'attachment_sent',
     company_id: record.company_id,
     financial_record_id: record.id,
@@ -3320,7 +3505,7 @@ async function processChargeForRecord(
     provider_message_id: providerMessageId,
     phone,
     sent_at: sentAt,
-  }));
+  });
 
   return { status: 'sucesso', tipo, fileId: file.id };
 }
@@ -3424,7 +3609,7 @@ async function getBillingCenterData(
   companyId: string,
   todayIso: string,
 ) {
-  console.log('get_billing_center before registros_financeiros query', { company_id: companyId });
+  safeInfo('get_billing_center before registros_financeiros query', { company_id: companyId });
   const { data: records, error: recordsError } = await supabaseAdmin
     .from('registros_financeiros')
     .select('id, company_id, nome, cliente_nome, documento, numero_nf, numero_boleto, data_vencimento, valor, telefone, status, created_at, linha_digitavel, codigo_barras, boleto_url, boleto_pdf_nome, boleto_match_confidence, boleto_status, drive_file_id')
@@ -3432,10 +3617,9 @@ async function getBillingCenterData(
     .order('data_vencimento', { ascending: true });
 
   if (recordsError) throw new Error(recordsError.message);
-  console.log('get_billing_center after registros_financeiros query', { total_registros: (records || []).length });
-  console.log('[COBRANCA RAW]', records?.slice?.(0, 5));
+  safeInfo('get_billing_center after registros_financeiros query', { total_registros: (records || []).length });
 
-  console.log('get_billing_center before logs_cobranca query', { company_id: companyId });
+  safeInfo('get_billing_center before logs_cobranca query', { company_id: companyId });
   const { data: logsData, error: logsError } = await supabaseAdmin
     .from('logs_cobranca')
     .select('id, financeiro_id, company_id, data_hora, tipo_cobranca, status_envio, arquivo_encontrado, erro, created_at')
@@ -3443,7 +3627,7 @@ async function getBillingCenterData(
     .order('data_hora', { ascending: false })
     .limit(500);
   const logs = logsError ? [] : (logsData || []);
-  console.log('get_billing_center after logs_cobranca query', {
+  safeInfo('get_billing_center after logs_cobranca query', {
     total_logs: logs.length,
     logs_error: logsError?.message || null,
   });
@@ -3491,7 +3675,7 @@ async function getBillingCenterData(
       ? Math.max(Number(record?.boleto_match_confidence || 0), 100)
       : Number(record?.boleto_match_confidence || 0);
 
-    console.log('[COBRANCA STATUS]', {
+    safeInfo('[COBRANCA STATUS]', {
       cliente: record.cliente_nome,
       documento: record.documento,
       numero_nf: record.numero_nf,
@@ -3539,7 +3723,7 @@ async function getBillingCenterData(
       motivo_nao_elegivel: motivoNaoElegivel,
     };
   });
-  console.log('[COBRANCA MAPPED]', mapped?.slice?.(0, 5));
+  safeInfo('[COBRANCA MAPPED]', { total_items: mapped.length });
 
   const isOpen = (status: string) => OPEN_STATUSES.has(normalizeText(status));
 
@@ -4480,7 +4664,7 @@ Deno.serve(async (req: Request) => {
       : (body?.companyId ? String(body.companyId) : null);
     manual = body?.manual === true;
     simulate = body?.simulate === true;
-    console.log('billing-automation request', { action, company_id: companyId });
+    safeInfo('billing-automation request', { action, company_id: companyId });
     logRuntime(runtime, {
       companyId,
       metadata: {
@@ -5013,7 +5197,7 @@ Deno.serve(async (req: Request) => {
           companyId || '',
           auth.userId,
           items as Array<Record<string, unknown>>,
-          { allowTestMode: auth.bypass === true }
+          { allowTestMode: auth.bypass === true, requestId: runtime.requestId }
         );
         return jsonResponse({
           ok: true,
@@ -5057,7 +5241,7 @@ Deno.serve(async (req: Request) => {
           simulate,
           customMessage,
           forceResend,
-          { allowTestMode: auth.bypass === true },
+          { allowTestMode: auth.bypass === true, requestId: runtime.requestId },
         );
 
         if (result.duplicate) {
@@ -5094,15 +5278,15 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'get_billing_center') {
-      console.log('get_billing_center iniciou action');
+      safeInfo('get_billing_center iniciou action');
       try {
-        console.log('get_billing_center body validado', { company_id: companyId });
-        console.log('get_billing_center antes do select registros_financeiros');
+        safeInfo('get_billing_center body validado', { company_id: companyId });
+        safeInfo('get_billing_center antes do select registros_financeiros');
         const center = await getBillingCenterData(admin, companyId || '', todayIso);
-        console.log('get_billing_center depois do select registros_financeiros', { total_items: Array.isArray(center?.items) ? center.items.length : 0 });
-        console.log('get_billing_center antes do select logs_cobranca');
-        console.log('get_billing_center depois do select logs_cobranca', { total_logs_relacionados: Array.isArray(center?.items) ? center.items.filter((item) => item.ultima_cobranca).length : 0 });
-        console.log('get_billing_center antes de montar cards');
+        safeInfo('get_billing_center depois do select registros_financeiros', { total_items: Array.isArray(center?.items) ? center.items.length : 0 });
+        safeInfo('get_billing_center antes do select logs_cobranca');
+        safeInfo('get_billing_center depois do select logs_cobranca', { total_logs_relacionados: Array.isArray(center?.items) ? center.items.filter((item) => item.ultima_cobranca).length : 0 });
+        safeInfo('get_billing_center antes de montar cards');
         const response = {
           ok: true,
           success: true,
@@ -5118,10 +5302,10 @@ Deno.serve(async (req: Request) => {
           },
           items: Array.isArray(center?.items) ? center.items : [],
         };
-        console.log('get_billing_center antes do return final', { total_items: response.items.length });
+        safeInfo('get_billing_center antes do return final', { total_items: response.items.length });
         return jsonResponse(response, 200);
       } catch (error) {
-        console.error('get_billing_center error', error);
+        safeError('get_billing_center error', error);
         return jsonResponse({
           ok: false,
           success: false,
@@ -5148,7 +5332,7 @@ Deno.serve(async (req: Request) => {
           pagination: history.pagination,
         }, 200);
       } catch (error) {
-        console.error('get_billing_history error', error);
+        safeError('get_billing_history error', error);
         return jsonResponse({
           ok: false,
           success: false,
@@ -5172,7 +5356,7 @@ Deno.serve(async (req: Request) => {
           items: inconsistencies.items,
         }, 200);
       } catch (error) {
-        console.error('get_billing_inconsistencies error', error);
+        safeError('get_billing_inconsistencies error', error);
         return jsonResponse({
           ok: false,
           success: false,
@@ -5196,7 +5380,7 @@ Deno.serve(async (req: Request) => {
           recommendations: checklist.recommendations,
         }, 200);
       } catch (error) {
-        console.error('get_real_send_checklist error', error);
+        safeError('get_real_send_checklist error', error);
         return jsonResponse({
           ok: false,
           success: false,
@@ -5293,7 +5477,7 @@ Deno.serve(async (req: Request) => {
           limit: result.limit,
         }, 200);
       } catch (error) {
-        console.error('simulate_charge_batch error', error);
+        safeError('simulate_charge_batch error', error);
         return jsonResponse({
           ok: false,
           success: false,

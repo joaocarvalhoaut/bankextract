@@ -238,7 +238,6 @@ function ZapiIntegrationCard({
     setQrLoading(true);
     try {
       const result = await getCompanyIntegrationQrCode(companyId, form);
-      console.log('[ZAPI get_qr_code]', result);
       const connected = Boolean(result?.connected) || String(result?.status || '').toLowerCase() === 'connected';
       if (connected) {
         setQrCodeDataUrl('');
