@@ -48,7 +48,9 @@ const blockedMockNames = new Set([
 const normalizeImportRecord = (row = {}, index = 0, tipo = 'vencidos', companyId = '') => {
   const nome = row.nome || row.cliente || row.cliente_fornecedor || row.customer_name || row.pagador || row.sacado || '';
   const documento = row.documento || row.numero_documento || row.doc || row.titulo || '';
-  const numeroBoleto = row.numero_boleto || row.boleto_numero || row.nosso_numero || '';
+  const numeroBoleto =
+    row.numero_boleto || row.boleto_numero || row.nosso_numero ||
+    row.documento || row.numero_documento || '';
   const dueDate = row.data_vencimento || row.vencimento || row.due_date || '';
   const status = row.status || (tipo === 'liquidacao' ? 'liquidado' : 'pendente');
   const telefone = row.telefone || row.phone || row.celular || '';

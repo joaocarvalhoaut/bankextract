@@ -787,6 +787,10 @@ export const financeService = {
         };
         delete clone.id;
         clone.documento = documentoFinal;
+        // [DEBUG-DOC] non-PII: confirm documento/numero_boleto saved
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('[insertRegistros] doc=%s boleto=%s', clone.documento || '(empty)', clone.numero_boleto || '(empty)');
+        }
         return clone;
       });
 
@@ -1182,8 +1186,8 @@ export const financeService = {
       batchId,
       cliente_fornecedor: row.cliente_fornecedor || row.nome || '',
       nome: row.nome || row.cliente_fornecedor || '',
-      numeroBoleto: row.numero_boleto ?? row.documento ?? row.numeroBoleto ?? row.numero_nf ?? row.numeroNf ?? row.numeroDocumento ?? row.document ?? row.titulo ?? '',
-      documento: row.documento ?? row.numero_boleto ?? row.numeroBoleto ?? row.numero_nf ?? row.numeroNf ?? row.numeroDocumento ?? row.document ?? row.titulo ?? '',
+      numeroBoleto: row.numero_boleto || row.documento || row.numeroBoleto || row.numero_nf || row.numeroNf || row.numeroDocumento || row.document || row.titulo || '',
+      documento: row.documento || row.numero_boleto || row.numeroBoleto || row.numero_nf || row.numeroNf || row.numeroDocumento || row.document || row.titulo || '',
       numero_nf: row.numero_nf ?? row.numeroNf ?? '',
       dataVencimento: row.data_vencimento ?? row.dataVencimento ?? '',
       vencimento: row.data_vencimento ?? row.dataVencimento ?? '',
@@ -1198,6 +1202,10 @@ export const financeService = {
       liquidadoEm: null,
     }));
 
+    // [DEBUG-DOC] non-PII: confirm documento resolved before insert
+    if (process.env.NODE_ENV !== 'production') {
+      payload.forEach((r, i) => console.debug('[importSelectedRows] row=%d doc=%s boleto=%s', i, r.documento || '(empty)', r.numeroBoleto || '(empty)'));
+    }
     const inserted = await this.insertRegistros(payload, {
       userId: tenant.userId,
       companyId: tenant.companyId,
