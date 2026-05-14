@@ -47,13 +47,15 @@ create index if not exists idx_be_registro
 
 alter table public.billing_events enable row level security;
 
-create policy if not exists "be_company_read"
-  on public.billing_events for select
-  using (
-    company_id in (
-      select company_id from public.usuarios_empresas where user_id = auth.uid()
-    )
-  );
+do $$ begin
+  create policy "be_company_read" on public.billing_events
+    for select using (
+      company_id in (
+        select company_id from public.usuarios_empresas where user_id = auth.uid()
+      )
+    );
+exception when duplicate_object then null;
+end $$;
 
 -- ── 2. billing_metrics_daily — pré-agregação diária por empresa ───────────────
 create table if not exists public.billing_metrics_daily (
@@ -101,13 +103,15 @@ create index if not exists idx_bmd_company_date
 
 alter table public.billing_metrics_daily enable row level security;
 
-create policy if not exists "bmd_company_read"
-  on public.billing_metrics_daily for select
-  using (
-    company_id in (
-      select company_id from public.usuarios_empresas where user_id = auth.uid()
-    )
-  );
+do $$ begin
+  create policy "bmd_company_read" on public.billing_metrics_daily
+    for select using (
+      company_id in (
+        select company_id from public.usuarios_empresas where user_id = auth.uid()
+      )
+    );
+exception when duplicate_object then null;
+end $$;
 
 -- ── 3. customer_financial_profiles — inteligência de pagamento ────────────────
 create table if not exists public.customer_financial_profiles (
@@ -167,13 +171,15 @@ create index if not exists idx_cfp_critical
 
 alter table public.customer_financial_profiles enable row level security;
 
-create policy if not exists "cfp_company_read"
-  on public.customer_financial_profiles for select
-  using (
-    company_id in (
-      select company_id from public.usuarios_empresas where user_id = auth.uid()
-    )
-  );
+do $$ begin
+  create policy "cfp_company_read" on public.customer_financial_profiles
+    for select using (
+      company_id in (
+        select company_id from public.usuarios_empresas where user_id = auth.uid()
+      )
+    );
+exception when duplicate_object then null;
+end $$;
 
 -- ── 4. collection_intelligence_scores — priorização automática ───────────────
 create table if not exists public.collection_intelligence_scores (
@@ -201,13 +207,15 @@ create index if not exists idx_cis_company_priority
 
 alter table public.collection_intelligence_scores enable row level security;
 
-create policy if not exists "cis_company_read"
-  on public.collection_intelligence_scores for select
-  using (
-    company_id in (
-      select company_id from public.usuarios_empresas where user_id = auth.uid()
-    )
-  );
+do $$ begin
+  create policy "cis_company_read" on public.collection_intelligence_scores
+    for select using (
+      company_id in (
+        select company_id from public.usuarios_empresas where user_id = auth.uid()
+      )
+    );
+exception when duplicate_object then null;
+end $$;
 
 -- ── 5. operational_alerts — alertas com estado ───────────────────────────────
 create table if not exists public.operational_alerts (
@@ -236,14 +244,16 @@ create index if not exists idx_oa_severity
 
 alter table public.operational_alerts enable row level security;
 
-create policy if not exists "oa_company_read"
-  on public.operational_alerts for select
-  using (
-    company_id is null or
-    company_id in (
-      select company_id from public.usuarios_empresas where user_id = auth.uid()
-    )
-  );
+do $$ begin
+  create policy "oa_company_read" on public.operational_alerts
+    for select using (
+      company_id is null or
+      company_id in (
+        select company_id from public.usuarios_empresas where user_id = auth.uid()
+      )
+    );
+exception when duplicate_object then null;
+end $$;
 
 -- ── 6. Colunas adicionais em automation_audit_logs ────────────────────────────
 alter table public.automation_audit_logs
@@ -322,6 +332,8 @@ create index if not exists idx_ss_user_started
 
 alter table public.security_sessions enable row level security;
 
-create policy if not exists "ss_own_read"
-  on public.security_sessions for select
-  using (user_id = auth.uid());
+do $$ begin
+  create policy "ss_own_read" on public.security_sessions
+    for select using (user_id = auth.uid());
+exception when duplicate_object then null;
+end $$;
