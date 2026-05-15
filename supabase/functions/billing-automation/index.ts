@@ -4290,7 +4290,7 @@ async function getRealSendChecklistData(
   const planData = await getPlanCapabilitiesData(supabaseAdmin, companyId, todayIso);
   const { data: records, error: recordsError } = await supabaseAdmin
     .from('registros_financeiros')
-    .select('id, company_id, nome, cliente_nome, documento, numero_nf, numero_boleto, data_vencimento, valor, telefone, status, created_at')
+    .select('id, company_id, nome, cliente_nome, cliente_numero, documento, numero_nf, numero_boleto, data_vencimento, valor, telefone, status, linha_digitavel, codigo_barras, boleto_url, drive_file_id, created_at')
     .eq('company_id', companyId)
     .order('created_at', { ascending: false });
   if (recordsError) throw new Error(recordsError.message);
@@ -4501,6 +4501,33 @@ async function getRealSendChecklistData(
     .filter((item) => !item.status)
     .map((item) => `${item.section}: ${item.item} - ${item.detail}`);
 
+  const sampleChargeRecord =
+    safeRecords.find((row) => validatePhone(normalizePhone(row.telefone)) && (row.numero_boleto || row.documento || row.numero_nf)) ||
+    safeRecords.find((row) => validatePhone(normalizePhone(row.telefone))) ||
+    safeRecords.find((row) => row.numero_boleto || row.documento || row.numero_nf) ||
+    safeRecords[0] ||
+    null;
+
+  const sampleCharge = sampleChargeRecord
+    ? {
+        id: sampleChargeRecord.id,
+        nome: sampleChargeRecord.nome || sampleChargeRecord.cliente_nome || '',
+        cliente_nome: sampleChargeRecord.cliente_nome || sampleChargeRecord.nome || '',
+        cliente_numero: sampleChargeRecord.cliente_numero || '',
+        telefone: sampleChargeRecord.telefone || '',
+        documento: sampleChargeRecord.documento || sampleChargeRecord.numero_nf || sampleChargeRecord.numero_boleto || '',
+        numero_boleto: sampleChargeRecord.numero_boleto || sampleChargeRecord.documento || sampleChargeRecord.numero_nf || '',
+        numero_nf: sampleChargeRecord.numero_nf || '',
+        valor: Number(sampleChargeRecord.valor || 0),
+        data_vencimento: sampleChargeRecord.data_vencimento || '',
+        status: sampleChargeRecord.status || 'pendente',
+        linha_digitavel: sampleChargeRecord.linha_digitavel || null,
+        codigo_barras: sampleChargeRecord.codigo_barras || null,
+        boleto_url: sampleChargeRecord.boleto_url || (sampleChargeRecord.drive_file_id ? `https://drive.google.com/file/d/${sampleChargeRecord.drive_file_id}/view` : null),
+        drive_file_id: sampleChargeRecord.drive_file_id || null,
+      }
+    : null;
+
   return {
     status_geral: statusGeral,
     cards: {
@@ -4517,6 +4544,7 @@ async function getRealSendChecklistData(
     },
     checklist,
     recommendations,
+    sample_charge: sampleCharge,
     commercial: planData,
   };
 }

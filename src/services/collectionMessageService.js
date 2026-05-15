@@ -106,7 +106,7 @@ function formatCurrency(value) {
 }
 
 function formatDate(value) {
-  if (!value) return 'nao localizado';
+  if (!value) return 'nao informado';
   try {
     return new Intl.DateTimeFormat('pt-BR').format(new Date(`${value}T00:00:00`));
   } catch {
@@ -159,16 +159,16 @@ export function generateCollectionMessage(input = {}, tone = 'neutro') {
   const style = MESSAGE_STYLES[normalizedTone];
   const context = {
     nome: input.nome || input.cliente || 'cliente',
-    telefone: input.telefone || 'nao localizado',
-    documento: input.documento || input.numero_documento || 'nao localizado',
-    numeroBoleto: input.numero_boleto || input.boleto || input.documento || 'nao localizado',
+    telefone: input.telefone || 'nao informado',
+    documento: input.documento || input.numero_documento || 'nao informado',
+    numeroBoleto: input.numero_boleto || input.boleto || input.documento || 'nao informado',
     valor: formatCurrency(input.valor),
     vencimento: formatDate(input.vencimento),
     diasAtraso: Number(input.diasAtraso || input.dias_atraso || 0),
     empresa: input.empresa || 'NC Finance',
-    linhaDigitavel: input.linha_digitavel || 'nao localizado',
-    codigoBarras: input.codigo_barras || 'nao localizado',
-    linkBoleto: input.link_boleto || input.boleto_url || 'nao localizado',
+    linhaDigitavel: input.linha_digitavel || 'nao informado',
+    codigoBarras: input.codigo_barras || 'nao informado',
+    linkBoleto: input.link_boleto || input.boleto_url || 'nao informado',
     historyHint: getHistoryHint(input.historico),
   };
 

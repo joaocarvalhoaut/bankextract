@@ -65,6 +65,7 @@ export const mapRegistroToApp = (row) => ({
   telefone: row.telefone || '',
   observacao: row.observacao || '',
   status: row.status || 'pendente',
+  tipo: row.tipo || row.tipo_importacao || 'vencidos',
   importadoEm: row.importado_em ?? row.importadoEm ?? null,
   liquidadoEm: row.liquidado_em ?? row.liquidadoEm ?? null,
 });
@@ -84,6 +85,7 @@ export const mapRegistroToDb = (row) => ({
   telefone: row.telefone || '',
   observacao: row.observacao || '',
   status: row.status || 'pendente',
+  tipo: row.tipo || row.tipo_importacao || 'vencidos',
   importado_em: row.importadoEm ?? row.importado_em ?? null,
   liquidado_em: row.liquidadoEm ?? row.liquidado_em ?? null,
 });

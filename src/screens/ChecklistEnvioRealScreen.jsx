@@ -18,6 +18,7 @@ import { createAuditEvent } from '../services/auditTimelineService';
 import { createNotification } from '../services/notificationService';
 import { getCollectionToneMeta } from '../services/collectionMessageService';
 import { incrementUsage } from '../services/usageService';
+import { buildChecklistPreviewContext, buildChecklistPreviewSummary } from '../utils/checklistPreview';
 
 function ChecklistCard({ label, value, tone = 'slate' }) {
   const palette = {
@@ -125,6 +126,18 @@ export default function ChecklistEnvioRealScreen({
     inconsistencias_criticas: 0,
     zapi: 'Pendente / bloqueado',
   };
+
+  const previewContext = useMemo(
+    () =>
+      buildChecklistPreviewContext({
+        sampleCharge: data?.sample_charge || null,
+        companyName,
+        recommendations: data?.recommendations || [],
+      }),
+    [companyName, data?.recommendations, data?.sample_charge]
+  );
+
+  const previewSummary = useMemo(() => buildChecklistPreviewSummary(previewContext), [previewContext]);
 
   const handleSimulateBatch = useCallback(async () => {
     if (!resolvedCompanyId || globalMode) {
@@ -376,21 +389,47 @@ export default function ChecklistEnvioRealScreen({
             </div>
           </section>
 
+          <section className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Amostra real da cobranca</p>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-[20px] border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-200">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Documento</p>
+                <p className="mt-1 font-medium text-slate-50">{previewSummary.documento}</p>
+              </div>
+              <div className="rounded-[20px] border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-200">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Boleto</p>
+                <p className="mt-1 font-medium text-slate-50">{previewSummary.boleto}</p>
+              </div>
+              <div className="rounded-[20px] border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-200">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Valor</p>
+                <p className="mt-1 font-medium text-slate-50">{previewSummary.valor}</p>
+              </div>
+              <div className="rounded-[20px] border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-200">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Vencimento</p>
+                <p className="mt-1 font-medium text-slate-50">{previewSummary.vencimento}</p>
+              </div>
+              <div className="rounded-[20px] border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-200">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Telefone</p>
+                <p className="mt-1 font-medium text-slate-50">{previewSummary.telefone}</p>
+              </div>
+              <div className="rounded-[20px] border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-200">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Dias de atraso</p>
+                <p className="mt-1 font-medium text-slate-50">{previewSummary.diasAtraso}</p>
+              </div>
+              <div className="rounded-[20px] border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-200 sm:col-span-2">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Linha digitavel</p>
+                <p className="mt-1 break-all font-medium text-slate-50">{previewSummary.linhaDigitavel}</p>
+              </div>
+              <div className="rounded-[20px] border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-200 sm:col-span-2">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Link do boleto</p>
+                <p className="mt-1 break-all font-medium text-slate-50">{previewSummary.linkBoleto}</p>
+              </div>
+            </div>
+          </section>
+
           <CollectionMessagePreview
             title="IA de cobranca para simulacao operacional"
-            context={{
-              nome: companyName || 'Cliente Exemplo',
-              valor: cards.titulos_monitorados ? 2500 : 0,
-              vencimento: new Date().toISOString().slice(0, 10),
-              diasAtraso: Number(cards.inconsistencias_criticas || 0) > 0 ? 10 : 2,
-              documento: `CHECKLIST-${resolvedCompanyId}`,
-              telefone: 'nao localizado',
-              empresa: companyName || 'Empresa Exemplo',
-              linha_digitavel: 'nao localizado',
-              link_boleto: 'nao localizado',
-              codigo_barras: 'nao localizado',
-              historico: (data?.recommendations || []).slice(0, 2).join('; '),
-            }}
+            context={previewContext}
             initialMessage={checklistAiMessage}
             restoreMessage={checklistAiMessage}
             onMessageChange={setChecklistAiMessage}

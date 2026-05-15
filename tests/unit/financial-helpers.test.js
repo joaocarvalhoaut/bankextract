@@ -8,6 +8,7 @@ import {
   buildFinancialExportRows,
   getFinancialTipoLabel,
 } from '../../src/utils/financialExport.js';
+import { mapRegistroToApp } from '../../src/services/financeAdapters.js';
 
 test('gera a mesma idempotency key para o mesmo titulo com formatacoes diferentes', () => {
   const base = {
@@ -77,4 +78,20 @@ test('exporta coluna tipo com labels amigaveis e fallback legado', () => {
 test('mantem label amigavel para tipos conhecidos e converte tipos desconhecidos', () => {
   assert.equal(getFinancialTipoLabel('liquidacao'), 'Liquidacao');
   assert.equal(getFinancialTipoLabel('manual_assistido'), 'Manual Assistido');
+});
+
+test('preserva o tipo do registro no mapeamento para a UI', () => {
+  const mapped = mapRegistroToApp({
+    id: '1',
+    company_id: 'empresa-1',
+    nome: 'Cliente Teste',
+    documento: 'DOC-1',
+    numero_boleto: 'BOLETO-1',
+    data_vencimento: '2026-05-20',
+    valor: 100,
+    status: 'pendente',
+    tipo: 'a_vencer',
+  });
+
+  assert.equal(mapped.tipo, 'a_vencer');
 });

@@ -7,6 +7,7 @@ import { canUserPerformAction } from '../security/permissions';
 
 const importTypeOptions = [
   { value: 'vencidos', label: 'Vencidos', hint: 'Popula a carteira financeira da empresa ativa.' },
+  { value: 'a_vencer', label: 'A vencer', hint: 'Importa titulos futuros para acompanhamento preventivo.' },
   { value: 'liquidacao', label: 'Liquidacao', hint: 'Marca registros como liquidados sem apagar historico.' },
 ];
 
@@ -172,7 +173,7 @@ export default function ImportacaoScreen({
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                   Tipo de importacao
                 </span>
-                <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-800/60 p-1">
+                <div className="grid grid-cols-1 gap-2 rounded-2xl bg-slate-800/60 p-1 sm:grid-cols-3">
                   {importTypeOptions.map((item) => (
                     <button
                       key={item.value}
