@@ -32,6 +32,7 @@ import {
   normalizeRepresentativeList,
 } from './financeAdapters.js';
 import { normalizeText } from './financeNormalizers.js';
+import { buildFinancialRecordIdempotencyKey, isFinancialRecordConflictError } from '../utils/financialRecordIdempotency.js';
 
 const isProduction = import.meta.env.PROD;
 const isDevelopment = import.meta.env.DEV;
@@ -264,7 +265,8 @@ export async function deleteFinancialRecords(recordIds = [], tenantOptions = {})
 export async function fetchCobrancaDashboardMeta({ companyId, userId } = {}) {
   try {
     const dataset = await financeService.fetchCompanyDataset({ companyId, userId });
-    const charges = (db.cobrancasWhatsapp || []).filter((item) => {
+    const whatsappCharges = Array.isArray(db?.cobrancasWhatsapp) ? db.cobrancasWhatsapp : [];
+    const charges = whatsappCharges.filter((item) => {
       if (companyId === GLOBAL_COMPANY_ID) return true;
       return item.empresa_id === companyId;
     });
@@ -752,6 +754,10 @@ export const financeService = {
   },
 
   async insertRegistros(items, tenantOptions = {}) {
+    if (!Array.isArray(items) || !items.length) {
+      return [];
+    }
+
     const tenant = await getEffectiveTenant({
       userId: tenantOptions.userId || items[0]?.user_id,
       companyId: tenantOptions.companyId || items[0]?.company_id
@@ -765,7 +771,7 @@ export const financeService = {
       const client = requireSupabase();
       const cleanPayload = items.map((item) => {
         const normalizedStatus = normalizeStatus(item?.status);
-          const documentoFinal =
+        const documentoFinal =
           item?.documento ||
           item?.numero_boleto ||
           item?.numeroBoleto ||
@@ -787,6 +793,15 @@ export const financeService = {
         };
         delete clone.id;
         clone.documento = documentoFinal;
+        clone.idempotency_key = buildFinancialRecordIdempotencyKey({
+          numero_boleto: clone.numero_boleto,
+          documento: clone.documento,
+          numero_nf: clone.numero_nf,
+          nome: clone.nome,
+          telefone: clone.telefone,
+          data_vencimento: clone.data_vencimento,
+          valor: clone.valor,
+        });
         // [DEBUG-DOC] non-PII: confirm documento/numero_boleto saved
         if (import.meta.env.DEV) {
           console.debug('[insertRegistros] doc=%s boleto=%s', clone.documento || '(empty)', clone.numero_boleto || '(empty)');
@@ -794,9 +809,19 @@ export const financeService = {
         return clone;
       });
 
-
-      const { data, error } = await client.from('registros_financeiros').insert(cleanPayload).select();
-      if (error) throw buildError(error, 'Falha ao inserir registros.');
+      const { data, error } = await client
+        .from('registros_financeiros')
+        .upsert(cleanPayload, {
+          onConflict: 'company_id,idempotency_key',
+          ignoreDuplicates: true,
+        })
+        .select();
+      if (error) {
+        if (isFinancialRecordConflictError(error)) {
+          throw new Error('Alguns registros ja existiam na carteira e foram bloqueados pela protecao de idempotencia.');
+        }
+        throw buildError(error, 'Falha ao inserir registros.');
+      }
       return (data || []).map(mapRegistroToApp);
     }
 
@@ -1150,7 +1175,7 @@ export const financeService = {
       batchId,
       arquivo: options.fileName || 'importacao_ocr.pdf',
       tipo,
-      registros: selectedRows.length,
+      registros: 0,
       status: 'concluida',
       data: timestamp,
     };
@@ -1211,12 +1236,27 @@ export const financeService = {
       companyId: tenant.companyId,
     });
 
-    await this.appendImportacao(importacaoEntry, {
-      userId: tenant.userId,
-      companyId: tenant.companyId,
-    });
+    const importedCount = Array.isArray(inserted) ? inserted.length : 0;
+    const skippedDuplicates = Math.max(0, selectedRows.length - importedCount);
+    const historySaved = importedCount > 0;
 
-    return { imported: inserted || [], historySaved: true, batch_id: batchId };
+    if (historySaved) {
+      await this.appendImportacao({
+        ...importacaoEntry,
+        registros: importedCount,
+      }, {
+        userId: tenant.userId,
+        companyId: tenant.companyId,
+      });
+    }
+
+    return {
+      imported: inserted || [],
+      historySaved,
+      batch_id: batchId,
+      attemptedCount: selectedRows.length,
+      skippedDuplicates,
+    };
   },
 
   async updateConfiguracao(payload, tenantOptions = {}) {

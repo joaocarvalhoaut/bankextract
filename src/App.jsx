@@ -14,6 +14,7 @@ import { createNotification, syncTrialEndingNotification } from './services/noti
 import { getPlans, getUsageLimits } from './services/subscriptionService';
 import { incrementUsage } from './services/usageService';
 import { financeService, sanitizeSpreadsheetCell } from './services/financeService.ts';
+import { buildFinancialExportRows } from './utils/financialExport.js';
 import { sendSingleCharge } from './services/billingAutomationService';
 import { createStripeCheckoutSession, createStripePortalSession } from './services/billingService';
 import SplashScreen from './components/branding/SplashScreen';
@@ -793,25 +794,33 @@ export default function App() {
     try {
       const selectedRows = (preview?.rows || []).filter((row) => row.selected !== false);
       const batchId = makeUuid();
-      await financeService.importSelectedRows(preview?.rows || [], batchId, currentCompanyId, {
+      const importResult = await financeService.importSelectedRows(preview?.rows || [], batchId, currentCompanyId, {
         fileName: preview.fileName,
         tipo: importType,
         companyName: currentCompanyName,
       });
+      const importedCount = Array.isArray(importResult?.imported) ? importResult.imported.length : selectedRows.length;
+      const skippedDuplicates = Number(importResult?.skippedDuplicates || 0);
       await auditLog.importConfirmed(currentCompanyId, {
         arquivo: preview.fileName,
-        registros: selectedRows.length,
+        registros: importedCount,
+        registros_tentados: selectedRows.length,
+        registros_ignorados_duplicidade: skippedDuplicates,
         tipo: importType,
       }, currentUserId);
       try {
         await createNotification(currentCompanyId, {
           type: 'import_completed',
           title: 'Importacao concluida',
-          message: `${selectedRows.length} registro(s) foram confirmados no lote ${preview.fileName || 'sem nome'}.`,
+          message: importedCount > 0
+            ? `${importedCount} registro(s) foram confirmados no lote ${preview.fileName || 'sem nome'}${skippedDuplicates ? ` e ${skippedDuplicates} duplicado(s) foram ignorado(s).` : '.'}`
+            : `Nenhum novo registro foi inserido no lote ${preview.fileName || 'sem nome'} porque todos os itens ja existiam na carteira.`,
           severity: 'success',
           metadata: {
             import_type: importType,
             file_name: preview.fileName || '',
+            imported_count: importedCount,
+            skipped_duplicates: skippedDuplicates,
           },
         });
       } catch {
@@ -821,7 +830,13 @@ export default function App() {
       setSelectedFile(null);
       await refreshAllData();
       setActiveTab(importType === 'liquidacao' ? 'historico' : 'visao-geral');
-      showToast('sucesso', 'Lote processado com batch_id e salvo com sucesso.');
+      if (importedCount > 0) {
+        showToast('sucesso', skippedDuplicates
+          ? `${importedCount} registro(s) importado(s) e ${skippedDuplicates} duplicado(s) ignorado(s).`
+          : `${importedCount} registro(s) importado(s) com sucesso.`);
+      } else {
+        showToast('sucesso', 'Nenhum novo registro foi inserido porque o lote continha apenas duplicatas ja existentes.');
+      }
     } catch (error) {
       console.error('[IMPORT] erro', error);
       showToast('erro', error.message || 'Nao foi possivel importar os registros selecionados.');
@@ -982,18 +997,8 @@ export default function App() {
       }
 
       const separator = format === 'csv' ? ';' : '\t';
-      const header = ['Cliente', 'Documento', 'Vencimento', 'Valor', 'Telefone', 'Status', 'batch_id'];
-      const lines = filteredFinancialRows.map((row) =>
-        [
-          sanitizeSpreadsheetCell(row.nome),
-          sanitizeSpreadsheetCell(row.numero_boleto),
-          sanitizeSpreadsheetCell(row.data_vencimento),
-          sanitizeSpreadsheetCell(String(row.valor).replace('.', ',')),
-          sanitizeSpreadsheetCell(row.telefone || ''),
-          sanitizeSpreadsheetCell(row.status),
-          sanitizeSpreadsheetCell(row.batch_id || ''),
-        ].join(separator)
-      );
+      const { header, lines: exportLines } = buildFinancialExportRows(filteredFinancialRows);
+      const lines = exportLines.map((line) => line.map((value) => sanitizeSpreadsheetCell(value)).join(separator));
 
       const blob = new Blob([[header.join(separator), ...lines].join('\n')], {
         type: format === 'csv' ? 'text/csv;charset=utf-8;' : 'text/plain;charset=utf-8;',

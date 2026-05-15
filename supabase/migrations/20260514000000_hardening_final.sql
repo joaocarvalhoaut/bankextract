@@ -33,6 +33,32 @@ create table if not exists public.automation_audit_logs (
   created_at           timestamptz not null default now()
 );
 
+alter table public.automation_audit_logs
+  add column if not exists company_id            uuid,
+  add column if not exists request_id            text,
+  add column if not exists correlation_id        text,
+  add column if not exists action                text,
+  add column if not exists registro_id           uuid,
+  add column if not exists charge_id             text,
+  add column if not exists telefone              text,
+  add column if not exists boleto_file_id        text,
+  add column if not exists boleto_score          numeric,
+  add column if not exists boleto_strategy       text,
+  add column if not exists boleto_second_score   numeric,
+  add column if not exists template_used         text,
+  add column if not exists pdf_hash              text,
+  add column if not exists zapi_status           text,
+  add column if not exists provider_message_id   text,
+  add column if not exists request_payload       jsonb,
+  add column if not exists response_payload      jsonb,
+  add column if not exists duration_ms           integer,
+  add column if not exists blocked_reason        text,
+  add column if not exists ocr_used              boolean     not null default false,
+  add column if not exists ocr_source            text,
+  add column if not exists pdf_validation_reason text,
+  add column if not exists user_id               uuid,
+  add column if not exists created_at            timestamptz not null default now();
+
 create index if not exists idx_aal_company_created
   on public.automation_audit_logs(company_id, created_at desc);
 
@@ -103,6 +129,14 @@ create table if not exists public.zapi_circuit_state (
   last_success_at       timestamptz,
   updated_at            timestamptz not null default now()
 );
+
+alter table public.zapi_circuit_state
+  add column if not exists consecutive_failures integer     not null default 0,
+  add column if not exists circuit_open         boolean     not null default false,
+  add column if not exists circuit_opened_at    timestamptz,
+  add column if not exists last_failure_at      timestamptz,
+  add column if not exists last_success_at      timestamptz,
+  add column if not exists updated_at           timestamptz not null default now();
 
 comment on table public.zapi_circuit_state is
   'Per-company Z-API circuit breaker state: opens after 3 consecutive failures';
