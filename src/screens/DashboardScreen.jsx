@@ -1,48 +1,159 @@
 import { useEffect, useRef, useState } from 'react';
-import { Activity, ArrowRight, BarChart3, BookOpenText, ClipboardList, ListChecks, TrendingUp, Zap } from 'lucide-react';
+import {
+  Activity,
+  ArrowRight,
+  CheckCircle2,
+  ChevronRight,
+  Clock,
+  ClipboardList,
+  ListChecks,
+  MessageSquare,
+  RefreshCcw,
+  TrendingUp,
+  Zap,
+  ZapOff,
+} from 'lucide-react';
 import KPICard from '../components/KPICard';
 import AuditEventCard from '../components/AuditEventCard';
+import StatusPill from '../components/ui/StatusPill';
 import { getRecentAudit } from '../services/auditTimelineService';
-import { formatCurrencyBRL } from '../utils/format';
+import { formatCurrencyBRL, formatDateBR } from '../utils/format';
 
-function SectionHeader({ title, subtitle, badge, action }) {
+/* ─────────────────────────────────────────────────────────────
+   Sub-components
+───────────────────────────────────────────────────────────── */
+
+function SectionLabel({ children }) {
   return (
-    <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h3 className="text-lg font-bold tracking-tight text-slate-50">{title}</h3>
-        {subtitle ? <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p> : null}
-      </div>
+    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+      {children}
+    </p>
+  );
+}
+
+function SectionRow({ title, action }) {
+  return (
+    <div className="mb-3 flex items-center justify-between gap-2">
+      <h3 className="text-sm font-semibold text-slate-200">{title}</h3>
+      {action}
+    </div>
+  );
+}
+
+function NavAction({ label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 transition hover:text-slate-300"
+    >
+      {label}
+      <ChevronRight size={11} />
+    </button>
+  );
+}
+
+function ConsoleStatusBar({ operational }) {
+  const { autoChargeActive, whatsappMockMode, lastAutoExecution, nextRunHint, recentAuditAction } = operational;
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-700/60 bg-slate-900/50 px-4 py-2.5">
       <div className="flex items-center gap-2">
-        {badge ? (
-          <span className="inline-flex w-fit items-center rounded-full border border-slate-700 bg-slate-800/40 px-3 py-1 text-xs font-semibold text-slate-300">
-            {badge}
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+        <span className="text-[12px] font-medium text-slate-300">Console ativo</span>
+      </div>
+
+      <div className="h-3.5 w-px bg-slate-700/60 max-sm:hidden" />
+
+      <StatusPill variant={autoChargeActive ? 'success' : 'neutral'} dot>
+        {autoChargeActive ? 'Cobrança automática on' : 'Cobrança automática off'}
+      </StatusPill>
+
+      {whatsappMockMode && (
+        <StatusPill variant="warning" dot>Modo simulação ativo</StatusPill>
+      )}
+
+      <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1">
+        {lastAutoExecution && (
+          <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
+            <Clock size={11} />
+            Última exec: <span className="font-medium text-slate-400">{lastAutoExecution}</span>
           </span>
-        ) : null}
-        {action || null}
+        )}
+        {nextRunHint && (
+          <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
+            <Zap size={11} />
+            Próxima: <span className="font-medium text-slate-400">{nextRunHint}</span>
+          </span>
+        )}
+        {recentAuditAction && recentAuditAction !== 'Sem atividade' && (
+          <span className="hidden text-[11px] text-slate-600 xl:block">
+            Última ação: <span className="text-slate-500">{recentAuditAction}</span>
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-function MiniBars({ items = [] }) {
-  const max = Math.max(...items.map((item) => item.value || 0), 1);
+function CriticalQueueRow({ row }) {
+  const statusTone = {
+    pendente:    'neutral',
+    aberto:      'info',
+    vencido:     'danger',
+    negociacao:  'warning',
+    promessa:    'info',
+    liquidado:   'success',
+  };
 
   return (
-    <div className="space-y-4">
+    <div className="grid grid-cols-[1.6fr_1fr_auto_auto] items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-slate-800/40 sm:grid-cols-[2fr_1.2fr_1fr_auto]">
+      <div className="min-w-0">
+        <p className="truncate text-[13px] font-medium text-slate-100">{row.cliente || 'Cliente'}</p>
+        <p className="truncate font-mono text-[11px] text-slate-500">
+          {row.numero_boleto || row.documento || '—'}
+        </p>
+      </div>
+      <span className="font-mono tabular-nums text-[13px] font-semibold text-slate-50">
+        {formatCurrencyBRL(row.valor || 0)}
+      </span>
+      <span className="hidden font-mono text-[12px] text-slate-400 sm:block">
+        {row.vencimento ? formatDateBR(row.vencimento) : '—'}
+      </span>
+      <StatusPill variant={statusTone[row.status] || 'neutral'}>
+        {row.status || 'pendente'}
+      </StatusPill>
+    </div>
+  );
+}
+
+function AgingStrip({ items = [] }) {
+  const max = Math.max(...items.map((i) => i.value || 0), 1);
+
+  if (!items.length) {
+    return (
+      <div className="flex items-center justify-center rounded-xl border border-dashed border-slate-700/60 py-6 text-[12px] text-slate-500">
+        Sem dados de aging
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2.5">
       {items.map((item) => {
-        const pct = Math.max(((item.value || 0) / max) * 100, 4);
+        const pct = Math.max(((item.value || 0) / max) * 100, 3);
         return (
-          <div key={item.label}>
-            <div className="mb-2 flex items-center justify-between text-xs">
-              <span className="font-semibold text-slate-100">{item.label}</span>
-              <span className="font-semibold text-slate-50">{formatCurrencyBRL(item.value || 0)}</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-800/60">
+          <div key={item.label} className="flex items-center gap-3">
+            <span className="w-[88px] shrink-0 text-[11px] text-slate-400 truncate">{item.label}</span>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800/60">
               <div
-                className="h-full rounded-full transition-all duration-700"
-                style={{ width: `${pct}%`, backgroundColor: item.color }}
+                className="h-full rounded-full"
+                style={{ width: `${pct}%`, backgroundColor: item.color || '#475569' }}
               />
             </div>
+            <span className="w-[72px] shrink-0 text-right font-mono tabular-nums text-[11px] font-medium text-slate-300">
+              {formatCurrencyBRL(item.value || 0)}
+            </span>
           </div>
         );
       })}
@@ -50,34 +161,137 @@ function MiniBars({ items = [] }) {
   );
 }
 
-function StatusPill({ active, label, tone = 'blue' }) {
-  const toneClass =
-    tone === 'amber'
-      ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-      : tone === 'blue'
-        ? 'border-blue-500/30 bg-blue-900/20 text-blue-300'
-        : 'border-blue-500/30 bg-blue-900/20 text-blue-300';
-
-  const dotClass = tone === 'amber' ? 'bg-amber-400' : tone === 'blue' ? 'bg-blue-500' : 'bg-cyan-500';
+function ImportWidget({ importacoes = [] }) {
+  if (!importacoes.length) {
+    return (
+      <div className="flex items-center justify-center rounded-xl border border-dashed border-slate-700/60 py-5 text-[12px] text-slate-500">
+        Sem importações recentes
+      </div>
+    );
+  }
 
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${
-        active ? toneClass : 'border-slate-700 bg-slate-800/40 text-slate-500'
-      }`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${active ? dotClass : 'bg-slate-300'}`} />
-      {label}
-    </span>
+    <div className="space-y-1.5">
+      {importacoes.map((item) => (
+        <div key={item.label} className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-slate-800/40">
+          <span className="truncate text-[12px] text-slate-400">{item.label}</span>
+          <span className="font-mono tabular-nums text-[12px] font-semibold text-slate-200">
+            {item.value}
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 
-export default function DashboardScreen({ metrics, errorMessage = '', onRetry, companyId, allCompanies = false, onNavigate, onboarding = null }) {
+function AutomationWidget({ operational }) {
+  const { autoChargeActive, whatsappMockMode, lastAutoExecution, nextRunHint } = operational;
+
+  const rows = [
+    {
+      label: 'Cobrança auto',
+      value: autoChargeActive ? 'Ativa' : 'Inativa',
+      icon: autoChargeActive ? CheckCircle2 : ZapOff,
+      cls: autoChargeActive ? 'text-emerald-300' : 'text-slate-500',
+    },
+    {
+      label: 'Modo envio',
+      value: whatsappMockMode ? 'Simulação' : 'Real',
+      icon: whatsappMockMode ? Zap : MessageSquare,
+      cls: whatsappMockMode ? 'text-amber-300' : 'text-slate-300',
+    },
+    {
+      label: 'Última execução',
+      value: lastAutoExecution || 'Nunca',
+      icon: Clock,
+      cls: 'text-slate-400',
+    },
+    {
+      label: 'Próxima janela',
+      value: nextRunHint || 'Inativa',
+      icon: TrendingUp,
+      cls: 'text-slate-400',
+    },
+  ];
+
+  return (
+    <div className="space-y-1">
+      {rows.map(({ label, value, icon: Icon, cls }) => (
+        <div key={label} className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-slate-800/40">
+          <div className="flex items-center gap-2">
+            <Icon size={12} className={cls} />
+            <span className="text-[12px] text-slate-500">{label}</span>
+          </div>
+          <span className={`text-[12px] font-medium ${cls}`}>{value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OnboardingWidget({ onboarding, onNavigate }) {
+  if (!onboarding?.steps?.length) return null;
+
+  const steps = onboarding.steps.slice(0, 4);
+  const done = steps.filter((s) => s.done).length;
+  const pct = Math.round((done / steps.length) * 100);
+
+  return (
+    <div className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-5">
+      <SectionRow
+        title="Primeiros passos"
+        action={
+          onNavigate ? <NavAction label="Ver tudo" onClick={() => onNavigate('onboarding')} /> : null
+        }
+      />
+
+      <div className="mb-4 flex items-center gap-3">
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800/60">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className="shrink-0 font-mono text-[11px] font-semibold text-slate-400">{pct}%</span>
+      </div>
+
+      <div className="space-y-2">
+        {steps.map((step) => (
+          <div key={step.id} className="flex items-start gap-2.5">
+            <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${step.done ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800/60 text-slate-600'}`}>
+              {step.done ? <CheckCircle2 size={11} /> : <ListChecks size={11} />}
+            </div>
+            <div className="min-w-0">
+              <p className={`text-[12px] font-medium ${step.done ? 'text-slate-500 line-through' : 'text-slate-200'}`}>
+                {step.title}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Main component
+───────────────────────────────────────────────────────────── */
+
+export default function DashboardScreen({
+  metrics,
+  errorMessage = '',
+  onRetry,
+  companyId,
+  allCompanies = false,
+  onNavigate,
+  onboarding = null,
+}) {
   const operational = metrics?.operational || {};
   const isEmpty = !metrics?.hasFinancialData && !metrics?.kpis?.length;
 
   const [recentAudit, setRecentAudit] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [criticalTab, setCriticalTab] = useState('due');
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -88,315 +302,229 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
   useEffect(() => {
     if (!companyId && !allCompanies) return;
     setAuditLoading(true);
-    getRecentAudit(companyId, 5, { allCompanies })
+    getRecentAudit(companyId, 6, { allCompanies })
       .then((data) => { if (mountedRef.current) setRecentAudit(data); })
       .catch(() => {})
       .finally(() => { if (mountedRef.current) setAuditLoading(false); });
   }, [allCompanies, companyId]);
 
+  /* ── Error state ── */
   if (errorMessage) {
     return (
-      <div className="surface-card flex flex-col items-center justify-center rounded-[32px] p-16 text-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-amber-500/10">
-          <Activity size={28} className="text-amber-400" />
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-700/80 bg-slate-900/60 p-16 text-center">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10">
+          <Activity size={22} className="text-amber-400" />
         </div>
-        <h3 className="text-xl font-bold tracking-tight text-slate-50">Nao foi possivel carregar o dashboard</h3>
-        <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-300">{errorMessage}</p>
-        {onRetry ? (
-          <button type="button" onClick={onRetry} className="mt-5 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+        <h3 className="text-base font-semibold text-slate-50">Não foi possível carregar o console</h3>
+        <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-400">{errorMessage}</p>
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="mt-5 inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/40 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-700/60"
+          >
+            <RefreshCcw size={14} />
             Tentar novamente
           </button>
-        ) : null}
+        )}
       </div>
     );
   }
 
+  /* ── Empty state ── */
   if (isEmpty) {
     return (
-      <div className="surface-card flex flex-col items-center justify-center rounded-[32px] border border-dashed border-slate-700 p-16 text-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-800/60">
-          <Activity size={28} className="text-slate-400" />
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700/60 bg-slate-900/40 p-16 text-center">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-800/60">
+          <Activity size={22} className="text-slate-500" />
         </div>
-        <h3 className="text-xl font-bold tracking-tight text-slate-50">Sem dados financeiros</h3>
-        <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-300">
-          Importe uma carteira para popular o dashboard executivo com metricas reais da empresa ativa.
+        <h3 className="text-base font-semibold text-slate-50">Sem dados financeiros</h3>
+        <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-400">
+          Importe uma carteira para popular o console operacional com métricas reais.
         </p>
-        {onRetry ? (
-          <button type="button" onClick={onRetry} className="mt-5 rounded-2xl border border-slate-700 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800/40">
-            Tentar novamente
+        {onNavigate && (
+          <button
+            type="button"
+            onClick={() => onNavigate('importacao')}
+            className="mt-5 inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/40 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-700/60"
+          >
+            Ir para Importação
+            <ArrowRight size={14} />
           </button>
-        ) : null}
+        )}
       </div>
     );
   }
 
+  const dueRows = metrics.nextDueRows || [];
+  const openRows = metrics.biggestOpenRows || [];
+  const criticalRows = criticalTab === 'due' ? dueRows : openRows;
+
+  /* ── Operations Console ── */
   return (
-    <div className="space-y-6">
-      <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-700 bg-slate-900/60 p-7 shadow-lifted lg:p-9">
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-          <div>
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <StatusPill active label="Dashboard ao vivo" />
-              {operational.autoChargeActive ? <StatusPill active label="Cobranca automatica" tone="blue" /> : null}
-              {operational.whatsappMockMode ? <StatusPill active label="Modo teste WhatsApp" tone="amber" /> : null}
-            </div>
-            <h2 className="max-w-2xl text-3xl font-bold tracking-tight text-slate-50 lg:text-4xl">
-              Operacao financeira organizada para escalar cobrancas com seguranca.
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-300 lg:text-base">
-              O NC Finance consolida carteira, lotes importados, automacoes e sinais operacionais em uma leitura
-              executiva pronta para venda e para a rotina do financeiro.
-            </p>
-          </div>
+    <div className="space-y-4">
 
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { label: 'Ultima execucao', value: operational.lastAutoExecution || 'Nunca executada' },
-              { label: 'Proxima janela', value: operational.nextRunHint || 'Automacao inativa' },
-              { label: 'Audit log recente', value: operational.recentAuditAction || 'Sem atividade' },
-              { label: 'Ambiente', value: operational.whatsappMockMode ? 'Modo teste' : 'Pronto para real' },
-            ].map((item) => (
-              <div key={item.label} className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-soft">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
-                <p className="mt-1.5 text-sm font-semibold text-slate-50">{item.value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* 1 ─ Console status bar */}
+      <ConsoleStatusBar operational={operational} />
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {(metrics.kpis || []).map((item, idx) => (
-          <div key={item.title} className={`animate-slide-up stagger-${Math.min(idx + 1, 6)}`}>
+      {/* 2 ─ KPI strip */}
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+        {(metrics.kpis || []).slice(0, 5).map((item, idx) => (
+          <div key={item.title} className={`stagger-${Math.min(idx + 1, 6)}`}>
             <KPICard title={item.title} value={item.value} hint={item.hint} tone={item.tone} />
           </div>
         ))}
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <article className="accent-bar surface-card rounded-[28px] p-6">
-          <SectionHeader title="Aging de carteira" subtitle="Distribuicao real por janela de atraso." />
-          <MiniBars items={metrics.charts?.aging || []} />
-        </article>
+      {/* 3 ─ Main operations grid */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
 
-        <article className="accent-bar surface-card rounded-[28px] p-6">
-          <SectionHeader title="Importacoes recentes" subtitle="Volume de linhas por lote no periodo." />
-          {(metrics.charts?.importacoes || []).length ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {metrics.charts.importacoes.map((item) => (
-                <div key={item.label} className="rounded-2xl bg-slate-800/40 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
-                  <p className="mt-2 text-2xl font-bold text-slate-50">{item.value}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-700 py-10 text-sm text-slate-400">
-              Nenhuma importacao registrada ainda.
-            </div>
-          )}
-        </article>
-      </section>
+        {/* 3a ─ Critical queue */}
+        <div className="xl:col-span-7">
+          <div className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-5">
+            <SectionRow
+              title="Fila crítica"
+              action={onNavigate ? <NavAction label="Ver visão geral" onClick={() => onNavigate('visao-geral')} /> : null}
+            />
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <article className="surface-card rounded-[28px] p-6">
-          <SectionHeader title="Proximos vencimentos" subtitle="Titulos mais proximos da empresa ativa." />
-          {(metrics.nextDueRows || []).length ? (
-            <div className="space-y-3">
-              {metrics.nextDueRows.map((row) => (
-                <div key={row.id} className="rounded-2xl bg-slate-800/40 px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-50">{row.cliente || 'Cliente'}</p>
-                      <p className="text-xs text-slate-500">{row.numero_boleto || row.documento || 'Sem documento'}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-slate-50">{formatCurrencyBRL(row.valor || 0)}</p>
-                      <p className="text-xs text-slate-500">{row.vencimento || 'Sem vencimento'}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-700 py-10 text-sm text-slate-400">
-              Nenhum proximo vencimento encontrado.
-            </div>
-          )}
-        </article>
-
-        <article className="surface-card rounded-[28px] p-6">
-          <SectionHeader title="Maiores valores em aberto" subtitle="Prioridades financeiras por valor." />
-          {(metrics.biggestOpenRows || []).length ? (
-            <div className="space-y-3">
-              {metrics.biggestOpenRows.map((row) => (
-                <div key={row.id} className="rounded-2xl bg-slate-800/40 px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-50">{row.cliente || 'Cliente'}</p>
-                      <p className="text-xs text-slate-500">{row.status || 'pendente'}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-slate-50">{formatCurrencyBRL(row.valor || 0)}</p>
-                      <p className="text-xs text-slate-500">{row.vencimento || 'Sem vencimento'}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-700 py-10 text-sm text-slate-400">
-              Nenhum valor em aberto encontrado.
-            </div>
-          )}
-        </article>
-      </section>
-
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-        <article className="surface-card rounded-[28px] xl:col-span-2 p-6">
-          <SectionHeader
-            title="Primeiros passos"
-            subtitle="Acompanhe a ativacao inicial da empresa e avance para as proximas etapas."
-            badge={`${onboarding?.progress || 0}% concluido`}
-            action={
-              onNavigate ? (
+            {/* Tabs */}
+            <div className="mb-3 flex gap-1 rounded-lg border border-slate-700/60 bg-slate-800/40 p-1">
+              {[
+                { id: 'due', label: `Próx. vencimentos (${dueRows.length})` },
+                { id: 'open', label: `Maiores em aberto (${openRows.length})` },
+              ].map((tab) => (
                 <button
-                  onClick={() => onNavigate('onboarding')}
-                  className="flex items-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-900/20 px-3 py-1.5 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-900/30"
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setCriticalTab(tab.id)}
+                  className={`flex-1 rounded-md px-3 py-1.5 text-[12px] font-medium transition ${
+                    criticalTab === tab.id
+                      ? 'bg-slate-700/80 text-slate-100'
+                      : 'text-slate-500 hover:text-slate-300'
+                  }`}
                 >
-                  Abrir onboarding <ArrowRight size={12} />
+                  {tab.label}
                 </button>
-              ) : null
-            }
-          />
-          {(onboarding?.steps || []).length ? (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {(onboarding.steps || []).slice(0, 4).map((step) => (
-                <div key={step.id} className={`rounded-2xl border p-4 ${step.done ? 'border-emerald-500/20 bg-emerald-500/10' : 'border-slate-700 bg-slate-800/40'}`}>
-                  <div className="flex items-start gap-3">
-                    <div className={`flex h-9 w-9 items-center justify-center rounded-2xl ${step.done ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-400'}`}>
-                      <ListChecks size={16} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-slate-50">{step.title}</p>
-                      <p className="mt-1 text-xs leading-relaxed text-slate-500">{step.description}</p>
-                    </div>
-                  </div>
-                </div>
               ))}
             </div>
-          ) : (
-            <div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-700 py-10 text-sm text-slate-400">
-              Nenhum passo inicial disponivel.
+
+            {criticalRows.length ? (
+              <div className="space-y-0.5">
+                {/* Header */}
+                <div className="grid grid-cols-[1.6fr_1fr_auto_auto] gap-3 px-3 pb-1 sm:grid-cols-[2fr_1.2fr_1fr_auto]">
+                  <SectionLabel>Cliente</SectionLabel>
+                  <SectionLabel>Valor</SectionLabel>
+                  <SectionLabel className="hidden sm:block">Vencimento</SectionLabel>
+                  <SectionLabel>Status</SectionLabel>
+                </div>
+                {criticalRows.map((row, i) => (
+                  <CriticalQueueRow key={row.id || i} row={row} index={i} />
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center rounded-xl border border-dashed border-slate-700/60 py-8 text-[12px] text-slate-500">
+                {criticalTab === 'due' ? 'Nenhum vencimento próximo encontrado.' : 'Nenhum valor em aberto encontrado.'}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 3b ─ Right rail */}
+        <div className="space-y-4 xl:col-span-5">
+
+          {/* Aging */}
+          <div className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-5">
+            <SectionRow title="Aging da carteira" />
+            <AgingStrip items={metrics.charts?.aging || []} />
+          </div>
+
+          {/* Automation status */}
+          <div className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-5">
+            <SectionRow
+              title="Automação"
+              action={onNavigate ? <NavAction label="Configurar" onClick={() => onNavigate('automacoes')} /> : null}
+            />
+            <AutomationWidget operational={operational} />
+          </div>
+
+          {/* Import stats */}
+          {(metrics.charts?.importacoes || []).length > 0 && (
+            <div className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-5">
+              <SectionRow
+                title="Importações recentes"
+                action={onNavigate ? <NavAction label="Ver histórico" onClick={() => onNavigate('historico')} /> : null}
+              />
+              <ImportWidget importacoes={metrics.charts.importacoes} />
             </div>
           )}
-        </article>
+        </div>
+      </div>
 
-        <article className="surface-card rounded-[28px] p-6">
-          <SectionHeader title="Ajuda rapida" subtitle="Guias essenciais para tirar duvidas sem sair da operacao." />
-          <div className="space-y-3">
-            {[
-              { label: 'Importar carteira', target: 'help' },
-              { label: 'Preparar cobranca', target: 'help' },
-              { label: 'Interpretar dashboard', target: 'help' },
-            ].map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                onClick={() => onNavigate?.(item.target)}
-                className="flex w-full items-center justify-between rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3 text-left text-sm font-semibold text-slate-200 transition hover:bg-slate-800/60"
-              >
-                <span className="flex items-center gap-2">
-                  <BookOpenText size={16} className="text-blue-600" />
-                  {item.label}
-                </span>
-                <ArrowRight size={14} className="text-slate-400" />
-              </button>
-            ))}
-          </div>
-        </article>
-      </section>
+      {/* 4 ─ Activity + Onboarding */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
 
-      {/* Mini card de atividades recentes */}
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-        <article className="surface-card rounded-[28px] xl:col-span-2 p-6">
-          <SectionHeader
-            title="Ultimas atividades"
-            subtitle={allCompanies ? 'Eventos operacionais recentes de todas as empresas.' : 'Eventos operacionais recentes desta empresa.'}
-            action={
-              onNavigate ? (
-                <button
-                  onClick={() => onNavigate('audit')}
-                  className="flex items-center gap-1.5 rounded-xl border border-violet-500/30 bg-violet-900/20 px-3 py-1.5 text-xs font-semibold text-violet-300 transition-colors hover:bg-violet-900/30"
-                >
-                  Ver auditoria completa <ArrowRight size={12} />
-                </button>
-              ) : null
-            }
-          />
-          {auditLoading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="skeleton h-7 w-7 rounded-lg" />
-                  <div className="flex-1 space-y-1.5">
-                    <div className="skeleton h-3.5 w-40 rounded-full" />
-                    <div className="skeleton h-3 w-56 rounded-full" />
+        {/* Activity feed */}
+        <div className="xl:col-span-8">
+          <div className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-5">
+            <SectionRow
+              title={allCompanies ? 'Atividade recente — todas as empresas' : 'Atividade recente'}
+              action={onNavigate ? <NavAction label="Ver auditoria" onClick={() => onNavigate('audit')} /> : null}
+            />
+
+            {auditLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex items-center gap-3 px-3 py-2">
+                    <div className="skeleton h-7 w-7 rounded-lg" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="skeleton h-3 w-40 rounded-full" />
+                      <div className="skeleton h-2.5 w-56 rounded-full" />
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : recentAudit.length > 0 ? (
-            <div className="divide-y divide-slate-50">
-              {recentAudit.map((event) => (
-                <AuditEventCard key={event.id} event={event} compact />
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : recentAudit.length > 0 ? (
+              <div className="divide-y divide-slate-800/60">
+                {recentAudit.map((event) => (
+                  <AuditEventCard key={event.id} event={event} compact />
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-700/60 py-8 text-center">
+                <ClipboardList size={20} className="mb-2 text-slate-600" />
+                <p className="text-[12px] text-slate-500">Nenhuma atividade registrada ainda.</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Onboarding progress */}
+        <div className="xl:col-span-4">
+          {onboarding?.steps?.length ? (
+            <OnboardingWidget onboarding={onboarding} onNavigate={onNavigate} />
           ) : (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700 py-10 text-center">
-              <ClipboardList size={22} className="text-slate-300" />
-              <p className="mt-2 text-sm text-slate-400">Nenhuma atividade registrada ainda.</p>
+            <div className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-5">
+              <SectionRow title="Status do sistema" />
+              <div className="space-y-2">
+                {[
+                  { label: 'Banco de dados', ok: true },
+                  { label: 'WhatsApp provider', ok: !operational.whatsappMockMode },
+                  { label: 'Cobrança automática', ok: !!operational.autoChargeActive },
+                  { label: 'Audit log', ok: !!(recentAudit.length || operational.recentAuditAction) },
+                ].map(({ label, ok }) => (
+                  <div key={label} className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-slate-800/40">
+                    <span className="text-[12px] text-slate-400">{label}</span>
+                    <StatusPill variant={ok ? 'success' : 'neutral'} dot>
+                      {ok ? 'OK' : 'Inativo'}
+                    </StatusPill>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
-        </article>
+        </div>
+      </div>
 
-        <article className="accent-bar surface-card rounded-[28px] p-6">
-          <SectionHeader title="Cobranca WhatsApp" subtitle="Status do agendador automatico." />
-          <div className="space-y-3">
-            {[
-              { label: 'Status', value: operational.autoChargeActive ? 'Ativo' : 'Inativo', cls: operational.autoChargeActive ? 'text-blue-300' : 'text-slate-500' },
-              { label: 'Ultima execucao', value: operational.lastAutoExecution || 'Nunca executada', cls: 'text-slate-50' },
-              { label: 'Proxima janela', value: operational.nextRunHint || 'Automacao inativa', cls: 'text-slate-50' },
-            ].map((row) => (
-              <div key={row.label} className="rounded-2xl bg-slate-800/40 px-4 py-3">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{row.label}</p>
-                <p className={`mt-1.5 text-sm font-semibold ${row.cls}`}>{row.value}</p>
-              </div>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="grid grid-cols-1 gap-5">
-        <article className="accent-bar surface-card rounded-[28px] p-6">
-          <SectionHeader title="Leituras operacionais" subtitle="Sinais rapidos para operacao e venda do SaaS." badge={operational.recentAuditAction || 'Sem atividade recente'} />
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            {[
-              { label: 'Cobertura de contato', desc: 'Use a taxa com telefone para medir a prontidao real da carteira para cobranca.', icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-900/20' },
-              { label: 'Modo teste', desc: operational.whatsappMockMode ? 'WhatsApp em mock ativo para validar o fluxo sem custo real.' : 'Ambiente preparado para ativar o provedor real depois.', icon: Zap, color: operational.whatsappMockMode ? 'text-amber-400' : 'text-slate-500', bg: operational.whatsappMockMode ? 'bg-amber-500/10' : 'bg-slate-800/40' },
-              { label: 'Leitura multiempresa', desc: 'Voce esta em modo global com visao consolidada de todas as empresas, ou no escopo isolado de uma.', icon: BarChart3, color: 'text-blue-600', bg: 'bg-blue-900/20' },
-            ].map(({ label, desc, icon: Icon, color, bg }) => (
-              <div key={label} className="rounded-2xl border border-slate-700 bg-slate-800/40 p-4">
-                <div className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl ${bg}`}>
-                  <Icon size={18} className={color} />
-                </div>
-                <p className="text-sm font-semibold text-slate-50">{label}</p>
-                <p className="mt-1 text-xs leading-relaxed text-slate-500">{desc}</p>
-              </div>
-            ))}
-          </div>
-        </article>
-      </section>
     </div>
   );
 }
