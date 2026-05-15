@@ -802,10 +802,6 @@ export const financeService = {
           data_vencimento: clone.data_vencimento,
           valor: clone.valor,
         });
-        // [DEBUG-DOC] non-PII: confirm documento/numero_boleto saved
-        if (import.meta.env.DEV) {
-          console.debug('[insertRegistros] doc=%s boleto=%s', clone.documento || '(empty)', clone.numero_boleto || '(empty)');
-        }
         return clone;
       });
 
@@ -1227,10 +1223,6 @@ export const financeService = {
       liquidadoEm: null,
     }));
 
-    // [DEBUG-DOC] non-PII: confirm documento resolved before insert
-    if (import.meta.env.DEV) {
-      payload.forEach((r, i) => console.debug('[importSelectedRows] row=%d doc=%s boleto=%s', i, r.documento || '(empty)', r.numeroBoleto || '(empty)'));
-    }
     const inserted = await this.insertRegistros(payload, {
       userId: tenant.userId,
       companyId: tenant.companyId,

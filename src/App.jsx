@@ -14,6 +14,7 @@ import { createNotification, syncTrialEndingNotification } from './services/noti
 import { getPlans, getUsageLimits } from './services/subscriptionService';
 import { incrementUsage } from './services/usageService';
 import { financeService, sanitizeSpreadsheetCell } from './services/financeService.ts';
+import { buildImportCompletionFeedback } from './utils/importFeedback.js';
 import { buildFinancialExportRows } from './utils/financialExport.js';
 import { sendSingleCharge } from './services/billingAutomationService';
 import { createStripeCheckoutSession, createStripePortalSession } from './services/billingService';
@@ -799,8 +800,13 @@ export default function App() {
         tipo: importType,
         companyName: currentCompanyName,
       });
-      const importedCount = Array.isArray(importResult?.imported) ? importResult.imported.length : selectedRows.length;
+      const importedCount = Array.isArray(importResult?.imported) ? importResult.imported.length : 0;
       const skippedDuplicates = Number(importResult?.skippedDuplicates || 0);
+      const importFeedback = buildImportCompletionFeedback({
+        importedCount,
+        skippedDuplicates,
+        fileName: preview.fileName,
+      });
       await auditLog.importConfirmed(currentCompanyId, {
         arquivo: preview.fileName,
         registros: importedCount,
@@ -812,9 +818,7 @@ export default function App() {
         await createNotification(currentCompanyId, {
           type: 'import_completed',
           title: 'Importacao concluida',
-          message: importedCount > 0
-            ? `${importedCount} registro(s) foram confirmados no lote ${preview.fileName || 'sem nome'}${skippedDuplicates ? ` e ${skippedDuplicates} duplicado(s) foram ignorado(s).` : '.'}`
-            : `Nenhum novo registro foi inserido no lote ${preview.fileName || 'sem nome'} porque todos os itens ja existiam na carteira.`,
+          message: importFeedback.notificationMessage,
           severity: 'success',
           metadata: {
             import_type: importType,
@@ -830,13 +834,7 @@ export default function App() {
       setSelectedFile(null);
       await refreshAllData();
       setActiveTab(importType === 'liquidacao' ? 'historico' : 'visao-geral');
-      if (importedCount > 0) {
-        showToast('sucesso', skippedDuplicates
-          ? `${importedCount} registro(s) importado(s) e ${skippedDuplicates} duplicado(s) ignorado(s).`
-          : `${importedCount} registro(s) importado(s) com sucesso.`);
-      } else {
-        showToast('sucesso', 'Nenhum novo registro foi inserido porque o lote continha apenas duplicatas ja existentes.');
-      }
+      showToast('sucesso', importFeedback.toastMessage);
     } catch (error) {
       console.error('[IMPORT] erro', error);
       showToast('erro', error.message || 'Nao foi possivel importar os registros selecionados.');

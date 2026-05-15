@@ -2,6 +2,7 @@ import { AlertTriangle, ArrowRightCircle, BadgeDollarSign, MessageCircleMore, Ph
 import { useEffect, useMemo, useState } from 'react';
 import { GLOBAL_COMPANY_ID } from '../services/companyService';
 import { financeService } from '../services/financeService.ts';
+import { deriveCobrancaIndicatorMetrics, EMPTY_COBRANCA_DASHBOARD_META, normalizeCobrancaDashboardMeta } from '../utils/cobrancaIndicators.js';
 import { formatCurrencyBRL } from '../utils/format';
 
 function DashboardCard({ title, value, tone = 'slate', subtitle = '', badges = [], action = null }) {
@@ -39,8 +40,6 @@ function DashboardCard({ title, value, tone = 'slate', subtitle = '', badges = [
   );
 }
 
-const isRowOpen = (row) => String(row.status || '').trim().toLowerCase() !== 'liquidado';
-
 export default function CobrancaIndicators({
   rows = [],
   companyId = null,
@@ -48,13 +47,7 @@ export default function CobrancaIndicators({
   userId = null,
   companyCount = 0,
 }) {
-  const [meta, setMeta] = useState({
-    totalWhatsAppCharges: 0,
-    manualWhatsAppCharges: 0,
-    autoWhatsAppCharges: 0,
-    autoChargeActive: false,
-    activeAutoConfigsCount: 0,
-  });
+  const [meta, setMeta] = useState(EMPTY_COBRANCA_DASHBOARD_META);
   const [metaError, setMetaError] = useState('');
 
   useEffect(() => {
@@ -64,13 +57,7 @@ export default function CobrancaIndicators({
     const loadMeta = async () => {
       if (!queryCompanyId && !globalMode) {
         if (active) {
-          setMeta({
-            totalWhatsAppCharges: 0,
-            manualWhatsAppCharges: 0,
-            autoWhatsAppCharges: 0,
-            autoChargeActive: false,
-            activeAutoConfigsCount: 0,
-          });
+          setMeta(EMPTY_COBRANCA_DASHBOARD_META);
           setMetaError('');
         }
         return;
@@ -82,11 +69,12 @@ export default function CobrancaIndicators({
           userId,
         });
         if (active) {
-          setMeta(nextMeta);
+          setMeta(normalizeCobrancaDashboardMeta(nextMeta));
           setMetaError('');
         }
       } catch (err) {
         if (active) {
+          setMeta(EMPTY_COBRANCA_DASHBOARD_META);
           setMetaError(err.message || 'Falha ao carregar indicadores de cobranca.');
         }
       }
@@ -106,27 +94,13 @@ export default function CobrancaIndicators({
   }, [companyId, globalMode, userId]);
 
   const indicators = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
-    const openRows = rows.filter(isRowOpen);
-    const overdueRows = openRows.filter((row) => String(row.dataVencimento || '') < today);
-    const futureRows = openRows.filter((row) => String(row.dataVencimento || '') >= today);
-    const eligibleChargeRows = overdueRows.filter((row) => String(row.telefone || '').trim());
-    const olderThanFiveDays = overdueRows.filter((row) => {
-      const dueDate = new Date(`${row.dataVencimento}T00:00:00`);
-      if (Number.isNaN(dueDate.getTime())) return false;
-      const diff = Math.floor((Date.now() - dueDate.getTime()) / 86400000);
-      return diff > 5;
-    });
-
     return {
-      totalVencido: overdueRows.reduce((sum, row) => sum + Number(row.valorAtualizado || row.valor || 0), 0),
-      totalAVencer: futureRows.reduce((sum, row) => sum + Number(row.valorAtualizado || row.valor || 0), 0),
-      valorPotencial: eligibleChargeRows.reduce((sum, row) => sum + Number(row.valorAtualizado || row.valor || 0), 0),
-      clientesSemTelefone: overdueRows.filter((row) => !String(row.telefone || '').trim()).length,
-      titulosProtesto: olderThanFiveDays.length,
-      totalEmpresas: companyCount,
+      ...deriveCobrancaIndicatorMetrics(rows),
+      totalEmpresas: Number(companyCount || 0),
     };
   }, [companyCount, rows]);
+
+  const isEmptyState = !metaError && !rows.length && meta.totalWhatsAppCharges === 0;
 
   return (
     <section className="space-y-3">
@@ -147,6 +121,12 @@ export default function CobrancaIndicators({
       {metaError ? (
         <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
           {metaError}
+        </div>
+      ) : null}
+
+      {isEmptyState ? (
+        <div className="rounded-xl border border-dashed border-slate-700/70 bg-slate-900/35 px-4 py-3 text-sm text-slate-400">
+          Nenhum dado de cobranca encontrado ainda. Os cards permanecem operacionais com zero, sem quebrar KPIs ou graficos.
         </div>
       ) : null}
 
