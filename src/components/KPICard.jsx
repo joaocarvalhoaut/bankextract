@@ -5,8 +5,8 @@ const toneMap = {
   green: {
     accent:   'text-cyan-300',
     bar:      'from-blue-500 to-cyan-400',
-    surface:  'bg-blue-900/200/10',
-    badge:    'border-blue-500/20 bg-blue-900/200/10 text-cyan-200',
+    surface:  'bg-blue-900/10',
+    badge:    'border-blue-500/20 bg-blue-900/10 text-cyan-200',
     dot:      'bg-cyan-400',
   },
   red: {
@@ -19,8 +19,8 @@ const toneMap = {
   blue: {
     accent:   'text-cyan-300',
     bar:      'from-blue-500 to-cyan-400',
-    surface:  'bg-blue-900/200/10',
-    badge:    'border-blue-500/20 bg-blue-900/200/10 text-blue-100',
+    surface:  'bg-blue-900/10',
+    badge:    'border-blue-500/20 bg-blue-900/10 text-blue-100',
     dot:      'bg-blue-600',
   },
   gold: {

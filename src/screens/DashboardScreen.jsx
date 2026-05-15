@@ -53,12 +53,12 @@ function MiniBars({ items = [] }) {
 function StatusPill({ active, label, tone = 'blue' }) {
   const toneClass =
     tone === 'amber'
-      ? 'border-amber-200 bg-amber-50 text-amber-700'
+      ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
       : tone === 'blue'
-        ? 'border-blue-700/40 bg-blue-900/20 text-blue-700'
-        : 'border-blue-700/40 bg-blue-900/20 text-blue-700';
+        ? 'border-blue-500/30 bg-blue-900/20 text-blue-300'
+        : 'border-blue-500/30 bg-blue-900/20 text-blue-300';
 
-  const dotClass = tone === 'amber' ? 'bg-amber-500' : tone === 'blue' ? 'bg-blue-900/200' : 'bg-cyan-500';
+  const dotClass = tone === 'amber' ? 'bg-amber-400' : tone === 'blue' ? 'bg-blue-500' : 'bg-cyan-500';
 
   return (
     <span
@@ -97,8 +97,8 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
   if (errorMessage) {
     return (
       <div className="surface-card flex flex-col items-center justify-center rounded-[32px] p-16 text-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-amber-50">
-          <Activity size={28} className="text-amber-500" />
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-amber-500/10">
+          <Activity size={28} className="text-amber-400" />
         </div>
         <h3 className="text-xl font-bold tracking-tight text-slate-50">Nao foi possivel carregar o dashboard</h3>
         <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-300">{errorMessage}</p>
@@ -262,7 +262,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
               onNavigate ? (
                 <button
                   onClick={() => onNavigate('onboarding')}
-                  className="flex items-center gap-1.5 rounded-xl border border-blue-700/40 bg-blue-900/20 px-3 py-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+                  className="flex items-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-900/20 px-3 py-1.5 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-900/30"
                 >
                   Abrir onboarding <ArrowRight size={12} />
                 </button>
@@ -272,7 +272,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
           {(onboarding?.steps || []).length ? (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {(onboarding.steps || []).slice(0, 4).map((step) => (
-                <div key={step.id} className={`rounded-2xl border p-4 ${step.done ? 'border-emerald-200 bg-emerald-50/70' : 'border-slate-700 bg-slate-800/40'}`}>
+                <div key={step.id} className={`rounded-2xl border p-4 ${step.done ? 'border-emerald-500/20 bg-emerald-500/10' : 'border-slate-700 bg-slate-800/40'}`}>
                   <div className="flex items-start gap-3">
                     <div className={`flex h-9 w-9 items-center justify-center rounded-2xl ${step.done ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-400'}`}>
                       <ListChecks size={16} />
@@ -327,7 +327,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
               onNavigate ? (
                 <button
                   onClick={() => onNavigate('audit')}
-                  className="flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100"
+                  className="flex items-center gap-1.5 rounded-xl border border-violet-500/30 bg-violet-900/20 px-3 py-1.5 text-xs font-semibold text-violet-300 transition-colors hover:bg-violet-900/30"
                 >
                   Ver auditoria completa <ArrowRight size={12} />
                 </button>
@@ -364,7 +364,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
           <SectionHeader title="Cobranca WhatsApp" subtitle="Status do agendador automatico." />
           <div className="space-y-3">
             {[
-              { label: 'Status', value: operational.autoChargeActive ? 'Ativo' : 'Inativo', cls: operational.autoChargeActive ? 'text-blue-700' : 'text-slate-500' },
+              { label: 'Status', value: operational.autoChargeActive ? 'Ativo' : 'Inativo', cls: operational.autoChargeActive ? 'text-blue-300' : 'text-slate-500' },
               { label: 'Ultima execucao', value: operational.lastAutoExecution || 'Nunca executada', cls: 'text-slate-50' },
               { label: 'Proxima janela', value: operational.nextRunHint || 'Automacao inativa', cls: 'text-slate-50' },
             ].map((row) => (
@@ -383,7 +383,7 @@ export default function DashboardScreen({ metrics, errorMessage = '', onRetry, c
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             {[
               { label: 'Cobertura de contato', desc: 'Use a taxa com telefone para medir a prontidao real da carteira para cobranca.', icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-900/20' },
-              { label: 'Modo teste', desc: operational.whatsappMockMode ? 'WhatsApp em mock ativo para validar o fluxo sem custo real.' : 'Ambiente preparado para ativar o provedor real depois.', icon: Zap, color: operational.whatsappMockMode ? 'text-amber-600' : 'text-slate-500', bg: operational.whatsappMockMode ? 'bg-amber-50' : 'bg-slate-800/40' },
+              { label: 'Modo teste', desc: operational.whatsappMockMode ? 'WhatsApp em mock ativo para validar o fluxo sem custo real.' : 'Ambiente preparado para ativar o provedor real depois.', icon: Zap, color: operational.whatsappMockMode ? 'text-amber-400' : 'text-slate-500', bg: operational.whatsappMockMode ? 'bg-amber-500/10' : 'bg-slate-800/40' },
               { label: 'Leitura multiempresa', desc: 'Voce esta em modo global com visao consolidada de todas as empresas, ou no escopo isolado de uma.', icon: BarChart3, color: 'text-blue-600', bg: 'bg-blue-900/20' },
             ].map(({ label, desc, icon: Icon, color, bg }) => (
               <div key={label} className="rounded-2xl border border-slate-700 bg-slate-800/40 p-4">
