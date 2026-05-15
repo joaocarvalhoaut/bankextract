@@ -368,10 +368,27 @@ export default function DashboardScreen({
       <ConsoleStatusBar operational={operational} />
 
       {/* 2 ─ KPI strip */}
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+      {/*
+        auto-fit + minmax(160px, 1fr):
+        – each card is at least 160 px wide (comfortably fits 20 px mono values)
+        – on narrow viewports cards drop to 2 or 3 per row automatically
+        – on wide viewports all 5 cards stretch to fill evenly
+        – no card can ever be squeezed below 160 px
+      */}
+      <section
+        className="grid gap-3"
+        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}
+      >
         {(metrics.kpis || []).slice(0, 5).map((item, idx) => (
           <div key={item.title} className={`min-w-0 stagger-${Math.min(idx + 1, 6)}`}>
-            <KPICard title={item.title} value={item.value} hint={item.hint} tone={item.tone} />
+            <KPICard
+              title={item.title}
+              value={item.value}
+              hint={item.hint}
+              tone={item.tone}
+              trend={item.trend ?? null}
+              badge={item.badge ?? null}
+            />
           </div>
         ))}
       </section>
