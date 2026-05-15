@@ -5,20 +5,20 @@ import { formatCurrencyBRL } from '../utils/format';
 import { canUserPerformAction } from '../security/permissions';
 
 const statusTone = {
-  pendente: 'bg-slate-800/60 text-slate-200 ring-slate-700',
-  queued: 'bg-amber-50 text-amber-700 ring-amber-200',
-  sent: 'bg-blue-900/20 text-blue-700 ring-blue-200',
-  delivered: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  read: 'bg-violet-50 text-violet-700 ring-violet-200',
-  failed: 'bg-red-50 text-red-700 ring-red-200',
-  simulated: 'bg-slate-800/60 text-slate-200 ring-slate-700',
-  'sem telefone': 'bg-amber-50 text-amber-700 ring-amber-200',
+  pendente:      'bg-slate-800/40 text-slate-300 ring-slate-700/60',
+  queued:        'bg-amber-500/10 text-amber-300 ring-amber-500/25',
+  sent:          'bg-blue-500/10 text-blue-300 ring-blue-500/25',
+  delivered:     'bg-emerald-500/10 text-emerald-300 ring-emerald-500/25',
+  read:          'bg-violet-500/10 text-violet-300 ring-violet-500/25',
+  failed:        'bg-red-500/10 text-red-300 ring-red-500/25',
+  simulated:     'bg-slate-800/40 text-slate-300 ring-slate-700/60',
+  'sem telefone':'bg-amber-500/10 text-amber-300 ring-amber-500/25',
 };
 
 const statusMeta = {
   pendente: { label: 'Pendente', dot: 'bg-slate-400' },
   queued: { label: '🟡 fila', dot: 'bg-amber-400' },
-  sent: { label: '🔵 enviada', dot: 'bg-blue-900/200' },
+  sent: { label: '🔵 enviada', dot: 'bg-blue-400' },
   delivered: { label: '🟢 entregue', dot: 'bg-emerald-500' },
   read: { label: '👁 lida', dot: 'bg-violet-500' },
   failed: { label: '🔴 falhou', dot: 'bg-red-500' },
@@ -91,7 +91,7 @@ export default function CobrancasScreen({
     {
       key: 'valor',
       label: 'Valor',
-      render: (row) => <span className="font-semibold text-slate-50">{formatCurrencyBRL(row.valor)}</span>,
+      render: (row) => <span className="font-mono tabular-nums font-semibold text-slate-50">{formatCurrencyBRL(row.valor)}</span>,
     },
     {
       key: 'telefone',
@@ -166,9 +166,9 @@ export default function CobrancasScreen({
 
   const stats = [
     { label: 'Cobrancas pendentes', value: pending, color: 'text-slate-50', bar: 'from-slate-400 to-slate-500', Icon: PhoneOff },
-    { label: 'Com telefone', value: rows.length - withoutPhone, color: 'text-emerald-700', bar: 'from-emerald-400 to-emerald-600', Icon: PhoneCall },
-    { label: 'Sem telefone', value: withoutPhone, color: 'text-amber-700', bar: 'from-amber-400 to-orange-400', Icon: PhoneOff },
-    { label: 'Mensagens enviadas', value: sent, color: 'text-blue-700', bar: 'from-blue-400 to-blue-600', Icon: Eye },
+    { label: 'Com telefone', value: rows.length - withoutPhone, color: 'text-emerald-300', bar: 'from-emerald-400 to-emerald-600', Icon: PhoneCall },
+    { label: 'Sem telefone', value: withoutPhone, color: 'text-amber-300', bar: 'from-amber-400 to-orange-400', Icon: PhoneOff },
+    { label: 'Mensagens enviadas', value: sent, color: 'text-blue-300', bar: 'from-blue-400 to-blue-600', Icon: Eye },
   ];
 
   return (
@@ -177,7 +177,7 @@ export default function CobrancasScreen({
         {stats.map(({ label, value, color, bar, Icon }) => (
           <article
             key={label}
-            className="relative overflow-hidden rounded-[28px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card"
+            className="relative overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900/60 p-5 shadow-card"
           >
             <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${bar} opacity-70`} />
             <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-slate-800/40 text-slate-500">
@@ -189,10 +189,10 @@ export default function CobrancasScreen({
         ))}
       </section>
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-6 shadow-card">
         <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-700">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-300">
               <PhoneOff size={22} />
             </div>
             <div>
@@ -236,11 +236,11 @@ export default function CobrancasScreen({
             </div>
 
             {simulationMode ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-300">
                 Simulacao ativa — nenhuma mensagem real sera enviada.
               </div>
             ) : (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-2.5 text-sm text-emerald-300">
                 Envio real ativo — os envios individuais chamarao a Edge Function com simulate: false.
               </div>
             )}

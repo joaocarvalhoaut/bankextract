@@ -22,14 +22,14 @@ import { formatCurrencyBRL, formatDateBR, formatDateTimeBR } from '../utils/form
 function HistoryCard({ label, value, tone = 'slate' }) {
   const palette = {
     slate: 'from-slate-400 to-slate-500 text-slate-50',
-    emerald: 'from-emerald-400 to-emerald-600 text-emerald-700',
-    blue: 'from-blue-400 to-blue-600 text-blue-700',
-    amber: 'from-amber-400 to-orange-400 text-amber-700',
-    red: 'from-red-400 to-red-600 text-red-700',
+    emerald: 'from-emerald-400 to-emerald-600 text-emerald-300',
+    blue: 'from-blue-400 to-blue-600 text-blue-300',
+    amber: 'from-amber-400 to-orange-400 text-amber-300',
+    red: 'from-red-400 to-red-600 text-red-300',
   };
 
   return (
-    <article className="relative overflow-hidden rounded-[24px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
+    <article className="relative overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900/60 p-5 shadow-card">
       <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${palette[tone]?.split(' text-')[0] || 'from-slate-400 to-slate-500'} opacity-80`} />
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
       <p className={`mt-2 text-3xl font-semibold ${palette[tone]?.split(' ').pop() || 'text-slate-50'}`}>{value}</p>
@@ -48,10 +48,10 @@ function FilterField({ label, children }) {
 
 function statusTone(status) {
   const normalized = String(status || 'pendente').toLowerCase();
-  if (['sucesso', 'sucesso_simulado', 'simulado'].includes(normalized)) return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
-  if (normalized === 'erro') return 'bg-red-50 text-red-700 ring-red-200';
-  if (normalized === 'ignorado') return 'bg-amber-50 text-amber-700 ring-amber-200';
-  return 'bg-slate-800/60 text-slate-200 ring-slate-700';
+  if (['sucesso', 'sucesso_simulado', 'simulado'].includes(normalized)) return 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/25';
+  if (normalized === 'erro') return 'bg-red-500/10 text-red-300 ring-red-500/25';
+  if (normalized === 'ignorado') return 'bg-amber-500/10 text-amber-300 ring-amber-500/25';
+  return 'bg-slate-800/40 text-slate-300 ring-slate-700/60';
 }
 
 function getPayloadMessage(payload) {
@@ -297,7 +297,7 @@ export default function HistoricoCobrancaScreen({
     {
       key: 'valor',
       label: 'Valor',
-      render: (row) => <span className="font-semibold text-slate-50">{formatCurrencyBRL(row.valor || 0)}</span>,
+      render: (row) => <span className="font-mono tabular-nums font-semibold text-slate-50">{formatCurrencyBRL(row.valor || 0)}</span>,
     },
     {
       key: 'tipo_cobranca',
@@ -376,12 +376,12 @@ export default function HistoricoCobrancaScreen({
 
   if (globalMode || !resolvedCompanyId) {
     return (
-      <section className="rounded-[28px] border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800 shadow-soft">
+      <section className="rounded-2xl border border-amber-500/25 bg-amber-500/10 p-6 text-sm text-amber-300">
         <div className="flex items-start gap-3">
           <ShieldAlert className="mt-0.5" size={18} />
           <div>
             <p className="font-semibold">Selecione uma empresa especifica</p>
-            <p className="mt-1 text-xs text-amber-700">
+            <p className="mt-1 text-xs text-amber-400">
               O historico de cobrancas trabalha por empresa para manter isolamento por company_id.
             </p>
           </div>
@@ -392,10 +392,10 @@ export default function HistoricoCobrancaScreen({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-6 shadow-card">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-blue-700/40 bg-blue-900/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
+            <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/25 bg-blue-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.10em] text-blue-300">
               <FileSpreadsheet size={13} />
               Historico de cobrancas
             </div>
@@ -438,7 +438,7 @@ export default function HistoricoCobrancaScreen({
         <HistoryCard label="Resolvidos" value={cards.resolvidos || 0} tone="slate" />
       </section>
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-6 shadow-card">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <FilterField label="Data inicial">
             <input type="date" value={filters.date_from} onChange={(e) => setFilters((prev) => ({ ...prev, date_from: e.target.value }))} className="input-premium w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-50 outline-none focus:ring-2 focus:ring-emerald-500" />
@@ -489,14 +489,14 @@ export default function HistoricoCobrancaScreen({
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-6 shadow-card">
         <DataTable
           columns={columns}
           rows={items}
           emptyTitle="Nenhum log de cobranca encontrado."
           emptyDescription="Assim que houver simulacoes ou eventos registrados, eles aparecerao aqui para auditoria."
         />
-        <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-4 flex flex-col gap-3 border-t border-slate-700/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-slate-500">
             Mostrando {items.length} de {pagination.total || 0} registros filtrados.
           </p>
@@ -526,8 +526,8 @@ export default function HistoricoCobrancaScreen({
 
       {detailsRow ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-[32px] border border-slate-700 bg-slate-900/60 shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-700/80 bg-[#0d1b2e] shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-700/60 px-6 py-5">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Detalhes do log</p>
                 <h3 className="mt-2 text-2xl font-semibold text-slate-50">{detailsRow.cliente_nome || 'Cliente'}</h3>
@@ -561,17 +561,17 @@ export default function HistoricoCobrancaScreen({
               </div>
               <div className="space-y-4">
                 {payloadMessage ? (
-                  <div className="rounded-[24px] border border-emerald-200 bg-emerald-50/70 p-5">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Mensagem gerada</p>
-                    <pre className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-emerald-950">{payloadMessage}</pre>
+                  <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.10em] text-emerald-400">Mensagem gerada</p>
+                    <pre className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-emerald-200">{payloadMessage}</pre>
                   </div>
                 ) : (
-                  <div className="rounded-[24px] border border-amber-200 bg-amber-50/80 p-5 text-sm text-amber-800">
+                  <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-5 text-sm text-amber-300">
                     <div className="flex items-start gap-2">
                       <AlertCircle size={16} className="mt-0.5" />
                       <div>
                         <p className="font-semibold">Payload sem mensagem destacada</p>
-                        <p className="mt-1 text-xs text-amber-700">Este log nao possui mensagem gerada no payload. Veja o JSON completo abaixo.</p>
+                        <p className="mt-1 text-xs text-amber-400">Este log nao possui mensagem gerada no payload. Veja o JSON completo abaixo.</p>
                       </div>
                     </div>
                   </div>
@@ -584,7 +584,7 @@ export default function HistoricoCobrancaScreen({
                 </div>
               </div>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 px-6 py-4">
+            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-700/60 px-6 py-4">
               <button
                 type="button"
                 onClick={async () => {

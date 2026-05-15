@@ -8,9 +8,9 @@ const typeLabel = {
 };
 
 const statusTone = {
-  importado: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  processado: 'bg-blue-900/20 text-blue-700 ring-blue-200',
-  erro: 'bg-red-50 text-red-700 ring-red-200',
+  importado: 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/25',
+  processado: 'bg-blue-500/10 text-blue-300 ring-blue-500/25',
+  erro: 'bg-red-500/10 text-red-300 ring-red-500/25',
 };
 
 export default function HistoricoScreen({
@@ -23,7 +23,11 @@ export default function HistoricoScreen({
     {
       key: 'created_at',
       label: 'Data',
-      render: (row) => <span className="text-slate-300">{formatDateTimeBR(row.created_at)}</span>,
+      render: (row) => (
+        <span className="font-mono tabular-nums text-slate-400">
+          {formatDateTimeBR(row.created_at)}
+        </span>
+      ),
     },
     {
       key: 'empresa_nome',
@@ -34,7 +38,7 @@ export default function HistoricoScreen({
       key: 'tipo',
       label: 'Tipo',
       render: (row) => (
-        <span className="inline-flex rounded-lg bg-slate-800/60 px-2 py-0.5 text-xs font-semibold text-slate-300">
+        <span className="inline-flex rounded-lg border border-slate-700/60 bg-slate-800/40 px-2 py-0.5 text-xs font-semibold text-slate-300">
           {typeLabel[row.tipo] || row.tipo}
         </span>
       ),
@@ -42,30 +46,42 @@ export default function HistoricoScreen({
     {
       key: 'arquivo',
       label: 'Arquivo',
-      render: (row) => <span className="max-w-[140px] truncate text-slate-300">{row.arquivo}</span>,
+      render: (row) => (
+        <span className="max-w-[140px] truncate font-mono text-xs text-slate-400">
+          {row.arquivo}
+        </span>
+      ),
     },
     {
       key: 'quantidade_registros',
       label: 'Qtd.',
-      render: (row) => <span className="font-semibold text-slate-50">{row.quantidade_registros}</span>,
+      render: (row) => (
+        <span className="font-mono tabular-nums font-semibold text-slate-50">
+          {row.quantidade_registros}
+        </span>
+      ),
     },
     {
       key: 'valor_total',
       label: 'Valor total',
-      render: (row) => <span className="font-semibold text-slate-50">{formatCurrencyBRL(row.valor_total)}</span>,
+      render: (row) => (
+        <span className="font-mono tabular-nums font-semibold text-slate-50">
+          {formatCurrencyBRL(row.valor_total)}
+        </span>
+      ),
     },
     {
       key: 'status',
       label: 'Status',
       render: (row) => (
         <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
-            statusTone[row.status] || 'bg-slate-800/60 text-slate-200 ring-slate-700'
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${
+            statusTone[row.status] || 'bg-slate-800/60 text-slate-300 ring-slate-700'
           }`}
         >
           <span
             className={`h-1.5 w-1.5 rounded-full ${
-              row.status === 'importado' ? 'bg-emerald-500' : row.status === 'erro' ? 'bg-red-400' : 'bg-blue-400'
+              row.status === 'importado' ? 'bg-emerald-400' : row.status === 'erro' ? 'bg-red-400' : 'bg-blue-400'
             }`}
           />
           {row.status}
@@ -80,15 +96,15 @@ export default function HistoricoScreen({
           <button
             type="button"
             onClick={() => onViewBatch(row)}
-            className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-800/40 active:scale-[0.98]"
+            className="inline-flex items-center gap-1 rounded-xl border border-slate-700/80 bg-slate-800/40 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-slate-700/60 hover:text-slate-100 active:scale-[0.98]"
           >
             <Eye size={12} />
-            Visualizar lote
+            Ver lote
           </button>
           <button
             type="button"
             onClick={() => onDeleteItem(row)}
-            className="inline-flex items-center gap-1 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 active:scale-[0.98]"
+            className="inline-flex items-center gap-1 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-300 transition hover:bg-red-500/20 active:scale-[0.98]"
           >
             <Trash2 size={12} />
             Excluir
@@ -100,27 +116,27 @@ export default function HistoricoScreen({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-6 shadow-card">
         <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-slate-900 text-white">
-            <FileStack size={22} />
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-800/60 text-slate-400">
+            <FileStack size={18} />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-slate-50">Historico de importacoes</h3>
+            <h3 className="text-base font-semibold text-slate-50">Historico de importacoes</h3>
             <p className="text-sm text-slate-500">
               Cada lote e identificado por{' '}
-              <code className="rounded bg-slate-800/60 px-1 py-0.5 font-mono text-xs text-slate-200">batch_id</code>.
+              <code className="rounded bg-slate-800/60 px-1 py-0.5 font-mono text-xs text-slate-300">batch_id</code>.
               Exclusoes respeitam{' '}
-              <code className="rounded bg-slate-800/60 px-1 py-0.5 font-mono text-xs text-slate-200">company_id</code>.
+              <code className="rounded bg-slate-800/60 px-1 py-0.5 font-mono text-xs text-slate-300">company_id</code>.
             </p>
           </div>
           {onOpenDataLogs ? (
             <button
               type="button"
               onClick={onOpenDataLogs}
-              className="ml-auto inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800/60"
+              className="ml-auto inline-flex items-center gap-2 rounded-xl border border-slate-700/80 bg-slate-800/40 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-700/60"
             >
-              <FileSearch size={14} />
+              <FileSearch size={13} />
               Logs de Dados
             </button>
           ) : null}

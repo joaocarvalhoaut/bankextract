@@ -29,15 +29,15 @@ const IGNORED_PREFIX = 'bankextract_ignored_inconsistencies_';
 
 function InconsistencyCard({ label, value, tone = 'slate' }) {
   const palette = {
-    slate: 'from-slate-400 to-slate-500 text-slate-50',
-    emerald: 'from-emerald-400 to-emerald-600 text-emerald-700',
-    blue: 'from-blue-400 to-blue-600 text-blue-700',
-    amber: 'from-amber-400 to-orange-400 text-amber-700',
-    red: 'from-red-400 to-red-600 text-red-700',
+    slate:  'from-slate-400 to-slate-500 text-slate-50',
+    emerald:'from-emerald-400 to-emerald-600 text-emerald-300',
+    blue:   'from-blue-400 to-blue-600 text-blue-300',
+    amber:  'from-amber-400 to-orange-400 text-amber-300',
+    red:    'from-red-400 to-red-600 text-red-300',
   };
 
   return (
-    <article className="relative overflow-hidden rounded-[24px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
+    <article className="relative overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900/60 p-5 shadow-card">
       <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${palette[tone]?.split(' text-')[0] || 'from-slate-400 to-slate-500'} opacity-80`} />
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
       <p className={`mt-2 text-3xl font-semibold ${palette[tone]?.split(' ').pop() || 'text-slate-50'}`}>{value}</p>
@@ -55,9 +55,9 @@ function FilterField({ label, children }) {
 }
 
 function severityTone(level) {
-  if (level === 'alta') return 'bg-red-50 text-red-700 ring-red-200';
-  if (level === 'media') return 'bg-amber-50 text-amber-700 ring-amber-200';
-  return 'bg-slate-800/60 text-slate-200 ring-slate-700';
+  if (level === 'alta') return 'bg-red-500/10 text-red-300 ring-red-500/25';
+  if (level === 'media') return 'bg-amber-500/10 text-amber-300 ring-amber-500/25';
+  return 'bg-slate-800/40 text-slate-300 ring-slate-700/60';
 }
 
 function readIgnored(companyId) {
@@ -365,7 +365,7 @@ export default function InconsistenciasCobrancaScreen({
             type="button"
             disabled={!canManageCharges || Boolean(runningAction)}
             onClick={() => runStatusAction(row, 'pendente', 'Registro marcado como pendente.')}
-            className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50"
           >
             {runningAction === `pendente-${row.id}` ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
             Marcar como pendente
@@ -374,7 +374,7 @@ export default function InconsistenciasCobrancaScreen({
             type="button"
             disabled={!canManageCharges || Boolean(runningAction)}
             onClick={() => runStatusAction(row, 'suspenso', 'Registro marcado como suspenso.')}
-            className="inline-flex items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-50"
           >
             {runningAction === `suspenso-${row.id}` ? <Loader2 size={12} className="animate-spin" /> : <AlertCircle size={12} />}
             Marcar como suspenso
@@ -393,12 +393,12 @@ export default function InconsistenciasCobrancaScreen({
 
   if (globalMode || !resolvedCompanyId) {
     return (
-      <section className="rounded-[28px] border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800 shadow-soft">
+      <section className="rounded-2xl border border-amber-500/25 bg-amber-500/10 p-6 text-sm text-amber-300">
         <div className="flex items-start gap-3">
           <ShieldAlert className="mt-0.5" size={18} />
           <div>
             <p className="font-semibold">Selecione uma empresa especifica</p>
-            <p className="mt-1 text-xs text-amber-700">
+            <p className="mt-1 text-xs text-amber-400">
               O painel de inconsistencias funciona por empresa para manter isolamento por company_id.
             </p>
           </div>
@@ -409,10 +409,10 @@ export default function InconsistenciasCobrancaScreen({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-6 shadow-card">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-red-700">
+            <div className="inline-flex items-center gap-2 rounded-full border border-red-500/25 bg-red-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.10em] text-red-300">
               <AlertCircle size={13} />
               Inconsistencias de cobranca
             </div>
@@ -444,7 +444,7 @@ export default function InconsistenciasCobrancaScreen({
         <InconsistencyCard label="Suspensos" value={cards.suspensos || 0} tone="slate" />
       </section>
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-6 shadow-card">
         <div className="mb-4 flex items-center justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-blue-700/40 bg-blue-900/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-300">
@@ -512,7 +512,7 @@ export default function InconsistenciasCobrancaScreen({
         ) : null}
       </section>
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-6 shadow-card">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
           <FilterField label="Cliente">
             <input
@@ -597,7 +597,7 @@ export default function InconsistenciasCobrancaScreen({
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-6 shadow-card">
         <DataTable
           columns={columns}
           rows={items}
@@ -608,8 +608,8 @@ export default function InconsistenciasCobrancaScreen({
 
       {phoneModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
-          <div className="w-full max-w-lg overflow-hidden rounded-[32px] border border-slate-700 bg-slate-900/60 shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-700/80 bg-[#0d1b2e] shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-700/60 px-6 py-5">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Editar telefone</p>
                 <h3 className="mt-2 text-2xl font-semibold text-slate-50">{phoneModal.nome || 'Cliente'}</h3>
@@ -637,7 +637,7 @@ export default function InconsistenciasCobrancaScreen({
                 O telefone será salvo no registro financeiro da empresa ativa respeitando o company_id atual.
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4">
+            <div className="flex items-center justify-end gap-3 border-t border-slate-700/60 px-6 py-4">
               <button
                 type="button"
                 onClick={() => setPhoneModal(null)}

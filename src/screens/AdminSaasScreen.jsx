@@ -9,15 +9,15 @@ import {
 
 function AdminCard({ label, value, icon: Icon, tone = 'slate' }) {
   const toneClass = {
-    slate: 'bg-slate-800/40 text-slate-200',
-    emerald: 'bg-emerald-50 text-emerald-700',
-    blue: 'bg-blue-900/20 text-blue-700',
-    amber: 'bg-amber-50 text-amber-700',
-    red: 'bg-red-50 text-red-700',
+    slate:  'bg-slate-800/40 text-slate-300',
+    emerald:'bg-emerald-500/10 text-emerald-300',
+    blue:   'bg-blue-500/10 text-blue-300',
+    amber:  'bg-amber-500/10 text-amber-300',
+    red:    'bg-red-500/10 text-red-300',
   };
 
   return (
-    <article className="rounded-[24px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
+    <article className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-5 shadow-card">
       <div className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl ${toneClass[tone] || toneClass.slate}`}>
         <Icon size={18} />
       </div>
@@ -73,7 +73,7 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
 
   if (!isSystemAdminUser) {
     return (
-      <div className="rounded-[32px] border border-red-200 bg-slate-900/60 p-12 text-center shadow-soft">
+      <div className="rounded-2xl border border-red-500/30 bg-slate-900/60 p-12 text-center shadow-card">
         <AlertTriangle className="mx-auto mb-4 text-red-500" size={30} />
         <h2 className="text-xl font-semibold text-slate-50">Acesso restrito</h2>
         <p className="mt-2 text-sm text-slate-500">
@@ -85,7 +85,7 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[30px] border border-slate-700 bg-slate-900/60 p-7 shadow-soft">
+      <section className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-6 shadow-card">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Admin SaaS</p>
@@ -108,14 +108,14 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-        <article className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+        <article className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-6 shadow-card">
           <div className="mb-5">
             <h3 className="text-lg font-semibold text-slate-50">Empresas SaaS</h3>
             <p className="text-sm text-slate-500">Altere status de trial e assinatura sem gateway de pagamento nesta fase.</p>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <table className="min-w-full divide-y divide-slate-800 text-sm">
               <thead>
                 <tr className="text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                   <th className="pb-3">Empresa</th>
@@ -168,7 +168,7 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
           </div>
         </article>
 
-        <article className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+        <article className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-6 shadow-card">
           <div className="mb-5">
             <h3 className="text-lg font-semibold text-slate-50">Leitura operacional</h3>
             <p className="text-sm text-slate-500">Atalhos para acompanhar volume, auditoria e validacoes internas.</p>
@@ -181,11 +181,11 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
             </div>
             <div className="rounded-2xl bg-slate-800/40 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Cobrancas geradas</p>
-              <p className="mt-2 text-2xl font-bold text-emerald-700">{overview?.generatedCharges || 0}</p>
+              <p className="mt-2 text-2xl font-bold text-emerald-300">{overview?.generatedCharges || 0}</p>
             </div>
             <div className="rounded-2xl bg-slate-800/40 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Automacoes executadas</p>
-              <p className="mt-2 text-2xl font-bold text-blue-700">{overview?.automationsExecuted || 0}</p>
+              <p className="mt-2 text-2xl font-bold text-blue-300">{overview?.automationsExecuted || 0}</p>
             </div>
             <button
               type="button"
@@ -217,7 +217,7 @@ export default function AdminSaasScreen({ user, isSystemAdminUser = false, onToa
         </article>
       </section>
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-6 shadow-card">
         <div className="mb-5 flex items-center gap-2">
           <FileClock size={18} className="text-slate-500" />
           <div>

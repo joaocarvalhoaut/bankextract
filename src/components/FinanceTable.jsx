@@ -212,14 +212,14 @@ export default function FinanceTable({
                     data-filter-dropdown
                   >
                     <div className="flex items-center gap-1">
-                      <button onClick={() => toggleSort(column.campo)} className="inline-flex items-center gap-1 hover:text-emerald-600">
+                      <button onClick={() => toggleSort(column.campo)} className="inline-flex items-center gap-1 hover:text-slate-100">
                         {column.label}
-                        <ArrowUpDown size={12} className={sortBy.campo === column.campo ? 'text-emerald-600' : 'text-slate-400'} />
+                        <ArrowUpDown size={12} className={sortBy.campo === column.campo ? 'text-blue-400' : 'text-slate-500'} />
                       </button>
                       {['juros', 'multa', 'valorAtualizado'].includes(column.campo) ? null : (
                         <button
                           onClick={() => setOpenFilterDropdown(openFilterDropdown === column.campo ? null : column.campo)}
-                          className={`ml-auto rounded p-1.5 hover:bg-slate-800/60 ${filters[column.campo]?.length ? 'text-emerald-600' : 'text-slate-400'}`}
+                          className={`ml-auto rounded p-1.5 hover:bg-slate-800/60 ${filters[column.campo]?.length ? 'text-blue-400' : 'text-slate-500'}`}
                         >
                           <Filter size={12} />
                         </button>
@@ -359,7 +359,7 @@ export default function FinanceTable({
 
                         if (['juros', 'multa', 'valorAtualizado', 'valor'].includes(column.campo)) {
                           return (
-                            <td key={column.campo} className="border-r border-slate-800 px-3 py-2 text-right font-medium">
+                            <td key={column.campo} className="border-r border-slate-800 px-3 py-2 text-right font-mono tabular-nums font-medium">
                               {isEditing ? (
                                 <input
                                   autoFocus
@@ -382,10 +382,10 @@ export default function FinanceTable({
                                 </button>
                               )}
                               {savingCell?.id === row.id && savingCell?.campo === column.campo ? (
-                                <p className="mt-1 text-[11px] font-medium text-blue-600">Salvando...</p>
+                                <p className="mt-1 text-[11px] font-medium text-blue-400">Salvando...</p>
                               ) : null}
                               {saveFeedback?.id === row.id && saveFeedback?.campo === column.campo ? (
-                                <p className={`mt-1 text-[11px] font-medium ${saveFeedback.type === 'erro' ? 'text-red-600' : 'text-emerald-600'}`}>
+                                <p className={`mt-1 text-[11px] font-medium ${saveFeedback.type === 'erro' ? 'text-red-400' : 'text-emerald-300'}`}>
                                   {saveFeedback.type === 'erro' ? 'Erro ao salvar' : '✓ salvo'}
                                 </p>
                               ) : null}
@@ -414,10 +414,10 @@ export default function FinanceTable({
                                 </button>
                               )}
                               {savingCell?.id === row.id && savingCell?.campo === column.campo ? (
-                                <p className="mt-1 text-[11px] font-medium text-blue-600">Salvando...</p>
+                                <p className="mt-1 text-[11px] font-medium text-blue-400">Salvando...</p>
                               ) : null}
                               {saveFeedback?.id === row.id && saveFeedback?.campo === column.campo ? (
-                                <p className={`mt-1 text-[11px] font-medium ${saveFeedback.type === 'erro' ? 'text-red-600' : 'text-emerald-600'}`}>
+                                <p className={`mt-1 text-[11px] font-medium ${saveFeedback.type === 'erro' ? 'text-red-400' : 'text-emerald-300'}`}>
                                   {saveFeedback.type === 'erro' ? 'Erro ao salvar' : '✓ salvo'}
                                 </p>
                               ) : null}
@@ -447,10 +447,10 @@ export default function FinanceTable({
                               </button>
                             )}
                             {savingCell?.id === row.id && savingCell?.campo === column.campo ? (
-                              <p className="mt-1 text-[11px] font-medium text-blue-600">Salvando...</p>
+                              <p className="mt-1 text-[11px] font-medium text-blue-400">Salvando...</p>
                             ) : null}
                             {saveFeedback?.id === row.id && saveFeedback?.campo === column.campo ? (
-                              <p className={`mt-1 text-[11px] font-medium ${saveFeedback.type === 'erro' ? 'text-red-600' : 'text-emerald-600'}`}>
+                              <p className={`mt-1 text-[11px] font-medium ${saveFeedback.type === 'erro' ? 'text-red-400' : 'text-emerald-300'}`}>
                                 {saveFeedback.type === 'erro' ? 'Erro ao salvar' : '✓ salvo'}
                               </p>
                             ) : null}
