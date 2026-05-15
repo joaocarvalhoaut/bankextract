@@ -98,6 +98,10 @@ export const useFinance = ({
   const [error, setError] = useState('');
   const [message, setMessage] = useState(null);
 
+  // Ref-based lock: previne double-submit mesmo quando setState ainda não propagou.
+  // useRef é síncrono — checagem e escrita acontecem no mesmo tick JS.
+  const importLockRef = useRef(false);
+
   const [activeTab, setActiveTab] = useState('importacao');
   const [importType, setImportType] = useState('vencidos');
 
@@ -487,9 +491,19 @@ Total Geral: 24.479,32`;
   }, [analyzedPreviewRows, preview]);
 
   const confirmImport = useCallback(async () => {
-    if (!ensureSpecificCompany('Selecione uma empresa especifica antes de importar dados.')) return;
+    // Guard síncrono: previne race condition de dupla submissão.
+    // useState não é suficiente aqui porque setState é assíncrono —
+    // dois cliques rápidos podem passar pelo check antes do re-render.
+    if (importLockRef.current) return;
+    importLockRef.current = true;
+
+    if (!ensureSpecificCompany('Selecione uma empresa especifica antes de importar dados.')) {
+      importLockRef.current = false;
+      return;
+    }
 
     if (!preview || !preview.selecionados.size) {
+      importLockRef.current = false;
       showMessage(
         'erro',
         preview?.tipo === 'liquidacao'
@@ -509,6 +523,7 @@ Total Geral: 24.479,32`;
       if (invalidRows.length > 0) {
         const proceed = window.confirm(`${invalidRows.length} registro(s) selecionado(s) possuem erros criticos. Deseja seguir mesmo assim?`);
         if (!proceed) {
+          importLockRef.current = false;
           setSaving(false);
           return;
         }
@@ -605,9 +620,22 @@ Total Geral: 24.479,32`;
             user_id: currentUserId,
             batchId,
             // CORRECAO: row.numeroBoleto e undefined em imports XLSX/CSV — campo vem como numero_boleto (snake_case).
-            numeroBoleto: row.numeroBoleto || row.numero_boleto || row.documento || `SN-${Date.now()}`,
+            // Fallback usa UUID estável — Date.now() causava colisão em lotes com múltiplos sem documento.
+            numeroBoleto: row.numeroBoleto || row.numero_boleto || row.documento || `SN-${makeUuid().slice(0, 8)}`,
             importadoEm: importTimestamp
           }));
+
+        // CORRECAO DE ORDEM: registros são inseridos ANTES do histórico.
+        // Se insertRegistros falhar, nenhum histórico órfão é criado.
+        // Se appendImportacao falhar (após insert OK), os dados estão
+        // seguros no banco — apenas o histórico fica pendente (sem perda de dados).
+        if (newRows.length) {
+          await financeService.insertRegistros(newRows, {
+            companyId: activeCompanyId,
+            userId: currentUserId
+          });
+          setRecords((prev) => [...prev, ...newRows]);
+        }
 
         await financeService.appendImportacao(
           {
@@ -621,14 +649,6 @@ Total Geral: 24.479,32`;
             userId: currentUserId
           }
         );
-
-        if (newRows.length) {
-          await financeService.insertRegistros(newRows, {
-            companyId: activeCompanyId,
-            userId: currentUserId
-          });
-          setRecords((prev) => [...prev, ...newRows]);
-        }
 
         setHistory((prev) => [
           {
@@ -663,6 +683,7 @@ Total Geral: 24.479,32`;
     } catch (err) {
       setError(err.message || 'Nao foi possivel concluir a operacao.');
     } finally {
+      importLockRef.current = false;
       setSaving(false);
     }
   }, [activeCompanyId, activeRecords, currentUserId, ensureSpecificCompany, preview, showMessage, triggerSync]);

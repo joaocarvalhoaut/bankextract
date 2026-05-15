@@ -447,10 +447,10 @@ export default function ChecklistEnvioRealScreen({
                 'não informado',
               telefone: sampleRecord?.telefone || 'não informado',
               empresa: companyName || 'Empresa Exemplo',
-              /* ── Fields unavailable in imported records (require Drive sync) ── */
-              linha_digitavel: 'não informado',
-              link_boleto: 'não informado',
-              codigo_barras: 'não informado',
+              /* ── Campos de boleto: presentes quando Drive sync já processou o título ── */
+              linha_digitavel: sampleRecord?.linha_digitavel || 'não informado',
+              link_boleto: sampleRecord?.boleto_url || 'não informado',
+              codigo_barras: sampleRecord?.codigo_barras || 'não informado',
               /* ── Operational context ── */
               historico: (data?.recommendations || []).slice(0, 2).join('; '),
             }}

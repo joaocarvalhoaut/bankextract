@@ -773,7 +773,7 @@ export default function App() {
         showToast('sucesso', 'Previa gerada com sucesso.');
       }
     } catch (error) {
-      console.error('[IMPORTACAO] erro OCR', error);
+      if (import.meta.env.DEV) console.error('[IMPORTACAO] erro OCR', error);
       setPreview(null);
       showToast('erro', error.message || 'Nao foi possivel processar o arquivo.');
     } finally {
@@ -823,7 +823,7 @@ export default function App() {
       setActiveTab(importType === 'liquidacao' ? 'historico' : 'visao-geral');
       showToast('sucesso', 'Lote processado com batch_id e salvo com sucesso.');
     } catch (error) {
-      console.error('[IMPORT] erro', error);
+      if (import.meta.env.DEV) console.error('[IMPORT] erro', error);
       showToast('erro', error.message || 'Nao foi possivel importar os registros selecionados.');
     }
   }, [currentCompanyId, currentCompanyName, currentUserId, currentUserRole, importType, preview, refreshAllData, showToast]);
@@ -1415,7 +1415,7 @@ export default function App() {
           cancelUrl,
         });
       } catch (err) {
-        console.error('[App] stripe checkout error:', err);
+        if (import.meta.env.DEV) console.error('[App] stripe checkout error:', err);
         throw err; // propaga para BillingScreen/PlanosScreen mostrarem o toast
       }
 
@@ -1434,7 +1434,7 @@ export default function App() {
         return;
       }
 
-      console.warn('[App] stripe checkout sem URL. data recebido:', result);
+      if (import.meta.env.DEV) console.warn('[App] stripe checkout sem URL. data recebido:', result);
       showToast('erro', 'Nao foi possivel abrir o checkout Stripe. Verifique o console para detalhes.');
     },
     [billingOverview?.currentPlan?.id, currentCompanyId, currentUserId, showToast]

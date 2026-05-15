@@ -67,6 +67,13 @@ export const mapRegistroToApp = (row) => ({
   status: row.status || 'pendente',
   importadoEm: row.importado_em ?? row.importadoEm ?? null,
   liquidadoEm: row.liquidado_em ?? row.liquidadoEm ?? null,
+  // Campos de boleto extraídos via Drive sync — presentes apenas quando o
+  // matching com o PDF foi bem-sucedido. Null/undefined = ainda não extraído.
+  linha_digitavel: row.linha_digitavel ?? null,
+  codigo_barras: row.codigo_barras ?? null,
+  boleto_url: row.boleto_url ?? null,
+  boleto_pdf_nome: row.boleto_pdf_nome ?? null,
+  boleto_match_confidence: row.boleto_match_confidence ?? null,
 });
 
 export const mapRegistroToDb = (row) => ({

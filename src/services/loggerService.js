@@ -46,7 +46,12 @@ const createEntry = ({
   subscription_plan: runtimeContext.subscription_plan || '',
 });
 
+const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV === true;
+
 const printEntry = (entry) => {
+  // Console output restrito a ambiente de desenvolvimento.
+  // Em produção, erros/warnings críticos são capturados pelo Sentry (abaixo).
+  if (!isDev) return;
   const label = `[${entry.app}] [${entry.level}] ${entry.module}:${entry.action}`;
   if (entry.level === LOG_LEVELS.error) { console.error(label, entry); return; }
   if (entry.level === LOG_LEVELS.warn) { console.warn(label, entry); return; }

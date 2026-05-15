@@ -101,7 +101,7 @@ export function useAutoGoogleSheetsSync({ activeCompanyId, isGlobalView, enabled
         } catch (syncErr) {
           setSyncStatus(SYNC_STATUS.ERROR);
           setSyncMessage((syncErr && syncErr.message) || 'Falha na sincronização automática com Google Sheets.');
-          console.warn('[AutoSync] Falha — motivo: ' + safeReason, syncErr);
+          if (import.meta.env.DEV) console.warn('[AutoSync] Falha — motivo: ' + safeReason, syncErr);
 
           clearTimeout(clearSyncRef.current);
           clearSyncRef.current = setTimeout(() => {

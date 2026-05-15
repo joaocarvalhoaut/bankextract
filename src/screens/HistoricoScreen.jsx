@@ -4,6 +4,7 @@ import { formatCurrencyBRL, formatDateTimeBR } from '../utils/format';
 
 const typeLabel = {
   vencidos: 'Vencidos',
+  a_vencer: 'A vencer',
   liquidacao: 'Liquidacao',
 };
 
