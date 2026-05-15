@@ -1,0 +1,282 @@
+{
+  "startedAt": "2026-05-15T01:03:46.805Z",
+  "runTag": "SMOKE-1778807026806",
+  "scenarios": {
+    "individual": {
+      "edgeOk": true,
+      "action": "send_single_charge",
+      "message": "Mensagem enviada via WhatsApp",
+      "error": null
+    },
+    "batch": {
+      "edgeOk": true,
+      "action": "send_real",
+      "sentCount": 2,
+      "failedCount": 0,
+      "failedMessages": [],
+      "error": null
+    },
+    "invalidPhone": {
+      "edgeOk": true,
+      "sentCount": 0,
+      "failedCount": 1,
+      "message": "Telefone invalido para envio real.",
+      "error": null
+    },
+    "duplicate": {
+      "edgeOk": true,
+      "duplicate": true,
+      "message": "Esta cobrança já foi enviada recentemente. Confirme o reenvio para mandar novamente.",
+      "error": null
+    },
+    "concurrent": {
+      "owner": {
+        "ok": true,
+        "duplicate": false,
+        "message": "Mensagem enviada via WhatsApp",
+        "error": null
+      },
+      "second": {
+        "ok": false,
+        "duplicate": true,
+        "message": "Esta operacao ja foi processada anteriormente.",
+        "error": null
+      }
+    }
+  },
+  "db": {
+    "logs": [
+      {
+        "id": "5c90***b8d0",
+        "financeiro_id": "68f6***7fa9",
+        "status_envio": "sucesso",
+        "tipo_cobranca": "manual",
+        "erro": null,
+        "telefone": "5577***67",
+        "provider_message_id": "3EB0***79D7",
+        "created_at": "2026-05-15T01:03:54.314299+00:00"
+      },
+      {
+        "id": "f378***fde5",
+        "financeiro_id": "9035***58d7",
+        "status_envio": "sucesso",
+        "tipo_cobranca": "manual",
+        "erro": null,
+        "telefone": "5577***67",
+        "provider_message_id": "3EB0***1F06",
+        "created_at": "2026-05-15T01:03:56.829346+00:00"
+      },
+      {
+        "id": "0395***ff48",
+        "financeiro_id": "624d***c741",
+        "status_envio": "sucesso",
+        "tipo_cobranca": "manual",
+        "erro": null,
+        "telefone": "5577***67",
+        "provider_message_id": "3EB0***BA86",
+        "created_at": "2026-05-15T01:03:58.41875+00:00"
+      },
+      {
+        "id": "e280***67de",
+        "financeiro_id": "2990***59b4",
+        "status_envio": "erro",
+        "tipo_cobranca": "manual",
+        "erro": "Telefone invalido para envio real.",
+        "telefone": "123***23",
+        "provider_message_id": "",
+        "created_at": "2026-05-15T01:04:00.076588+00:00"
+      },
+      {
+        "id": "945e***bae9",
+        "financeiro_id": "68f6***7fa9",
+        "status_envio": "ignorado",
+        "tipo_cobranca": "manual",
+        "erro": "duplicado_recente",
+        "telefone": "7798***67",
+        "provider_message_id": "",
+        "created_at": "2026-05-15T01:04:01.574331+00:00"
+      },
+      {
+        "id": "3850***092f",
+        "financeiro_id": "e928***1e2e",
+        "status_envio": "ignorado",
+        "tipo_cobranca": "manual",
+        "erro": "duplicado_idempotencia",
+        "telefone": "5577***67",
+        "provider_message_id": "",
+        "created_at": "2026-05-15T01:04:03.483564+00:00"
+      },
+      {
+        "id": "0f45***6fba",
+        "financeiro_id": "e928***1e2e",
+        "status_envio": "sucesso",
+        "tipo_cobranca": "manual",
+        "erro": null,
+        "telefone": "5577***67",
+        "provider_message_id": "3EB0***7B89",
+        "created_at": "2026-05-15T01:04:04.017214+00:00"
+      }
+    ],
+    "charges": [
+      {
+        "id": "cc19***3579",
+        "registro_id": "68f6***7fa9",
+        "status": "sent",
+        "provider_message_id": "3EB0***79D7",
+        "failure_reason": null,
+        "telefone": "5577***67",
+        "simulated": false,
+        "force_resend": false,
+        "enviado_por": "28a8***99b1",
+        "created_at": "2026-05-15T01:03:54.169919+00:00"
+      },
+      {
+        "id": "0c25***6d69",
+        "registro_id": "9035***58d7",
+        "status": "sent",
+        "provider_message_id": "3EB0***1F06",
+        "failure_reason": null,
+        "telefone": "5577***67",
+        "simulated": false,
+        "force_resend": false,
+        "enviado_por": "28a8***99b1",
+        "created_at": "2026-05-15T01:03:56.685786+00:00"
+      },
+      {
+        "id": "8ee3***7ae9",
+        "registro_id": "624d***c741",
+        "status": "sent",
+        "provider_message_id": "3EB0***BA86",
+        "failure_reason": null,
+        "telefone": "5577***67",
+        "simulated": false,
+        "force_resend": false,
+        "enviado_por": "28a8***99b1",
+        "created_at": "2026-05-15T01:03:58.27756+00:00"
+      },
+      {
+        "id": "7626***c4c3",
+        "registro_id": "2990***59b4",
+        "status": "failed",
+        "provider_message_id": "",
+        "failure_reason": "Telefone invalido para envio real.",
+        "telefone": "123***23",
+        "simulated": false,
+        "force_resend": false,
+        "enviado_por": "28a8***99b1",
+        "created_at": "2026-05-15T01:03:59.933377+00:00"
+      },
+      {
+        "id": "ae29***bc90",
+        "registro_id": "e928***1e2e",
+        "status": "sent",
+        "provider_message_id": "3EB0***7B89",
+        "failure_reason": null,
+        "telefone": "5577***67",
+        "simulated": false,
+        "force_resend": false,
+        "enviado_por": "28a8***99b1",
+        "created_at": "2026-05-15T01:04:03.87741+00:00"
+      }
+    ],
+    "dispatches": [
+      {
+        "id": "e1ab***8884",
+        "dispatch_type": "whatsapp_manual_real",
+        "status": "completed",
+        "external_reference": "3EB0***79D7",
+        "operation_hash": "7977***d6dc",
+        "reason": null,
+        "provider_message_id": "3EB0***79D7",
+        "created_at": "2026-05-15T01:03:53.382612+00:00"
+      },
+      {
+        "id": "8bec***b571",
+        "dispatch_type": "whatsapp_manual_real",
+        "status": "completed",
+        "external_reference": "3EB0***1F06",
+        "operation_hash": "4c1f***1569",
+        "reason": null,
+        "provider_message_id": "3EB0***1F06",
+        "created_at": "2026-05-15T01:03:55.923568+00:00"
+      },
+      {
+        "id": "4590***b295",
+        "dispatch_type": "whatsapp_manual_real",
+        "status": "completed",
+        "external_reference": "3EB0***BA86",
+        "operation_hash": "6b60***0bc9",
+        "reason": null,
+        "provider_message_id": "3EB0***BA86",
+        "created_at": "2026-05-15T01:03:57.551543+00:00"
+      },
+      {
+        "id": "dbaa***cbec",
+        "dispatch_type": "whatsapp_manual_real",
+        "status": "failed",
+        "external_reference": "",
+        "operation_hash": "a26f***cfad",
+        "reason": "invalid_phone",
+        "provider_message_id": "",
+        "created_at": "2026-05-15T01:03:59.789613+00:00"
+      },
+      {
+        "id": "fe3c***ddae",
+        "dispatch_type": "whatsapp_manual_real",
+        "status": "completed",
+        "external_reference": "3EB0***7B89",
+        "operation_hash": "feac***14ce",
+        "reason": null,
+        "provider_message_id": "3EB0***7B89",
+        "created_at": "2026-05-15T01:04:03.130772+00:00"
+      }
+    ],
+    "circuit": {
+      "company_id": "94aa3163-1e84-4c05-a398-dcef29997c63",
+      "state": "closed",
+      "failure_count": 0,
+      "success_count": 11,
+      "opened_at": null,
+      "updated_at": "2026-05-15T01:04:03.656+00:00"
+    }
+  },
+  "notes": [
+    "billing-automation invoked directly for all scenarios.",
+    "connected=false was forced before sends. allowTestMode remained false for authenticated users."
+  ],
+  "records": [
+    {
+      "id": "68f6***7fa9",
+      "documento": "4254-2",
+      "nome": "IDERLANDIO JESUS DE OLIVEIRA"
+    },
+    {
+      "id": "9035***58d7",
+      "documento": "CH01-3",
+      "nome": "FRANCISCO FERREIRA MOTA"
+    },
+    {
+      "id": "624d***c741",
+      "documento": "1242/002",
+      "nome": "MENEZES E BATISTA LTDA ME"
+    },
+    {
+      "id": "2990***59b4",
+      "documento": "1241/002",
+      "nome": "MENEZES E BATISTA LTDA ME"
+    },
+    {
+      "id": "e928***1e2e",
+      "documento": "1243/002",
+      "nome": "COLCHOES E CIA DE BRASILANDIA LTDA"
+    }
+  ],
+  "connectedForcedFalse": true,
+  "assertions": {
+    "connectedFalseStillWorked": true,
+    "noFallbackTestCredsPossible": true,
+    "duplicateIgnoredLogged": true,
+    "invalidPhoneLogged": true,
+    "concurrentOneSuccessOneDuplicate": true
+  }
+}

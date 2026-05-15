@@ -1,27 +1,29 @@
 import { useCallback, useMemo } from 'react';
 import { Eye, Loader2, MessageCircleMore, PhoneCall, PhoneOff, Send, ShieldCheck } from 'lucide-react';
 import DataTable from '../components/DataTable';
+import { PageShell, ScreenHeader } from '../components/ui/layout';
+import { OperationalMetric, OperationalPanel, OperationalStatusPill } from '../components/ui/operational';
 import { formatCurrencyBRL } from '../utils/format';
 import { canUserPerformAction } from '../security/permissions';
 
 const statusTone = {
   pendente: 'bg-slate-800/60 text-slate-200 ring-slate-700',
-  queued: 'bg-amber-50 text-amber-700 ring-amber-200',
-  sent: 'bg-blue-900/20 text-blue-700 ring-blue-200',
-  delivered: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  read: 'bg-violet-50 text-violet-700 ring-violet-200',
-  failed: 'bg-red-50 text-red-700 ring-red-200',
+  queued: 'bg-amber-950/30 text-amber-300 ring-amber-500/20',
+  sent: 'bg-blue-950/30 text-blue-300 ring-blue-500/20',
+  delivered: 'bg-emerald-950/30 text-emerald-300 ring-emerald-500/20',
+  read: 'bg-violet-950/30 text-violet-300 ring-violet-500/20',
+  failed: 'bg-red-950/30 text-red-300 ring-red-500/20',
   simulated: 'bg-slate-800/60 text-slate-200 ring-slate-700',
-  'sem telefone': 'bg-amber-50 text-amber-700 ring-amber-200',
+  'sem telefone': 'bg-amber-950/30 text-amber-300 ring-amber-500/20',
 };
 
 const statusMeta = {
   pendente: { label: 'Pendente', dot: 'bg-slate-400' },
-  queued: { label: '🟡 fila', dot: 'bg-amber-400' },
-  sent: { label: '🔵 enviada', dot: 'bg-blue-900/200' },
-  delivered: { label: '🟢 entregue', dot: 'bg-emerald-500' },
-  read: { label: '👁 lida', dot: 'bg-violet-500' },
-  failed: { label: '🔴 falhou', dot: 'bg-red-500' },
+  queued: { label: 'Fila', dot: 'bg-amber-400' },
+  sent: { label: 'Enviada', dot: 'bg-blue-400' },
+  delivered: { label: 'Entregue', dot: 'bg-emerald-500' },
+  read: { label: 'Lida', dot: 'bg-violet-500' },
+  failed: { label: 'Falhou', dot: 'bg-red-500' },
   simulated: { label: 'Simulada', dot: 'bg-slate-400' },
   'sem telefone': { label: 'Sem telefone', dot: 'bg-amber-400' },
 };
@@ -55,8 +57,6 @@ export default function CobrancasScreen({
 
   const handleSendSingleCharge = useCallback(
     async (row) => {
-      console.log('[SEND BUTTON CLICKED - COBRANCAS]', row);
-
       if (!companyId) {
         onToast?.('erro', 'Selecione uma empresa especifica para enviar a cobranca.');
         return;
@@ -72,16 +72,6 @@ export default function CobrancasScreen({
         onToast?.('erro', 'Esta cobranca nao possui um titulo financeiro associado.');
         return;
       }
-
-      const payload = {
-        action: 'send_single_charge',
-        companyId,
-        company_id: companyId,
-        registro_id: registroId,
-        charge_id: registroId,
-        simulate: simulationMode,
-      };
-
 
       try {
         const data = await onSend?.(row, { simulate: simulationMode });
@@ -120,9 +110,7 @@ export default function CobrancasScreen({
             statusTone[row.status] || 'bg-slate-800/60 text-slate-200 ring-slate-700'
           }`}
         >
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${(statusMeta[row.status] || statusMeta.pendente).dot}`}
-          />
+          <span className={`h-1.5 w-1.5 rounded-full ${(statusMeta[row.status] || statusMeta.pendente).dot}`} />
           {(statusMeta[row.status] || statusMeta.pendente).label}
         </span>
       ),
@@ -143,7 +131,7 @@ export default function CobrancasScreen({
               disabled={!canManageCharges}
               onClick={() => onGenerateMessage(row)}
               title={!canManageCharges ? 'Seu perfil nao pode gerar mensagens.' : ''}
-              className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-800/40 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-800/40 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <MessageCircleMore size={12} />
               Gerar mensagem
@@ -159,13 +147,13 @@ export default function CobrancasScreen({
                     ? 'Selecione uma empresa especifica para enviar.'
                     : sending
                       ? 'Esta cobranca ja esta sendo enviada.'
-                    : !registroId
-                      ? 'Esta cobranca nao possui um titulo financeiro associado.'
-                      : alreadySent
-                        ? 'Esta cobranca ja foi enviada. Clique para confirmar o reenvio.'
-                        : ''
+                      : !registroId
+                        ? 'Esta cobranca nao possui um titulo financeiro associado.'
+                        : alreadySent
+                          ? 'Esta cobranca ja foi enviada. Clique para confirmar o reenvio.'
+                          : ''
               }
-              className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {sending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
               {sending ? 'Enviando...' : alreadySent ? 'Enviada' : 'Enviar'}
@@ -177,95 +165,101 @@ export default function CobrancasScreen({
   ], [canManageCharges, companyId, handleSendSingleCharge, onGenerateMessage, sendingChargeIds]);
 
   const stats = [
-    { label: 'Cobrancas pendentes', value: pending, color: 'text-slate-50', bar: 'from-slate-400 to-slate-500', Icon: PhoneOff },
-    { label: 'Com telefone', value: rows.length - withoutPhone, color: 'text-emerald-700', bar: 'from-emerald-400 to-emerald-600', Icon: PhoneCall },
-    { label: 'Sem telefone', value: withoutPhone, color: 'text-amber-700', bar: 'from-amber-400 to-orange-400', Icon: PhoneOff },
-    { label: 'Mensagens enviadas', value: sent, color: 'text-blue-700', bar: 'from-blue-400 to-blue-600', Icon: Eye },
+    { label: 'Cobrancas pendentes', value: pending, Icon: PhoneOff },
+    { label: 'Com telefone', value: rows.length - withoutPhone, Icon: PhoneCall },
+    { label: 'Sem telefone', value: withoutPhone, Icon: PhoneOff },
+    { label: 'Mensagens enviadas', value: sent, Icon: Eye },
   ];
 
   return (
-    <div className="space-y-6">
-      <section className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        {stats.map(({ label, value, color, bar, Icon }) => (
-          <article
-            key={label}
-            className="relative overflow-hidden rounded-[28px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card"
-          >
-            <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${bar} opacity-70`} />
-            <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-slate-800/40 text-slate-500">
-              <Icon size={16} />
+    <PageShell>
+      <ScreenHeader
+        breadcrumb={['Cobranca', 'Fila WhatsApp']}
+        title="Fila de cobrancas WhatsApp"
+        description="Pendencias operacionais prontas para geracao de mensagem e disparo controlado."
+        status={(
+          <span className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1.5 text-xs font-semibold text-slate-200">
+            <ShieldCheck size={12} />
+            {simulationMode ? 'Simulacao ativa' : 'Envio real ativo'}
+          </span>
+        )}
+        actions={(
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-2">
+            <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              <ShieldCheck size={12} />
+              Modo de envio
             </div>
-            <p className="text-xs font-medium text-slate-500">{label}</p>
-            <p className={`mt-1.5 text-3xl font-semibold ${color}`}>{value}</p>
-          </article>
-        ))}
-      </section>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onBillingExecutionModeChange?.('simulate')}
+                className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                  simulationMode
+                    ? 'border border-amber-500/30 bg-amber-950/40 text-amber-200'
+                    : 'border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/40'
+                }`}
+              >
+                Simulacao
+              </button>
+              <button
+                type="button"
+                onClick={() => onBillingExecutionModeChange?.('real')}
+                className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                  simulationMode
+                    ? 'border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/40'
+                    : 'border border-emerald-500/30 bg-emerald-950/40 text-emerald-200'
+                }`}
+              >
+                Envio real
+              </button>
+            </div>
+          </div>
+        )}
+      />
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
-        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-700">
-              <PhoneOff size={22} />
+      <div className="space-y-6">
+        <section className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {stats.map(({ label, value, Icon }, index) => (
+            <OperationalMetric
+              key={label}
+              label={label}
+              value={value}
+              icon={Icon}
+              tone={index === 2 ? 'warning' : index === 3 ? 'processing' : index === 1 ? 'success' : 'info'}
+            />
+          ))}
+        </section>
+
+        <OperationalPanel title="Titulos prontos para acao" subtitle="A fila abaixo mantem leitura por cliente, documento, telefone e tracking de envio.">
+          <div className="mb-5 flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <OperationalStatusPill tone={simulationMode ? 'warning' : 'success'}>
+                <PhoneOff size={12} />
+                {simulationMode ? 'Simulacao ativa' : 'Envio real ativo'}
+              </OperationalStatusPill>
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-slate-50">Fila de cobrancas WhatsApp</h3>
-              <p className="text-sm text-slate-500">
-                Pendencias operacionais prontas para mensagem manual ou automatica.
-              </p>
+
+            <div className="flex flex-col items-start gap-3">
+              {simulationMode ? (
+                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                  Simulacao ativa - nenhuma mensagem real sera enviada.
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                  Envio real ativo - os envios individuais chamarao a Edge Function com simulate: false.
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="flex flex-col items-start gap-3">
-            <div className="rounded-2xl border border-slate-700 bg-slate-800/40 p-2 shadow-soft">
-              <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                <ShieldCheck size={12} />
-                Modo de envio
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => onBillingExecutionModeChange?.('simulate')}
-                  className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
-                    simulationMode
-                      ? 'bg-amber-500 text-white shadow-soft'
-                      : 'border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/40'
-                  }`}
-                >
-                  Simulacao
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onBillingExecutionModeChange?.('real')}
-                  className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
-                    simulationMode
-                      ? 'border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/40'
-                      : 'bg-emerald-600 text-white shadow-soft'
-                  }`}
-                >
-                  Envio real
-                </button>
-              </div>
-            </div>
-
-            {simulationMode ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                Simulacao ativa — nenhuma mensagem real sera enviada.
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                Envio real ativo — os envios individuais chamarao a Edge Function com simulate: false.
-              </div>
-            )}
-          </div>
-        </div>
-
-        <DataTable
-          columns={columns}
-          rows={rows}
-          emptyTitle="Nenhuma cobranca disponivel."
-          emptyDescription="Quando houver titulos pendentes, eles aparecerao aqui com status de telefone e envio."
-        />
-      </section>
-    </div>
+          <DataTable
+            columns={columns}
+            rows={rows}
+            emptyTitle="Nenhuma cobranca disponivel."
+            emptyDescription="Quando houver titulos pendentes, eles aparecerao aqui com status de telefone e envio."
+          />
+        </OperationalPanel>
+      </div>
+    </PageShell>
   );
 }

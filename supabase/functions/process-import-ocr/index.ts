@@ -64,6 +64,33 @@ function normalizePhone(raw: string) {
   return digits;
 }
 
+function maskPhone(raw: string) {
+  const digits = String(raw || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length <= 4) return `${digits.slice(0, 1)}***`;
+  return `${digits.slice(0, 4)}***${digits.slice(-2)}`;
+}
+
+function maskCompanyId(raw: string) {
+  const value = String(raw || "").trim();
+  if (!value) return "";
+  if (value.length <= 8) return `${value.slice(0, 2)}***`;
+  return `${value.slice(0, 4)}***${value.slice(-4)}`;
+}
+
+function safeLog(label: string, payload?: Record<string, unknown>) {
+  if (!payload) {
+    console.log(label);
+    return;
+  }
+
+  console.log(label, payload);
+}
+
+function safeError(label: string, message: string) {
+  console.error(label, { message });
+}
+
 function parseBrazilianCurrency(raw: string) {
   const cleaned = String(raw || "")
     .replace(/[R$\s]/g, "")
@@ -369,7 +396,11 @@ function parseReceivablesList(text: string): ParsedReceivablesResult {
         telefone = "";
       }
 
-      console.log("[OCR PARSER] sacado", sacado, "telefone", telefone, "documento", documento);
+      safeLog("[OCR PARSER]", {
+        sacado_length: sacado.length,
+        telefone: maskPhone(telefone),
+        documento_length: documento.length,
+      });
 
       const record: ImportRecord = {
         cliente_fornecedor: sacado,
@@ -419,14 +450,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return jsonResponse({ success: false, records: [], error: "company_id obrigatorio." }, 400);
     }
 
-    console.log("[process-import-ocr] file", fileEntry.name, fileEntry.type, fileEntry.size);
-    console.log("[process-import-ocr] tipo_importacao", tipoImportacao);
-    console.log("[process-import-ocr] company_id", companyId);
-
     const bytes = new Uint8Array(await fileEntry.arrayBuffer());
-    const decodedPreview = new TextDecoder("latin1").decode(bytes.slice(0, 200));
-    console.log("[process-import-ocr] buffer byteLength", bytes.byteLength);
-    console.log("[process-import-ocr] decoded preview", decodedPreview);
+    safeLog("[process-import-ocr] request", {
+      file_extension: String(fileEntry.name || "").split(".").pop() || "",
+      mime_type: fileEntry.type || "unknown",
+      file_size_bytes: fileEntry.size,
+      tipo_importacao: tipoImportacao || "unknown",
+      company_id: maskCompanyId(companyId),
+      buffer_bytes: bytes.byteLength,
+    });
 
     const extraction = await extractTextFromPdfStreams(bytes);
     const text = extraction.text || "";
@@ -434,14 +466,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const parsed = text ? parseReceivablesList(text) : { candidateLines: [], blocks: [], records: [] };
     const { candidateLines, blocks, records } = parsed;
 
-    console.log("[process-import-ocr] streams FlateDecode encontrados", extraction.flateStreamCount || 0);
-    console.log("[process-import-ocr] tamanho descomprimido total", extraction.totalDecompressedBytes || 0);
-    console.log("[process-import-ocr] text length", text.length);
-    console.log("[process-import-ocr] text sample", text.slice(0, 3000));
-    console.log("[process-import-ocr] normalized sample", normalized.slice(0, 3000));
-    console.log("[process-import-ocr] linhas candidatas", candidateLines.length);
-    console.log("[process-import-ocr] blocos candidatos", blocks.length);
-    console.log("[process-import-ocr] records extraidos", records.length);
+    safeLog("[process-import-ocr] extraction_summary", {
+      flate_stream_count: extraction.flateStreamCount || 0,
+      total_decompressed_bytes: extraction.totalDecompressedBytes || 0,
+      text_length: text.length,
+      candidate_lines: candidateLines.length,
+      candidate_blocks: blocks.length,
+      records_extracted: records.length,
+    });
 
     if (!text.length) {
       throw new Error("Nao foi possivel ler texto util do PDF. Use um PDF com texto selecionavel ou configure OCR externo.");
@@ -461,7 +493,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Falha ao processar OCR.";
-    console.error("[process-import-ocr] erro", message);
+    safeError("[process-import-ocr] erro", message);
     return jsonResponse({
       success: false,
       records: [],

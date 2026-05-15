@@ -1,8 +1,30 @@
 import { supabase } from './supabaseClient';
+import { buildZapiErrorInfo, ZAPI_ERROR_KINDS } from '../shared/zapiErrorMapping.js';
 
 const buildError = (err, fallback) => {
-  if (err instanceof Error) return err;
-  return new Error(err?.message || err?.error || fallback);
+  const sourceError = err instanceof Error ? err : new Error(err?.message || err?.error || fallback);
+  const mapped = buildZapiErrorInfo({
+    message: sourceError.message,
+    name: sourceError.name,
+  });
+
+  if (mapped.kind === ZAPI_ERROR_KINDS.UNKNOWN) {
+    return sourceError;
+  }
+
+  return new Error(mapped.userMessage);
+};
+
+const buildZapiUxError = (value, fallbackMessage) => {
+  const mapped = buildZapiErrorInfo({
+    message: String(value || fallbackMessage || '').trim(),
+  });
+
+  if (mapped.kind === ZAPI_ERROR_KINDS.UNKNOWN) {
+    return new Error(String(value || fallbackMessage || 'Falha ao processar a integracao Z-API.'));
+  }
+
+  return new Error(mapped.userMessage);
 };
 
 export async function getCompanyIntegration(companyId, provider = 'zapi') {
@@ -63,7 +85,7 @@ export async function validateCompanyIntegration(companyId, payload) {
 
   if (error) throw buildError(error, 'Falha ao validar integracao da empresa.');
   if (!(data?.ok === true || data?.success === true)) {
-    throw new Error(data?.error || 'Falha ao validar integracao da empresa.');
+    throw buildZapiUxError(data?.error, 'Falha ao validar integracao da empresa.');
   }
 
   return data;
@@ -88,8 +110,9 @@ export async function getCompanyIntegrationQrCode(companyId, payload) {
 
   if (error) throw buildError(error, 'Falha ao carregar o QR Code da integracao.');
   if (!(data?.ok === true || data?.success === true)) {
-    throw new Error(
-      data?.error || 'Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.'
+    throw buildZapiUxError(
+      data?.error,
+      'Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.'
     );
   }
 
@@ -115,7 +138,7 @@ export async function getCompanyIntegrationStatus(companyId, payload) {
 
   if (error) throw buildError(error, 'Falha ao consultar o status da integracao.');
   if (!(data?.ok === true || data?.success === true)) {
-    throw new Error(data?.error || 'Falha ao consultar o status da integracao.');
+    throw buildZapiUxError(data?.error, 'Falha ao consultar o status da integracao.');
   }
 
   return data;

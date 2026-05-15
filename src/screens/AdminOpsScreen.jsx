@@ -29,6 +29,14 @@ import {
   clearOperationalAlertAcknowledgement,
   getOperationalAlerts,
 } from '../services/operationalAlertsService';
+import {
+  OperationalAlertList,
+  OperationalMetric,
+  OperationalPanel,
+  OperationalStateView,
+  OperationalStatusPill,
+} from '../components/ui/operational';
+import { PageShell, ScreenHeader } from '../components/ui/layout';
 
 const PERIOD_OPTIONS = [
   { value: 7, label: '7 dias' },
@@ -49,48 +57,6 @@ function formatDuration(ms) {
   if (!value) return '0ms';
   if (value >= 1000) return `${(value / 1000).toFixed(1)}s`;
   return `${value}ms`;
-}
-
-function KpiCard({ label, value, sub, icon: Icon, tone = 'default', loading = false }) {
-  const tones = {
-    default: { bg: 'bg-slate-800/40', icon: 'bg-slate-700 text-slate-300', bar: '' },
-    emerald: { bg: 'bg-emerald-500/5', icon: 'bg-emerald-500/15 text-emerald-400', bar: 'bg-gradient-to-r from-emerald-400 to-emerald-600' },
-    blue: { bg: 'bg-blue-500/5', icon: 'bg-blue-500/15 text-blue-400', bar: 'bg-gradient-to-r from-blue-400 to-blue-600' },
-    amber: { bg: 'bg-amber-500/5', icon: 'bg-amber-500/15 text-amber-400', bar: 'bg-gradient-to-r from-amber-400 to-orange-500' },
-    red: { bg: 'bg-red-500/5', icon: 'bg-red-500/15 text-red-400', bar: 'bg-gradient-to-r from-red-400 to-red-600' },
-    violet: { bg: 'bg-violet-500/5', icon: 'bg-violet-500/15 text-violet-400', bar: 'bg-gradient-to-r from-violet-400 to-violet-600' },
-  };
-  const currentTone = tones[tone] || tones.default;
-
-  return (
-    <article className={`relative overflow-hidden rounded-[24px] border border-slate-700 ${currentTone.bg} p-5 shadow-soft`}>
-      {currentTone.bar ? <div className={`absolute inset-x-0 top-0 h-0.5 ${currentTone.bar}`} /> : null}
-      <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl ${currentTone.icon}`}>
-        <Icon size={18} />
-      </div>
-      {loading ? (
-        <>
-          <div className="skeleton mb-2 h-3 w-20 rounded-full" />
-          <div className="skeleton h-8 w-24 rounded-full" />
-        </>
-      ) : (
-        <>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-          <p className="mt-1.5 text-3xl font-bold text-slate-50">{value}</p>
-          {sub ? <p className="mt-1 text-xs text-slate-400">{sub}</p> : null}
-        </>
-      )}
-    </article>
-  );
-}
-
-function EmptyState({ title, description }) {
-  return (
-    <div className="rounded-[28px] border border-dashed border-slate-700 bg-slate-900/40 py-12 text-center">
-      <h3 className="text-base font-semibold text-slate-200">{title}</h3>
-      <p className="mt-1 text-sm text-slate-400">{description}</p>
-    </div>
-  );
 }
 
 function HealthCheckRow({ check }) {
@@ -145,64 +111,6 @@ function AutomationRow({ config, onToggle, togglingId, onSelect }) {
   );
 }
 
-function AlertRow({ alert, onAcknowledgeToggle }) {
-  const severityMeta = {
-    critical: 'border-red-500/20 bg-red-500/10 text-red-200',
-    warning: 'border-amber-500/20 bg-amber-500/10 text-amber-100',
-    info: 'border-blue-500/20 bg-blue-500/10 text-blue-100',
-    resolved: 'border-slate-700 bg-slate-800/40 text-slate-300',
-  };
-
-  return (
-    <div className={`rounded-2xl border px-4 py-4 ${severityMeta[alert.state === 'resolved' ? 'resolved' : alert.severity] || severityMeta.info}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-semibold">{alert.title}</p>
-            <span className="rounded-full bg-black/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]">
-              {alert.state === 'resolved' ? 'resolved' : alert.state === 'acknowledged' ? 'ack' : alert.severity}
-            </span>
-            {alert.companyId ? (
-              <span className="rounded-full bg-black/20 px-2 py-0.5 text-[10px] font-medium">
-                {alert.companyId}
-              </span>
-            ) : null}
-          </div>
-          <p className="mt-1 text-xs opacity-90">{alert.detail}</p>
-          <p className="mt-2 text-[11px] opacity-70">
-            {alert.state === 'resolved'
-              ? `Resolvido em ${new Date(alert.resolvedAt).toLocaleString('pt-BR')}`
-              : `Ultimo sinal em ${new Date(alert.lastSeenAt || alert.createdAt).toLocaleString('pt-BR')}`}
-          </p>
-        </div>
-        {alert.state !== 'resolved' ? (
-          <button
-            type="button"
-            onClick={() => onAcknowledgeToggle(alert)}
-            className="rounded-xl border border-white/10 bg-black/10 px-3 py-1.5 text-xs font-semibold text-white/90 transition hover:bg-black/20"
-          >
-            {alert.acknowledgedAt ? 'Remover ack' : 'Acknowledge'}
-          </button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function SectionCard({ title, subtitle, action, children }) {
-  return (
-    <section className="text-crisp rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="text-base font-semibold text-slate-50">{title}</h3>
-          {subtitle ? <p className="text-sm text-slate-400">{subtitle}</p> : null}
-        </div>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
 
 export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
   const [activeTab, setActiveTab] = useState('overview');
@@ -389,18 +297,36 @@ export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
 
   if (!isSystemAdminUser) {
     return (
-      <div className="rounded-[32px] border border-red-500/20 bg-slate-900/60 p-12 text-center shadow-soft">
-        <ShieldCheck className="mx-auto mb-4 text-red-400" size={30} />
-        <h2 className="text-xl font-semibold text-slate-50">Acesso restrito</h2>
-        <p className="mt-2 text-sm text-slate-400">A Central Operacional esta disponivel apenas para administradores globais.</p>
-      </div>
+      <PageShell width="wide">
+        <ScreenHeader
+          breadcrumb={['Admin', 'Operacoes']}
+          title="Central Operacional"
+          description="Saude, envios, automacoes, auditoria e uso multi-tenant em uma so leitura operacional."
+        />
+        <div className="rounded-[32px] border border-red-500/20 bg-slate-900/60 p-12 text-center shadow-soft">
+          <ShieldCheck className="mx-auto mb-4 text-red-400" size={30} />
+          <h2 className="text-xl font-semibold text-slate-50">Acesso restrito</h2>
+          <p className="mt-2 text-sm text-slate-400">A Central Operacional esta disponivel apenas para administradores globais.</p>
+        </div>
+      </PageShell>
     );
   }
 
   const healthMeta = healthStatusMeta[health?.overall || HEALTH_STATUS.UNKNOWN];
 
   return (
-    <div className="text-crisp space-y-6">
+    <PageShell width="wide">
+      <ScreenHeader
+        breadcrumb={['Admin', 'Operacoes']}
+        title="Central Operacional"
+        description="Saude, envios, automacoes, auditoria e uso multi-tenant em uma so leitura operacional."
+        status={
+          <OperationalStatusPill tone={health?.overall === HEALTH_STATUS.HEALTHY ? 'success' : health?.overall === HEALTH_STATUS.DEGRADED ? 'warning' : 'danger'} className="px-4 py-1.5 text-sm">
+            {healthMeta.label}
+          </OperationalStatusPill>
+        }
+      />
+      <div className="text-crisp space-y-6">
       <section className="relative overflow-hidden rounded-[32px] border border-slate-700/50 bg-slate-900/70 px-7 py-6 shadow-soft">
         <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-blue-500 via-violet-500 to-cyan-400 opacity-70" />
         <div className="flex flex-wrap items-start justify-between gap-5">
@@ -416,10 +342,9 @@ export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <span className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-semibold ${healthMeta.bg} ${healthMeta.color}`}>
-              <span className={`h-2 w-2 rounded-full ${healthMeta.dot}`} />
+            <OperationalStatusPill tone={health?.overall === HEALTH_STATUS.HEALTHY ? 'success' : health?.overall === HEALTH_STATUS.DEGRADED ? 'warning' : 'danger'} className="px-4 py-1.5 text-sm">
               {healthMeta.label}
-            </span>
+            </OperationalStatusPill>
             <select
               value={period}
               onChange={(event) => setPeriod(Number(event.target.value))}
@@ -467,12 +392,12 @@ export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
       </section>
 
       <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-        <KpiCard label="Envios totais" value={metrics?.whatsapp?.total ?? '—'} sub={`${period} dias`} icon={Send} tone="blue" loading={loadingMetrics} />
-        <KpiCard label="Falhas" value={metrics?.whatsapp?.falha ?? '—'} sub={`${metrics?.whatsapp?.timeouts || 0} timeout(s)`} icon={XCircle} tone={metrics?.whatsapp?.falha > 0 ? 'red' : 'default'} loading={loadingMetrics} />
-        <KpiCard label="Taxa de sucesso" value={metrics?.whatsapp ? `${metrics.whatsapp.taxaSucesso}%` : '—'} sub="real + mock" icon={CheckCircle2} tone={metrics?.whatsapp?.taxaSucesso >= 90 ? 'emerald' : metrics?.whatsapp?.taxaSucesso >= 70 ? 'amber' : 'red'} loading={loadingMetrics} />
-        <KpiCard label="Tempo medio envio" value={formatDuration(metrics?.whatsapp?.avgSendLatencyMs)} sub="created_at → sent_at" icon={Clock} tone="violet" loading={loadingMetrics} />
-        <KpiCard label="Retries" value={metrics?.dispatches?.retriesExecuted ?? '—'} sub={`${metrics?.dispatches?.deduplicados || 0} dedups`} icon={RefreshCw} tone="amber" loading={loadingMetrics} />
-        <KpiCard label="Tenants ativos" value={metrics?.tenants ? `${metrics.tenants.active}/${metrics.tenants.total}` : '—'} sub={`${metrics?.tenants?.blocked || 0} bloqueados`} icon={Building2} tone="blue" loading={loadingMetrics} />
+        <OperationalMetric label="Envios totais" value={loadingMetrics ? '…' : (metrics?.whatsapp?.total ?? '—')} hint={`${period} dias`} icon={Send} tone="info" />
+        <OperationalMetric label="Falhas" value={loadingMetrics ? '…' : (metrics?.whatsapp?.falha ?? '—')} hint={`${metrics?.whatsapp?.timeouts || 0} timeout(s)`} icon={XCircle} tone={metrics?.whatsapp?.falha > 0 ? 'danger' : 'success'} />
+        <OperationalMetric label="Taxa de sucesso" value={loadingMetrics ? '…' : (metrics?.whatsapp ? `${metrics.whatsapp.taxaSucesso}%` : '—')} hint="real + mock" icon={CheckCircle2} tone={metrics?.whatsapp?.taxaSucesso >= 90 ? 'success' : metrics?.whatsapp?.taxaSucesso >= 70 ? 'warning' : 'danger'} />
+        <OperationalMetric label="Tempo medio envio" value={loadingMetrics ? '…' : formatDuration(metrics?.whatsapp?.avgSendLatencyMs)} hint="created_at → sent_at" icon={Clock} tone="processing" />
+        <OperationalMetric label="Retries" value={loadingMetrics ? '…' : (metrics?.dispatches?.retriesExecuted ?? '—')} hint={`${metrics?.dispatches?.deduplicados || 0} dedups`} icon={RefreshCw} tone="warning" />
+        <OperationalMetric label="Tenants ativos" value={loadingMetrics ? '…' : (metrics?.tenants ? `${metrics.tenants.active}/${metrics.tenants.total}` : '—')} hint={`${metrics?.tenants?.blocked || 0} bloqueados`} icon={Building2} tone="info" />
       </section>
 
       <div className="sticky-toolbar table-scroll flex flex-nowrap gap-1 rounded-2xl border border-slate-700 bg-slate-900/55 p-1">
@@ -493,7 +418,7 @@ export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
 
       {activeTab === 'overview' ? (
         <div className="space-y-5">
-          <SectionCard
+          <OperationalPanel
             title="Breakdown por empresa"
             subtitle="Uso, sucesso, falhas, retries e fila por tenant com paginação e drill-down."
             action={
@@ -503,7 +428,7 @@ export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
             }
           >
             {!paginatedCompanies.length ? (
-              <EmptyState title="Nenhuma empresa encontrada" description="Ajuste a busca ou aguarde novos dados operacionais." />
+              <OperationalStateView title="Nenhuma empresa encontrada" description="Ajuste a busca ou aguarde novos dados operacionais." compact />
             ) : (
               <div className="space-y-3">
                 {paginatedCompanies.map((company) => (
@@ -540,11 +465,11 @@ export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
                 </div>
               </div>
             )}
-          </SectionCard>
+          </OperationalPanel>
 
-          <SectionCard title="Drill-down operacional" subtitle={selectedCompanyId ? `Empresa ${selectedCompanyId}` : 'Selecione uma empresa acima para abrir detalhes operacionais.'}>
+          <OperationalPanel title="Drill-down operacional" subtitle={selectedCompanyId ? `Empresa ${selectedCompanyId}` : 'Selecione uma empresa acima para abrir detalhes operacionais.'}>
             {!selectedCompanyId ? (
-              <EmptyState title="Nenhuma empresa selecionada" description="O drill-down mostra PDFs, retries, inconsistencias, Drive e eventos recentes da empresa." />
+              <OperationalStateView title="Nenhuma empresa selecionada" description="O drill-down mostra PDFs, retries, inconsistencias, Drive e eventos recentes da empresa." compact />
             ) : loadingDrilldown ? (
               <div className="space-y-3">
                 <div className="skeleton h-20 rounded-2xl" />
@@ -553,11 +478,11 @@ export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
             ) : companyDrilldown ? (
               <div className="space-y-5">
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                  <KpiCard label="PDFs encontrados" value={companyDrilldown.drive?.encontrados ?? 0} sub="Drive" icon={CheckCircle2} tone="emerald" />
-                  <KpiCard label="Conflitos" value={companyDrilldown.drive?.conflitos ?? 0} sub="match de boleto" icon={AlertTriangle} tone="amber" />
-                  <KpiCard label="Nao encontrados" value={companyDrilldown.drive?.naoEncontrados ?? 0} sub="PDF ausente" icon={XCircle} tone="red" />
-                  <KpiCard label="Baixa confianca" value={companyDrilldown.drive?.baixaConfianca ?? 0} sub="OCR/Drive" icon={ServerCrash} tone="amber" />
-                  <KpiCard label="Erros Drive" value={companyDrilldown.drive?.erros ?? 0} sub={companyDrilldown.integrations?.googleSheetsLabel || 'Drive'} icon={ExternalLink} tone={companyDrilldown.drive?.erros > 0 ? 'red' : 'default'} />
+                  <OperationalMetric label="PDFs encontrados" value={companyDrilldown.drive?.encontrados ?? 0} hint="Drive" icon={CheckCircle2} tone="success" />
+                  <OperationalMetric label="Conflitos" value={companyDrilldown.drive?.conflitos ?? 0} hint="match de boleto" icon={AlertTriangle} tone="warning" />
+                  <OperationalMetric label="Nao encontrados" value={companyDrilldown.drive?.naoEncontrados ?? 0} hint="PDF ausente" icon={XCircle} tone="danger" />
+                  <OperationalMetric label="Baixa confianca" value={companyDrilldown.drive?.baixaConfianca ?? 0} hint="OCR/Drive" icon={ServerCrash} tone="warning" />
+                  <OperationalMetric label="Erros Drive" value={companyDrilldown.drive?.erros ?? 0} hint={companyDrilldown.integrations?.googleSheetsLabel || 'Drive'} icon={ExternalLink} tone={companyDrilldown.drive?.erros > 0 ? 'danger' : 'info'} />
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-2">
@@ -590,12 +515,12 @@ export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
                 </div>
               </div>
             ) : (
-              <EmptyState title="Drill-down indisponivel" description="Nao foi possivel carregar detalhes dessa empresa." />
+              <OperationalStateView title="Drill-down indisponivel" description="Nao foi possivel carregar detalhes dessa empresa." compact />
             )}
-          </SectionCard>
+          </OperationalPanel>
 
           <div className="grid gap-5 xl:grid-cols-2">
-            <SectionCard title="Dispatches e idempotencia" subtitle="Fila, retries, duplicidade bloqueada e eventos em processamento.">
+            <OperationalPanel title="Dispatches e idempotencia" subtitle="Fila, retries, duplicidade bloqueada e eventos em processamento.">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {[
                   { label: 'Total', value: metrics?.dispatches?.total ?? '—', tone: 'text-slate-200' },
@@ -609,9 +534,9 @@ export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
                   </div>
                 ))}
               </div>
-            </SectionCard>
+            </OperationalPanel>
 
-            <SectionCard title="Integracoes do ecossistema" subtitle="Sinais consolidados de Z-API, Google e Stripe.">
+            <OperationalPanel title="Integracoes do ecossistema" subtitle="Sinais consolidados de Z-API, Google e Stripe.">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {[
                   { label: 'Z-API online', value: metrics?.integrations?.zapiConnected ?? 0, tone: 'text-emerald-400' },
@@ -627,13 +552,13 @@ export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
                   </div>
                 ))}
               </div>
-            </SectionCard>
+            </OperationalPanel>
           </div>
         </div>
       ) : null}
 
       {activeTab === 'health' ? (
-        <SectionCard
+        <OperationalPanel
           title="Health checks automaticos"
           subtitle={health?.checkedAt ? `Ultima verificacao em ${new Date(health.checkedAt).toLocaleString('pt-BR')}.` : 'Execute ou aguarde a verificacao automatica.'}
           action={
@@ -653,16 +578,16 @@ export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
           ) : filteredHealthChecks.length ? (
             <div className="space-y-3">{filteredHealthChecks.map((check, index) => <HealthCheckRow key={`${check.label}-${index}`} check={check} />)}</div>
           ) : (
-            <EmptyState title="Nenhum check encontrado" description="A busca atual nao retornou checks de health." />
+            <OperationalStateView title="Nenhum check encontrado" description="A busca atual nao retornou checks de health." compact />
           )}
-        </SectionCard>
+        </OperationalPanel>
       ) : null}
 
       {activeTab === 'automations' ? (
         <div className="space-y-5">
-          <SectionCard title="Controle de automacoes" subtitle="Pausa/ativacao segura por empresa.">
+          <OperationalPanel title="Controle de automacoes" subtitle="Pausa/ativacao segura por empresa.">
             {!metrics?.automations?.length ? (
-              <EmptyState title="Nenhuma automacao configurada" description="Nao ha configuracoes de automacao registradas." />
+              <OperationalStateView title="Nenhuma automacao configurada" description="Nao ha configuracoes de automacao registradas." compact />
             ) : (
               <div className="space-y-2">
                 {metrics.automations
@@ -678,11 +603,11 @@ export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
                   ))}
               </div>
             )}
-          </SectionCard>
+          </OperationalPanel>
 
-          <SectionCard title="Dispatches recentes" subtitle="Historico operacional com request_id, correlation_id e retries.">
+          <OperationalPanel title="Dispatches recentes" subtitle="Historico operacional com request_id, correlation_id e retries.">
             {!metrics?.dispatches?.recent?.length ? (
-              <EmptyState title="Sem dispatches recentes" description="A fila ainda nao gerou eventos no periodo." />
+              <OperationalStateView title="Sem dispatches recentes" description="A fila ainda nao gerou eventos no periodo." compact />
             ) : (
               <div className="space-y-2">
                 {metrics.dispatches.recent.slice(0, 12).map((row) => (
@@ -703,23 +628,40 @@ export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
                 ))}
               </div>
             )}
-          </SectionCard>
+          </OperationalPanel>
         </div>
       ) : null}
 
       {activeTab === 'alerts' ? (
-        <SectionCard title="Alertas internos" subtitle="Deduplicados por assinatura, com acknowledge e resolucao automatica quando o sinal desaparece.">
+        <OperationalPanel title="Alertas internos" subtitle="Deduplicados por assinatura, com acknowledge e resolucao automatica quando o sinal desaparece.">
           {!filteredAlerts.length ? (
-            <EmptyState title="Nenhum alerta encontrado" description="Nenhum alerta ativo ou resolvido corresponde ao filtro atual." />
+            <OperationalStateView title="Nenhum alerta encontrado" description="Nenhum alerta ativo ou resolvido corresponde ao filtro atual." compact />
           ) : (
-            <div className="space-y-3">
-              {filteredAlerts.map((alert) => (
-                <AlertRow key={alert.id} alert={alert} onAcknowledgeToggle={handleAlertToggle} />
-              ))}
-            </div>
+            <OperationalAlertList
+              items={filteredAlerts.map((alert) => ({
+                ...alert,
+                tone: alert.state === 'resolved' ? 'info' : alert.severity === 'critical' ? 'danger' : alert.severity === 'warning' ? 'warning' : 'processing',
+                status: alert.state === 'resolved' ? 'resolved' : alert.state === 'acknowledged' ? 'ack' : alert.severity,
+                meta: alert.state === 'resolved'
+                  ? `Resolvido em ${new Date(alert.resolvedAt).toLocaleString('pt-BR')}`
+                  : `Ultimo sinal em ${new Date(alert.lastSeenAt || alert.createdAt).toLocaleString('pt-BR')}`,
+              }))}
+              actionRenderer={(alert) => (
+                alert.state !== 'resolved' ? (
+                  <button
+                    type="button"
+                    onClick={() => handleAlertToggle(alert)}
+                    className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800"
+                  >
+                    {alert.acknowledgedAt ? 'Remover ack' : 'Acknowledge'}
+                  </button>
+                ) : null
+              )}
+            />
           )}
-        </SectionCard>
+        </OperationalPanel>
       ) : null}
-    </div>
+      </div>
+    </PageShell>
   );
 }

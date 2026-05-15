@@ -771,6 +771,14 @@ async function getCompanyZapiIntegration(
   return (data || null) as CompanyIntegrationRow | null;
 }
 
+function hasStoredCompanyZapiCredentials(integration: CompanyIntegrationRow | null | undefined) {
+  return Boolean(
+    String(integration?.instance_id || '').trim() &&
+    String(integration?.token || '').trim() &&
+    String(integration?.client_token || '').trim(),
+  );
+}
+
 function getTestZapiConfig() {
   const instanceId = Deno.env.get('TEST_ZAPI_INSTANCE_ID') || '';
   const token = Deno.env.get('TEST_ZAPI_TOKEN') || '';
@@ -797,6 +805,7 @@ async function resolveCompanyZapiConfig(
   const integration = await getCompanyZapiIntegration(supabaseAdmin, companyId);
   const allowTestMode = options.allowTestMode === true;
   const testConfig = allowTestMode ? getTestZapiConfig() : null;
+  const hasCompanyCredentials = hasStoredCompanyZapiCredentials(integration);
 
   safeInfo('[ZAPI COMPANY CONFIG]', {
     company_id: companyId,
@@ -805,16 +814,11 @@ async function resolveCompanyZapiConfig(
     has_instance_id: Boolean(String(integration?.instance_id || '').trim()),
     has_token: Boolean(String(integration?.token || '').trim()),
     has_client_token: Boolean(String(integration?.client_token || '').trim()),
-    source: integration?.connected ? 'company' : (testConfig ? 'test' : 'missing'),
+    source: hasCompanyCredentials ? 'company' : (testConfig ? 'test' : 'missing'),
     instance_id: maskSecret(integration?.instance_id),
   });
 
-  if (
-    integration?.connected &&
-    String(integration?.instance_id || '').trim() &&
-    String(integration?.token || '').trim() &&
-    String(integration?.client_token || '').trim()
-  ) {
+  if (hasCompanyCredentials) {
     return {
       source: 'company',
       instanceId: String(integration.instance_id || '').trim(),
@@ -2582,8 +2586,7 @@ async function sendRealChargesData(
     const registroId = String(item?.registro_id || item?.id || '').trim();
     const message = String(item?.message || item?.mensagem || '').trim();
     const documento = String(item?.documento || item?.numero_boleto || item?.numero_nf || '').trim();
-    const phoneRaw = String(item?.phone || item?.telefone || '').trim();
-    const normalizedPhone = normalizeBrazilPhone(phoneRaw);
+    const itemPhoneRaw = String(item?.phone || item?.telefone || '').trim();
 
     let record: Record<string, unknown> | null = null;
     if (registroId) {
@@ -2606,6 +2609,9 @@ async function sendRealChargesData(
 
       record = data;
     }
+
+    const phoneRaw = itemPhoneRaw || String(record?.telefone || '').trim();
+    const normalizedPhone = normalizeBrazilPhone(phoneRaw);
 
     const numeroBoletoEfetivo = getNumeroBoletoEfetivo((record || item) as Partial<FinancialRow> & Record<string, unknown>);
     const clienteEfetivo = getClienteEfetivo((record || item) as Partial<FinancialRow> & Record<string, unknown>) || String(item?.cliente || item?.cliente_nome || 'Cliente');
@@ -2665,14 +2671,15 @@ async function sendRealChargesData(
         status: 'duplicate',
         metadata: { reason: 'manual_dispatch_duplicate' },
       });
-      failed.push({
-        ...item,
-        registro_id: registroId || null,
-        telefone: normalizedPhone || phoneRaw || '',
-        error: 'Esta operacao ja foi processada anteriormente.',
-      });
-      continue;
-    }
+        failed.push({
+          ...item,
+          registro_id: registroId || null,
+          telefone: normalizedPhone || phoneRaw || '',
+          duplicate: true,
+          error: 'Esta operacao ja foi processada anteriormente.',
+        });
+        continue;
+      }
 
     if (!message) {
       const errorMessage = 'Mensagem vazia para envio real.';
@@ -3082,6 +3089,19 @@ async function sendSingleChargeData(
 
   if (result.failed.length) {
     const firstError = result.failed[0];
+    if (firstError?.duplicate === true) {
+      return {
+        success: false,
+        duplicate: true,
+        simulated: false,
+        zapiResponse: null,
+        message: String(firstError?.error || 'Esta operacao ja foi processada anteriormente.'),
+        payload: {
+          ...preview.payload,
+          message: finalMessage,
+        },
+      };
+    }
     throw new Error(String(firstError?.error || 'Falha ao enviar a cobranca individual.'));
   }
 

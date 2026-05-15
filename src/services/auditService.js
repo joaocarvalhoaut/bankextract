@@ -1,6 +1,8 @@
 import { supabase, hasSupabaseConfig } from './supabaseClient';
+import { createScopedLogger } from './loggerService';
 
 const isProduction = import.meta.env.PROD;
+const logger = createScopedLogger('audit-service');
 
 const getBrowserMetadata = () => ({
   ipAddress: null,
@@ -24,7 +26,7 @@ export async function logAuditEvent({
 
   if (!hasSupabaseConfig || !supabase) {
     if (isProduction) {
-      console.error('[AuditLog] Supabase nao configurado para producao.');
+      logger.error('supabase_not_configured', new Error('Supabase nao configurado para producao.'));
     }
     return false;
   }
@@ -57,13 +59,13 @@ export async function logAuditEvent({
     });
 
     if (error) {
-      console.warn('[AuditLog] Falha ao registrar log:', error.message);
+      logger.warn('insert_failed', { message: error.message });
       return false;
     }
 
     return true;
   } catch (error) {
-    console.warn('[AuditLog] Erro inesperado:', error?.message);
+    logger.warn('unexpected_error', { message: error?.message || 'Erro inesperado ao registrar auditoria.' });
     return false;
   }
 }

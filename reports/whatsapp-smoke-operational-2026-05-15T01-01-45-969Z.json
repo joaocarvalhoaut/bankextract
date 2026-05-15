@@ -1,0 +1,281 @@
+{
+  "startedAt": "2026-05-15T01:01:28.137Z",
+  "runTag": "SMOKE-1778806888137",
+  "scenarios": {
+    "individual": {
+      "edgeOk": true,
+      "action": "send_single_charge",
+      "message": "Mensagem enviada via WhatsApp",
+      "error": null
+    },
+    "batch": {
+      "edgeOk": true,
+      "action": "send_real",
+      "sentCount": 0,
+      "failedCount": 2,
+      "error": null
+    },
+    "invalidPhone": {
+      "edgeOk": true,
+      "sentCount": 0,
+      "failedCount": 1,
+      "message": "Telefone invalido para envio real.",
+      "error": null
+    },
+    "duplicate": {
+      "edgeOk": true,
+      "duplicate": true,
+      "message": "Esta cobrança já foi enviada recentemente. Confirme o reenvio para mandar novamente.",
+      "error": null
+    },
+    "concurrent": {
+      "owner": {
+        "ok": true,
+        "duplicate": false,
+        "message": "Mensagem enviada via WhatsApp",
+        "error": null
+      },
+      "second": {
+        "ok": false,
+        "duplicate": false,
+        "message": "Esta operacao ja foi processada anteriormente.",
+        "error": null
+      }
+    }
+  },
+  "db": {
+    "logs": [
+      {
+        "id": "da2f***00cb",
+        "financeiro_id": "ab65***85aa",
+        "status_envio": "sucesso",
+        "tipo_cobranca": "manual",
+        "erro": null,
+        "telefone": "5577***67",
+        "provider_message_id": "3EB0***ECE7",
+        "created_at": "2026-05-15T01:01:35.474626+00:00"
+      },
+      {
+        "id": "2719***2c1d",
+        "financeiro_id": "1957***5677",
+        "status_envio": "erro",
+        "tipo_cobranca": "manual",
+        "erro": "Telefone invalido para envio real.",
+        "telefone": "",
+        "provider_message_id": "",
+        "created_at": "2026-05-15T01:01:37.627095+00:00"
+      },
+      {
+        "id": "c95d***5c8f",
+        "financeiro_id": "a5d2***8915",
+        "status_envio": "erro",
+        "tipo_cobranca": "manual",
+        "erro": "Telefone invalido para envio real.",
+        "telefone": "",
+        "provider_message_id": "",
+        "created_at": "2026-05-15T01:01:38.47554+00:00"
+      },
+      {
+        "id": "4e91***c4e0",
+        "financeiro_id": "cd46***fcd2",
+        "status_envio": "erro",
+        "tipo_cobranca": "manual",
+        "erro": "Telefone invalido para envio real.",
+        "telefone": "123***23",
+        "provider_message_id": "",
+        "created_at": "2026-05-15T01:01:40.373634+00:00"
+      },
+      {
+        "id": "66d9***743a",
+        "financeiro_id": "ab65***85aa",
+        "status_envio": "ignorado",
+        "tipo_cobranca": "manual",
+        "erro": "duplicado_recente",
+        "telefone": "7798***67",
+        "provider_message_id": "",
+        "created_at": "2026-05-15T01:01:42.052779+00:00"
+      },
+      {
+        "id": "1bf9***2710",
+        "financeiro_id": "527d***8618",
+        "status_envio": "ignorado",
+        "tipo_cobranca": "manual",
+        "erro": "duplicado_idempotencia",
+        "telefone": "5577***67",
+        "provider_message_id": "",
+        "created_at": "2026-05-15T01:01:44.59545+00:00"
+      },
+      {
+        "id": "f3cb***bdfb",
+        "financeiro_id": "527d***8618",
+        "status_envio": "sucesso",
+        "tipo_cobranca": "manual",
+        "erro": null,
+        "telefone": "5577***67",
+        "provider_message_id": "3EB0***6E0A",
+        "created_at": "2026-05-15T01:01:44.606345+00:00"
+      }
+    ],
+    "charges": [
+      {
+        "id": "adc5***3a5b",
+        "registro_id": "ab65***85aa",
+        "status": "sent",
+        "provider_message_id": "3EB0***ECE7",
+        "failure_reason": null,
+        "telefone": "5577***67",
+        "simulated": false,
+        "force_resend": false,
+        "enviado_por": "28a8***99b1",
+        "created_at": "2026-05-15T01:01:35.297902+00:00"
+      },
+      {
+        "id": "35d7***2614",
+        "registro_id": "1957***5677",
+        "status": "failed",
+        "provider_message_id": "",
+        "failure_reason": "Telefone invalido para envio real.",
+        "telefone": "",
+        "simulated": false,
+        "force_resend": false,
+        "enviado_por": "28a8***99b1",
+        "created_at": "2026-05-15T01:01:37.483745+00:00"
+      },
+      {
+        "id": "d577***12a5",
+        "registro_id": "a5d2***8915",
+        "status": "failed",
+        "provider_message_id": "",
+        "failure_reason": "Telefone invalido para envio real.",
+        "telefone": "",
+        "simulated": false,
+        "force_resend": false,
+        "enviado_por": "28a8***99b1",
+        "created_at": "2026-05-15T01:01:38.335631+00:00"
+      },
+      {
+        "id": "f6bf***601d",
+        "registro_id": "cd46***fcd2",
+        "status": "failed",
+        "provider_message_id": "",
+        "failure_reason": "Telefone invalido para envio real.",
+        "telefone": "123***23",
+        "simulated": false,
+        "force_resend": false,
+        "enviado_por": "28a8***99b1",
+        "created_at": "2026-05-15T01:01:40.23243+00:00"
+      },
+      {
+        "id": "a8a8***a699",
+        "registro_id": "527d***8618",
+        "status": "sent",
+        "provider_message_id": "3EB0***6E0A",
+        "failure_reason": null,
+        "telefone": "5577***67",
+        "simulated": false,
+        "force_resend": false,
+        "enviado_por": "28a8***99b1",
+        "created_at": "2026-05-15T01:01:44.465916+00:00"
+      }
+    ],
+    "dispatches": [
+      {
+        "id": "6e74***01d5",
+        "dispatch_type": "whatsapp_manual_real",
+        "status": "completed",
+        "external_reference": "3EB0***ECE7",
+        "operation_hash": "e380***cd99",
+        "reason": null,
+        "provider_message_id": "3EB0***ECE7",
+        "created_at": "2026-05-15T01:01:34.412936+00:00"
+      },
+      {
+        "id": "a20b***764b",
+        "dispatch_type": "whatsapp_manual_real",
+        "status": "failed",
+        "external_reference": "",
+        "operation_hash": "c5ae***6ad9",
+        "reason": "invalid_phone",
+        "provider_message_id": "",
+        "created_at": "2026-05-15T01:01:37.340191+00:00"
+      },
+      {
+        "id": "db13***cef4",
+        "dispatch_type": "whatsapp_manual_real",
+        "status": "failed",
+        "external_reference": "",
+        "operation_hash": "18e5***d5e9",
+        "reason": "invalid_phone",
+        "provider_message_id": "",
+        "created_at": "2026-05-15T01:01:38.19154+00:00"
+      },
+      {
+        "id": "5954***96c0",
+        "dispatch_type": "whatsapp_manual_real",
+        "status": "failed",
+        "external_reference": "",
+        "operation_hash": "7c71***4112",
+        "reason": "invalid_phone",
+        "provider_message_id": "",
+        "created_at": "2026-05-15T01:01:40.089553+00:00"
+      },
+      {
+        "id": "e592***c128",
+        "dispatch_type": "whatsapp_manual_real",
+        "status": "completed",
+        "external_reference": "3EB0***6E0A",
+        "operation_hash": "42d0***dc33",
+        "reason": null,
+        "provider_message_id": "3EB0***6E0A",
+        "created_at": "2026-05-15T01:01:43.730745+00:00"
+      }
+    ],
+    "circuit": {
+      "company_id": "94aa3163-1e84-4c05-a398-dcef29997c63",
+      "state": "closed",
+      "failure_count": 0,
+      "success_count": 7,
+      "opened_at": null,
+      "updated_at": "2026-05-15T01:01:44.242+00:00"
+    }
+  },
+  "notes": [
+    "billing-automation invoked directly for all scenarios.",
+    "connected=false was forced before sends. allowTestMode remained false for authenticated users."
+  ],
+  "records": [
+    {
+      "id": "ab65***85aa",
+      "documento": "2427/5",
+      "nome": "DM CASA"
+    },
+    {
+      "id": "1957***5677",
+      "documento": "4239-2",
+      "nome": "MENEZES E BATISTA LTDA ME"
+    },
+    {
+      "id": "a5d2***8915",
+      "documento": "4240-2",
+      "nome": "MENEZES E BATISTA LTDA ME"
+    },
+    {
+      "id": "cd46***fcd2",
+      "documento": "4246-2",
+      "nome": "L7 PROMOCOES E PAGAMENTOS LTDA"
+    },
+    {
+      "id": "527d***8618",
+      "documento": "4241-2",
+      "nome": "SUPER MOVEIS DA VOVO LTDA"
+    }
+  ],
+  "connectedForcedFalse": true,
+  "assertions": {
+    "connectedFalseStillWorked": true,
+    "noFallbackTestCredsPossible": true,
+    "duplicateIgnoredLogged": true,
+    "invalidPhoneLogged": true,
+    "concurrentOneSuccessOneDuplicate": false
+  }
+}

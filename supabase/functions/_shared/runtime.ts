@@ -67,11 +67,12 @@ export function getDurationMs(ctx: RuntimeContext) {
 }
 
 export function normalizeRuntimeError(error: unknown) {
+  const isProduction = Boolean(getEnv('DENO_DEPLOYMENT_ID')) || getEnv('SUPABASE_ENV') === 'production';
   if (error instanceof Error) {
     return {
       name: error.name || 'Error',
       message: error.message || 'Erro interno.',
-      stack: error.stack || '',
+      stack: isProduction ? '' : (error.stack || ''),
     };
   }
 
@@ -94,6 +95,52 @@ export function normalizeRuntimeError(error: unknown) {
   };
 }
 
+const REDACTED_KEYS = ['token', 'secret', 'password', 'authorization', 'client_token', 'private_key'];
+const PHONE_KEYS = ['phone', 'telefone', 'mobile', 'whatsapp', 'celular'];
+
+function maskSecret(value: unknown) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (raw.length <= 8) return `${raw.slice(0, 2)}***${raw.slice(-2)}`;
+  return `${raw.slice(0, 4)}***${raw.slice(-4)}`;
+}
+
+function maskPhone(value: unknown) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length <= 4) return `${digits.slice(0, 1)}***`;
+  return `${digits.slice(0, 4)}***${digits.slice(-2)}`;
+}
+
+function shouldRedactKey(key: string) {
+  const normalized = String(key || '').toLowerCase();
+  return REDACTED_KEYS.some((token) => normalized.includes(token));
+}
+
+function shouldMaskPhoneKey(key: string) {
+  const normalized = String(key || '').toLowerCase();
+  return PHONE_KEYS.some((token) => normalized.includes(token));
+}
+
+function sanitizeRuntimeValue(value: unknown, parentKey = ''): unknown {
+  if (value == null) return value;
+  if (Array.isArray(value)) return value.map((item) => sanitizeRuntimeValue(item, parentKey));
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => {
+        if (shouldRedactKey(key)) return [key, maskSecret(nestedValue)];
+        if (shouldMaskPhoneKey(key)) return [key, maskPhone(nestedValue)];
+        return [key, sanitizeRuntimeValue(nestedValue, key)];
+      }),
+    );
+  }
+  if (typeof value === 'string') {
+    if (shouldRedactKey(parentKey)) return maskSecret(value);
+    if (shouldMaskPhoneKey(parentKey)) return maskPhone(value);
+  }
+  return value;
+}
+
 export function logRuntime(
   ctx: RuntimeContext,
   payload: {
@@ -113,10 +160,10 @@ export function logRuntime(
     action: payload.action || ctx.action,
     status: payload.status || 'ok',
     duration_ms: getDurationMs(ctx),
-    metadata: payload.metadata || {},
+    metadata: sanitizeRuntimeValue(payload.metadata || {}),
     created_at: new Date().toISOString(),
     environment: ctx.environment,
-    error: payload.error ? normalizeRuntimeError(payload.error) : null,
+    error: payload.error ? sanitizeRuntimeValue(normalizeRuntimeError(payload.error)) : null,
   };
 
   if (entry.status === 'error') {

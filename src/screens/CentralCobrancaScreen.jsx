@@ -16,6 +16,13 @@ import {
 import CollectionMessagePreview from '../components/CollectionMessagePreview';
 import DataTable from '../components/DataTable';
 import PlanLimitNotice from '../components/PlanLimitNotice';
+import { PageShell, ScreenHeader } from '../components/ui/layout';
+import {
+  OperationalMetric,
+  OperationalPanel,
+  OperationalStateView,
+  OperationalStatusPill,
+} from '../components/ui/operational';
 import {
   getBillingCenter,
   getBillingConfig,
@@ -34,23 +41,13 @@ import { getUsageSummary } from '../services/usageService';
 import { canUserPerformAction } from '../security/permissions';
 import { formatCurrencyBRL } from '../utils/format';
 
-function CenterCard({ label, value, tone = 'slate' }) {
-  const palette = {
-    slate: 'from-slate-400 to-slate-500 text-slate-50',
-    emerald: 'from-emerald-400 to-emerald-600 text-emerald-700',
-    blue: 'from-blue-400 to-blue-600 text-blue-700',
-    amber: 'from-amber-400 to-orange-400 text-amber-700',
-    red: 'from-red-400 to-red-600 text-red-700',
-  };
-
-  return (
-    <article className="relative overflow-hidden rounded-[24px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
-      <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${palette[tone]?.split(' text-')[0] || 'from-slate-400 to-slate-500'} opacity-80`} />
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className={`mt-2 text-3xl font-semibold ${palette[tone]?.split(' ').pop() || 'text-slate-50'}`}>{value}</p>
-    </article>
-  );
-}
+const metricTone = {
+  slate: 'info',
+  emerald: 'success',
+  blue: 'processing',
+  amber: 'warning',
+  red: 'danger',
+};
 
 const toneByStatus = {
   pendente: 'bg-slate-800/60 text-slate-200 ring-slate-700',
@@ -92,13 +89,6 @@ function temBoleto(registro = {}) {
 function logCobrancaMapping(registro = {}) {
   const numeroBoletoEfetivo = getNumeroBoletoEfetivo(registro);
   const clienteEfetivo = getClienteEfetivo(registro);
-  console.log(
-    '[COBRANCA]',
-    'cliente=', clienteEfetivo,
-    'documento=', registro?.documento || '',
-    'numero_nf=', registro?.numero_nf || '',
-    'usando=', numeroBoletoEfetivo
-  );
   return { numeroBoletoEfetivo, clienteEfetivo };
 }
 
@@ -359,7 +349,6 @@ export default function CentralCobrancaScreen({
       return;
     }
 
-    console.log('[MENSAGEM TEMPLATE]', finalMessage);
     setSavingTemplate(true);
     try {
       const currentConfigResponse = await getBillingConfig(resolvedCompanyId);
@@ -458,7 +447,6 @@ export default function CentralCobrancaScreen({
     setSendingRealKeys(activeKeys);
     try {
       const result = await sendRealCharge(resolvedCompanyId, payload);
-      console.log('[ENVIO REAL] resultado', result);
       setManualResult((current) => applyRealSendSummary(current, result));
       await loadCenter();
       await createAuditEvent(resolvedCompanyId, {
@@ -477,7 +465,6 @@ export default function CentralCobrancaScreen({
         `${Array.isArray(result?.sent) ? result.sent.length : 0} envio(s) real(is) concluido(s).`
       );
     } catch (error) {
-      console.error('[ENVIO REAL] erro', error);
       onToast?.('erro', error.message || 'Falha ao enviar cobranca real pelo WhatsApp.');
     } finally {
       setSendingReal(false);
@@ -540,8 +527,6 @@ export default function CentralCobrancaScreen({
   }, []);
 
   const handlePrepareSelected = useCallback(async (options = {}) => {
-    console.log('[PREPARAR COBRANCA] click');
-    console.log('[PREPARAR COBRANCA] selecionados', Array.from(selectedRows));
     const fallbackToEligible = options?.fallbackToEligible !== false;
     const selectedIds = Array.from(selectedRows).slice(0, 20);
     const eligibleRows = rows.filter((row) => isChargeRowEligible(row)).slice(0, 20);
@@ -552,23 +537,6 @@ export default function CentralCobrancaScreen({
       return;
     }
 
-    const debugPayload = targetIds.map((rowId) => {
-      const row = rows.find((item) => item.id === rowId) || {};
-      return {
-        id: rowId,
-        cliente: getClienteEfetivo(row),
-        telefone: row?.telefone || '',
-        documento: row?.documento || '',
-        numero_nf: row?.numero_nf || '',
-        numero_boleto: getNumeroBoletoEfetivo(row),
-        vencimento: row?.vencimento || null,
-        valor: row?.valor || 0,
-        status: row?.status || '',
-        temBoleto: temBoleto(row),
-        elegivel: isChargeRowEligible(row),
-      };
-    });
-
     setRunningAction('prepare-selected');
     try {
       const preparedItems = [];
@@ -576,16 +544,6 @@ export default function CentralCobrancaScreen({
       for (const rowId of targetIds) {
         const row = rows.find((item) => item.id === rowId) || {};
         const elegivel = isChargeRowEligible(row);
-        console.log('[PREVIEW ITEM]', {
-          cliente: row?.cliente_nome,
-          telefone: row?.telefone,
-          documento: row?.documento,
-          numero_nf: row?.numero_nf,
-          numero_boleto: row?.numero_boleto,
-          numeroEfetivo: getNumeroBoletoEfetivo(row),
-          temBoleto: temBoleto(row),
-          elegivel,
-        });
 
         if (!elegivel) {
           errorsList.push({
@@ -607,7 +565,6 @@ export default function CentralCobrancaScreen({
             message: result.manual_message || result.message || '',
           });
         } catch (error) {
-          console.error('[PREPARAR COBRANCA] erro item', error);
           try {
             const fallbackResult = await previewChargePayload(resolvedCompanyId, rowId);
             preparedItems.push({
@@ -637,7 +594,6 @@ export default function CentralCobrancaScreen({
         errorItems: errorsList,
         warning: 'Envio real nao realizado. Copie as mensagens e envie manualmente pelo WhatsApp.',
       };
-      console.log('[PREPARAR COBRANCA] resultado', result);
       setManualResult(result);
       if (preparedItems.length) {
         createAuditEvent(resolvedCompanyId, {
@@ -656,7 +612,6 @@ export default function CentralCobrancaScreen({
       await loadCenter();
       onToast?.('sucesso', `${preparedItems.length} preparo(s) manual(is) concluido(s).`);
     } catch (error) {
-      console.error('[PREPARAR COBRANCA] erro', error);
       onToast?.('erro', error.message || 'Falha ao preparar os titulos selecionados.');
     } finally {
       setRunningAction('');
@@ -942,74 +897,89 @@ export default function CentralCobrancaScreen({
 
   if (globalMode || !resolvedCompanyId) {
     return (
-      <section className="rounded-[28px] border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800 shadow-soft">
-        <div className="flex items-start gap-3">
-          <ShieldAlert className="mt-0.5" size={18} />
-          <div>
-            <p className="font-semibold">Selecione uma empresa especifica</p>
-            <p className="mt-1 text-xs text-amber-700">
-              A central de cobranca trabalha por empresa para manter isolamento por company_id.
-            </p>
-          </div>
-        </div>
-      </section>
+      <PageShell>
+        <ScreenHeader
+          breadcrumb={['Cobranca', 'Central de cobranca']}
+          title="Central de cobranca"
+          description="Operacao assistida por empresa para manter isolamento por company_id."
+        />
+        <OperationalPanel title="Central de cobranca indisponivel" subtitle="A central de cobranca trabalha por empresa para manter isolamento por company_id.">
+          <OperationalStateView icon={ShieldAlert} title="Selecione uma empresa especifica" description="Escolha uma empresa ativa para habilitar fila, simulacoes e preparacao assistida de cobrancas." tone="warning" compact />
+        </OperationalPanel>
+      </PageShell>
     );
   }
 
   return (
-    <div className="text-crisp space-y-6">
+    <PageShell>
+      <ScreenHeader
+        breadcrumb={['Cobranca', 'Central de cobranca']}
+        title="Central de cobranca"
+        description={`Visao consolidada da carteira da empresa ${companyName} com etapa da regua, boleto encontrado e ultimas simulacoes.`}
+        status={
+          <OperationalStatusPill tone="success">
+            <Receipt size={12} />
+            Central de cobranca
+          </OperationalStatusPill>
+        }
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={loadCenter}
+              disabled={loading}
+              className="control-surface inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition disabled:opacity-50"
+            >
+              {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCcw size={15} />}
+              Atualizar central
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePrepareSelected({ fallbackToEligible: true })}
+              disabled={Boolean(runningAction)}
+              className="control-surface inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition"
+            >
+              <Send size={15} />
+              Preparar cobranca
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePrepareSelected({ fallbackToEligible: false })}
+              disabled={!selectedRows.size || Boolean(runningAction)}
+              className="control-surface inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition disabled:opacity-50"
+            >
+              {runningAction === 'prepare-selected' ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+              Preparar lote
+            </button>
+          </>
+        }
+      />
+
+      <div className="text-crisp space-y-6">
       {limitNotice ? <PlanLimitNotice {...limitNotice} /> : null}
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <OperationalPanel
+        title="Operacao da regua por titulo"
+        subtitle={`Visao consolidada da carteira da empresa ${companyName} com etapa da regua, boleto encontrado e ultimas simulacoes.`}
+        action={null}
+      >
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
-              <Receipt size={13} />
-              Central de cobranca
-            </div>
-            <h3 className="mt-4 text-2xl font-semibold text-slate-50">Operacao da regua por titulo</h3>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-300">
-              Visao consolidada da carteira da empresa <span className="font-semibold text-slate-50">{companyName}</span> com etapa da regua, boleto encontrado e ultimas simulacoes.
+          <div className="max-w-3xl">
+            <p className="text-sm leading-relaxed text-slate-300">
+              Consolide fila, simulacoes, erros de boleto e preparacao manual num fluxo unico de operacao.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={loadCenter}
-            disabled={loading}
-            className="control-surface inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition disabled:opacity-50"
-          >
-            {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCcw size={15} />}
-            Atualizar central
-          </button>
-          <button
-            type="button"
-            onClick={() => handlePrepareSelected({ fallbackToEligible: true })}
-            disabled={Boolean(runningAction)}
-            className="control-surface inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition"
-          >
-            <Send size={15} />
-            Preparar cobranca
-          </button>
-          <button
-            type="button"
-            onClick={() => handlePrepareSelected({ fallbackToEligible: false })}
-            disabled={!selectedRows.size || Boolean(runningAction)}
-            className="control-surface inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition disabled:opacity-50"
-          >
-            {runningAction === 'prepare-selected' ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-            Preparar lote
-          </button>
         </div>
-      </section>
+      </OperationalPanel>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <CenterCard label="Vencendo amanha" value={cards.vencendo_amanha} tone="blue" />
-        <CenterCard label="Vencem hoje" value={cards.vencem_hoje} tone="emerald" />
-        <CenterCard label="Em atraso" value={cards.em_atraso} tone="amber" />
-        <CenterCard label="Sem boleto encontrado" value={cards.sem_boleto_encontrado} tone="red" />
-        <CenterCard label="Sem telefone valido" value={cards.sem_telefone_valido} tone="amber" />
-        <CenterCard label="Simulacoes hoje" value={cards.simulacoes_realizadas_hoje} tone="blue" />
-        <CenterCard label="Erros" value={cards.erros} tone="red" />
-        <CenterCard label="Total em aberto" value={cards.total_em_aberto} tone="slate" />
+        <OperationalMetric label="Vencendo amanha" value={cards.vencendo_amanha} hint="Fila preventiva" tone={metricTone.blue} />
+        <OperationalMetric label="Vencem hoje" value={cards.vencem_hoje} hint="Janela critica" tone={metricTone.emerald} />
+        <OperationalMetric label="Em atraso" value={cards.em_atraso} hint="Titulos vencidos" tone={metricTone.amber} />
+        <OperationalMetric label="Sem boleto encontrado" value={cards.sem_boleto_encontrado} hint="Bloqueio operacional" tone={metricTone.red} />
+        <OperationalMetric label="Sem telefone valido" value={cards.sem_telefone_valido} hint="Contato pendente" tone={metricTone.amber} />
+        <OperationalMetric label="Simulacoes hoje" value={cards.simulacoes_realizadas_hoje} hint="Validacoes recentes" tone={metricTone.blue} />
+        <OperationalMetric label="Erros" value={cards.erros} hint="Falhas no pipeline" tone={metricTone.red} />
+        <OperationalMetric label="Total em aberto" value={cards.total_em_aberto} hint="Carteira monitorada" tone={metricTone.slate} />
       </section>
 
       {simulationResult ? (
@@ -1043,7 +1013,6 @@ export default function CentralCobrancaScreen({
                   restoreMessage={simulationResult.mensagem_gerada || ''}
                   onMessageChange={(value) =>
                     {
-                      console.log('[MENSAGEM TEMPLATE]', value);
                       setSimulationResult((current) => (current ? { ...current, mensagem_gerada: value } : current));
                     }
                   }
@@ -1105,7 +1074,6 @@ export default function CentralCobrancaScreen({
                 restoreMessage={previewResult.message || ''}
                 onMessageChange={(value) =>
                   {
-                    console.log('[MENSAGEM TEMPLATE]', value);
                     setPreviewResult((current) => (current ? { ...current, message: value } : current));
                   }
                 }
@@ -1167,16 +1135,16 @@ export default function CentralCobrancaScreen({
             </div>
 
             <div className="mt-4 grid gap-4 md:grid-cols-4">
-              <CenterCard label="Preparados" value={manualResult.prepared || 0} tone="emerald" />
-              <CenterCard label="Erros" value={manualResult.errors || 0} tone="red" />
-              <CenterCard label="Sem telefone" value={(manualResult.errorItems || []).filter((item) => item.semTelefone).length} tone="amber" />
-              <CenterCard label="Sem boleto" value={(manualResult.errorItems || []).filter((item) => item.semBoleto).length} tone="amber" />
+              <OperationalMetric label="Preparados" value={manualResult.prepared || 0} hint="Itens prontos" tone={metricTone.emerald} />
+              <OperationalMetric label="Erros" value={manualResult.errors || 0} hint="Falhas de preparo" tone={metricTone.red} />
+              <OperationalMetric label="Sem telefone" value={(manualResult.errorItems || []).filter((item) => item.semTelefone).length} hint="Contato ausente" tone={metricTone.amber} />
+              <OperationalMetric label="Sem boleto" value={(manualResult.errorItems || []).filter((item) => item.semBoleto).length} hint="Documento ausente" tone={metricTone.amber} />
             </div>
 
             <div className="mt-4 grid gap-4 md:grid-cols-3">
-              <CenterCard label="Enviados reais" value={manualResult.sendSummary?.sent || 0} tone="emerald" />
-              <CenterCard label="Erros de envio" value={manualResult.sendSummary?.failed || 0} tone="red" />
-              <CenterCard label="Pendentes" value={manualResult.sendSummary?.pending ?? ((manualResult.items || []).length - (manualResult.sendSummary?.sent || 0) - (manualResult.sendSummary?.failed || 0))} tone="blue" />
+              <OperationalMetric label="Enviados reais" value={manualResult.sendSummary?.sent || 0} hint="Confirmados na Z-API" tone={metricTone.emerald} />
+              <OperationalMetric label="Erros de envio" value={manualResult.sendSummary?.failed || 0} hint="Retorno com falha" tone={metricTone.red} />
+              <OperationalMetric label="Pendentes" value={manualResult.sendSummary?.pending ?? ((manualResult.items || []).length - (manualResult.sendSummary?.sent || 0) - (manualResult.sendSummary?.failed || 0))} hint="Ainda nao enviados" tone={metricTone.blue} />
             </div>
 
             <div className="mt-5 space-y-4">
@@ -1240,7 +1208,6 @@ export default function CentralCobrancaScreen({
                       restoreMessage={item.message || ''}
                       onMessageChange={(value) =>
                         {
-                          console.log('[MENSAGEM TEMPLATE]', value);
                           setManualResult((current) =>
                             current
                               ? {
@@ -1297,6 +1264,7 @@ export default function CentralCobrancaScreen({
           </div>
         </div>
       ) : null}
-    </div>
+      </div>
+    </PageShell>
   );
 }

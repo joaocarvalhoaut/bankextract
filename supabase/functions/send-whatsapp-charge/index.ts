@@ -276,7 +276,7 @@ async function resolveZapiConfig(supabaseAdmin: AdminClient, companyId: string):
   const companyToken = String(data?.token || '').trim();
   const companyClientToken = String(data?.client_token || '').trim();
 
-  if (data?.connected && companyInstanceId && companyToken && companyClientToken) {
+  if (companyInstanceId && companyToken && companyClientToken) {
     return {
       mode: 'real',
       source: 'company',

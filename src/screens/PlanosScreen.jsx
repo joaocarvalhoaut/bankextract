@@ -39,14 +39,6 @@ export default function PlanosScreen({ plans = [], currentPlanId, onChoosePlan, 
   }, [companyId, onToast]);
 
   const handlePlanAction = async (plan) => {
-    const planCode = plan?.code || plan?.id;
-    console.log('[PlanosScreen] handlePlanAction called', {
-      planCode,
-      planName: plan?.name,
-      companyId,
-      hasOnChoosePlan: typeof onChoosePlan === 'function',
-    });
-
     if (!plan) return;
     if (!companyId) {
       onChoosePlan?.(plan);
@@ -57,7 +49,6 @@ export default function PlanosScreen({ plans = [], currentPlanId, onChoosePlan, 
     try {
       await onChoosePlan?.(plan);
     } catch (error) {
-      console.error('[PlanosScreen] handlePlanAction error:', error);
       onToast?.('erro', error.message || 'Falha ao iniciar o checkout do plano.');
     } finally {
       setCheckoutLoading(false);

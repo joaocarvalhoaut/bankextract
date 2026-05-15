@@ -6,7 +6,7 @@
  * - Verifica se a empresa possui config ativa antes de chamar a Edge Function.
  * - Cache de config com TTL de 60s para evitar consultas excessivas ao Supabase.
  * - Nunca sincroniza em modo global ("Todas as empresas").
- * - Erros são silenciosos para o usuário (apenas console.warn + estado exposto).
+ * - Erros sao silenciosos para o usuario (apenas estado exposto).
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -71,8 +71,7 @@ export function useAutoGoogleSheetsSync({ activeCompanyId, isGlobalView, enabled
    * Dispara a sincronização automática com debounce.
    * @param {string} reason - Motivo do disparo (apenas para log).
    */
-  const triggerSync = useCallback((reason) => {
-    var safeReason = reason || '';
+  const triggerSync = useCallback(() => {
     if (!enabled) return;
     if (!activeCompanyId) return;
     if (activeCompanyId === GLOBAL_COMPANY_ID || isGlobalView) return;
@@ -94,14 +93,12 @@ export function useAutoGoogleSheetsSync({ activeCompanyId, isGlobalView, enabled
         try {
           await syncGoogleSheets(activeCompanyId);
           setSyncStatus(SYNC_STATUS.SYNCED);
-          console.log('[AutoSync] Google Sheets sincronizado — motivo: ' + safeReason);
 
           clearTimeout(clearSyncRef.current);
           clearSyncRef.current = setTimeout(() => setSyncStatus(SYNC_STATUS.IDLE), 4000);
         } catch (syncErr) {
           setSyncStatus(SYNC_STATUS.ERROR);
           setSyncMessage((syncErr && syncErr.message) || 'Falha na sincronização automática com Google Sheets.');
-          console.warn('[AutoSync] Falha — motivo: ' + safeReason, syncErr);
 
           clearTimeout(clearSyncRef.current);
           clearSyncRef.current = setTimeout(() => {

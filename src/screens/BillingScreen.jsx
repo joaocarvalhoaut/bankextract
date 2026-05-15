@@ -169,19 +169,8 @@ export default function BillingScreen({
   // FIX: guard usa plan?.code || plan?.id (objetos do DB tem code, constantes locais tem id)
   const handleCheckout = async (plan = upgrade?.target) => {
     const planCode = plan?.code || plan?.id;
-    console.log('[BillingScreen] handleCheckout called', {
-      planCode,
-      planId: plan?.id,
-      planName: plan?.name,
-      hasUpgrade: !!upgrade,
-      upgradeTarget: upgrade?.target?.id,
-      hasOnChoosePlan: typeof onChoosePlan === 'function',
-    });
 
     if (!planCode || !onChoosePlan) {
-      console.warn('[BillingScreen] handleCheckout blocked:', {
-        reason: !planCode ? 'planCode vazio - upgrade.target ausente' : 'onChoosePlan nao fornecido',
-      });
       return;
     }
 
@@ -189,7 +178,6 @@ export default function BillingScreen({
     try {
       await onChoosePlan(plan);
     } catch (error) {
-      console.error('[BillingScreen] handleCheckout error:', error);
       onToast?.('erro', error.message || 'Falha ao iniciar o checkout Stripe.');
     } finally {
       setCheckoutLoading(false);

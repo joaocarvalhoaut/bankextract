@@ -4,6 +4,8 @@ import ClearOverviewModal from '../components/ClearOverviewModal';
 import ConfiguracaoJurosMulta from '../components/ConfiguracaoJurosMulta';
 import FinanceTable from '../components/FinanceTable';
 import RepresentanteModal from '../components/RepresentanteModal';
+import { PageShell, ScreenHeader } from '../components/ui/layout';
+import { OperationalMetric, OperationalPanel } from '../components/ui/operational';
 import { financeService } from '../services/financeService.ts';
 import { auditLog } from '../services/auditService';
 import { canUserPerformAction } from '../security/permissions';
@@ -51,7 +53,8 @@ const toTableRow = (row, config) => {
     company_id: row.company_id,
     empresaNome: row.empresa_nome || 'Empresa',
     nome: row.nome || '',
-    numeroBoleto: row.numero_boleto || '',
+    documento: row.documento || row.numero_documento || row.numero_boleto || '',
+    numeroBoleto: row.numero_boleto || row.documento || row.numero_documento || '',
     dataVencimento: row.data_vencimento || '',
     valor: Number(row.valor || 0),
     telefone: row.telefone || '',
@@ -165,7 +168,7 @@ export default function VisaoGeralScreen({
   const allTableRows = useMemo(() => {
     const baseRows = tableRows.filter((row) => {
       const searchHaystack = normalizeText(
-        `${row.empresaNome} ${row.nome} ${row.numeroBoleto} ${row.telefone} ${row.observacao} ${row.status} ${row.tipo}`
+        `${row.empresaNome} ${row.nome} ${row.documento} ${row.numeroBoleto} ${row.telefone} ${row.observacao} ${row.status} ${row.tipo}`
       );
 
       if (tableSearch && !searchHaystack.includes(normalizeText(tableSearch))) {
@@ -389,6 +392,7 @@ export default function VisaoGeralScreen({
 
       updateLocalRow(editingCell.id, {
         nome: saved.nome,
+        documento: saved.documento || saved.numero_boleto || '',
         numeroBoleto: saved.numero_boleto,
         dataVencimento: saved.data_vencimento,
         valor: Number(saved.valor || 0),
@@ -575,67 +579,18 @@ export default function VisaoGeralScreen({
   }, [canDeleteRecords, onRequestRefresh, onToast, selectedRows, tableRows]);
 
   return (
-    <div className="space-y-6">
-      <section className="hero-mesh text-crisp border-brand overflow-hidden rounded-[32px] border p-6 shadow-lifted lg:p-8">
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <div>
-            <div className="notice-info mb-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em]">
-              <WalletCards size={13} />
-              Carteira financeira
-            </div>
-            <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-slate-50 lg:text-4xl">
-              Visao consolidada da carteira para operar, exportar e limpar com seguranca.
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-300 lg:text-base">
-              Esta tela concentra registros reais, filtros comerciais e acoes operacionais com company_id, batch_id e
-              permissoes por role.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            <div className="surface-elevated rounded-2xl p-4 shadow-soft">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">Escopo atual</p>
-              <p className="text-on-light mt-2 text-sm font-semibold">
-                {globalMode ? 'Todas as empresas' : activeCompanyName || 'Nenhuma empresa ativa'}
-              </p>
-            </div>
-            <div className="surface-elevated rounded-2xl p-4 shadow-soft">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">Registros visiveis</p>
-              <p className="text-on-light mt-2 text-2xl font-semibold">{rows.length}</p>
-            </div>
-            <div className="surface-elevated rounded-2xl p-4 shadow-soft">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">Acoes destrutivas</p>
-              <p className="text-on-light mt-2 text-sm font-semibold">
-                {globalMode ? 'Bloqueadas no modo global' : canClearView ? 'Controladas por role' : 'Restritas'}
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <ConfiguracaoJurosMulta
-        config={config}
-        onChange={onConfigChange}
-        disabled={globalMode}
-        notice={globalMode ? 'Selecione uma empresa especifica para editar juros e multa.' : ''}
-        title="Configuracao financeira"
-        subtitle="Esses percentuais recalculam automaticamente valores atualizados, cobrancas e sincronizacao."
-        showRealtimeBadge
-        saveLabel="Salvar configuracao"
-      />
-
-      <section className="accent-bar text-crisp surface-card rounded-[28px] p-5">
-        <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-50">Carteira financeira</h3>
-            <p className="text-sm text-slate-300">Visao principal dos registros importados por empresa e lote.</p>
-            {!canExport || !canClearView ? (
-              <p className="notice-warning mt-2 rounded-xl px-3 py-2 text-xs">
-                Algumas acoes desta tela estao bloqueadas para o seu perfil atual.
-              </p>
-            ) : null}
-          </div>
-
+    <PageShell>
+      <ScreenHeader
+        breadcrumb={['Operacao', 'Visao geral']}
+        title="Carteira financeira"
+        description="Visao consolidada da carteira para operar, exportar e limpar com seguranca."
+        status={
+          <span className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1.5 text-xs font-semibold text-slate-200">
+            <WalletCards size={12} />
+            Carteira financeira
+          </span>
+        }
+        actions={
           <div className="flex flex-wrap gap-2">
             {canExport ? (
               <button
@@ -668,10 +623,57 @@ export default function VisaoGeralScreen({
               </button>
             ) : null}
           </div>
+        }
+      />
+
+      <div className="space-y-6">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <OperationalMetric
+          label="Escopo atual"
+          value={globalMode ? 'Todas as empresas' : activeCompanyName || 'Nenhuma empresa ativa'}
+          hint="A carteira respeita a empresa selecionada."
+          tone="info"
+        />
+        <OperationalMetric
+          label="Registros visiveis"
+          value={rows.length}
+          hint="Linhas ativas nesta leitura operacional."
+          tone="processing"
+        />
+        <OperationalMetric
+          label="Acoes destrutivas"
+          value={globalMode ? 'Bloqueadas' : canClearView ? 'Controladas' : 'Restritas'}
+          hint={globalMode ? 'Modo global sem limpeza direta.' : 'Permissao governada por role.'}
+          tone={globalMode ? 'warning' : canClearView ? 'success' : 'danger'}
+        />
+      </section>
+
+      <ConfiguracaoJurosMulta
+        config={config}
+        onChange={onConfigChange}
+        disabled={globalMode}
+        notice={globalMode ? 'Selecione uma empresa especifica para editar juros e multa.' : ''}
+        title="Configuracao financeira"
+        subtitle="Esses percentuais recalculam automaticamente valores atualizados, cobrancas e sincronizacao."
+        showRealtimeBadge
+        saveLabel="Salvar configuracao"
+      />
+
+      <OperationalPanel title="Carteira financeira" subtitle="Visao principal dos registros importados por empresa e lote.">
+        <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            {!canExport || !canClearView ? (
+              <p className="mt-2 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                Algumas acoes desta tela estao bloqueadas para o seu perfil atual.
+              </p>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap gap-2" />
         </div>
 
         <div className="mb-5 grid grid-cols-1 gap-3 xl:grid-cols-6">
-          <label className="surface-panel rounded-2xl px-4 py-3 shadow-soft">
+          <label className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
             <span className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
               <SlidersHorizontal size={13} />
               Empresa
@@ -728,7 +730,7 @@ export default function VisaoGeralScreen({
             <option value="vencidos">Vencidos</option>
             <option value="liquidacao">Liquidacao</option>
           </select>
-          <div className="surface-panel flex items-center gap-2 rounded-2xl px-4 py-3 shadow-soft">
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
             <Search size={14} className="text-slate-400" />
             <input
               value={filters.search}
@@ -785,7 +787,7 @@ export default function VisaoGeralScreen({
           savingCell={savingCell}
           saveFeedback={saveFeedback}
         />
-      </section>
+      </OperationalPanel>
 
       <ClearOverviewModal
         isOpen={clearOverviewModalOpen}
@@ -803,6 +805,7 @@ export default function VisaoGeralScreen({
         onSave={handleSaveRepresentative}
         onDelete={handleDeleteRepresentative}
       />
-    </div>
+      </div>
+    </PageShell>
   );
 }

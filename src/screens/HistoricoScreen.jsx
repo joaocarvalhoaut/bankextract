@@ -1,5 +1,6 @@
 import { Eye, FileSearch, FileStack, Trash2 } from 'lucide-react';
 import DataTable from '../components/DataTable';
+import { PageShell, ScreenHeader } from '../components/ui/layout';
 import { formatCurrencyBRL, formatDateTimeBR } from '../utils/format';
 
 const typeLabel = {
@@ -99,14 +100,33 @@ export default function HistoricoScreen({
   ];
 
   return (
-    <div className="space-y-6">
+    <PageShell>
+      <ScreenHeader
+        breadcrumb={['Auditoria', 'Historico de importacoes']}
+        title="Historico de importacoes"
+        description="Consulte lotes processados, batch_id, exclusoes e trilha de dados por empresa."
+        actions={
+          onOpenDataLogs ? (
+            <button
+              type="button"
+              onClick={onOpenDataLogs}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800/60"
+            >
+              <FileSearch size={14} />
+              Logs de Dados
+            </button>
+          ) : null
+        }
+      />
+
+      <div className="space-y-6">
       <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-slate-900 text-white">
-            <FileStack size={22} />
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white">
+            <FileStack size={18} />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-slate-50">Historico de importacoes</h3>
+            <h3 className="text-base font-semibold text-slate-50">Lotes processados</h3>
             <p className="text-sm text-slate-500">
               Cada lote e identificado por{' '}
               <code className="rounded bg-slate-800/60 px-1 py-0.5 font-mono text-xs text-slate-200">batch_id</code>.
@@ -114,16 +134,6 @@ export default function HistoricoScreen({
               <code className="rounded bg-slate-800/60 px-1 py-0.5 font-mono text-xs text-slate-200">company_id</code>.
             </p>
           </div>
-          {onOpenDataLogs ? (
-            <button
-              type="button"
-              onClick={onOpenDataLogs}
-              className="ml-auto inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800/60"
-            >
-              <FileSearch size={14} />
-              Logs de Dados
-            </button>
-          ) : null}
         </div>
 
         <DataTable
@@ -133,6 +143,7 @@ export default function HistoricoScreen({
           emptyDescription="Processe um documento na aba Importacao para comecar a construir o historico."
         />
       </section>
-    </div>
+      </div>
+    </PageShell>
   );
 }

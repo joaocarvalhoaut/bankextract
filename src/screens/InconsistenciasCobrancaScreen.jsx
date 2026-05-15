@@ -22,28 +22,12 @@ import {
   updateChargeStatus,
   updateFinancialPhone,
 } from '../services/billingAutomationService';
+import { PageShell, ScreenHeader } from '../components/ui/layout';
+import { OperationalMetric, OperationalPanel, OperationalStatusPill } from '../components/ui/operational';
 import { canUserPerformAction } from '../security/permissions';
 import { formatCurrencyBRL, formatDateBR } from '../utils/format';
 
 const IGNORED_PREFIX = 'bankextract_ignored_inconsistencies_';
-
-function InconsistencyCard({ label, value, tone = 'slate' }) {
-  const palette = {
-    slate: 'from-slate-400 to-slate-500 text-slate-50',
-    emerald: 'from-emerald-400 to-emerald-600 text-emerald-700',
-    blue: 'from-blue-400 to-blue-600 text-blue-700',
-    amber: 'from-amber-400 to-orange-400 text-amber-700',
-    red: 'from-red-400 to-red-600 text-red-700',
-  };
-
-  return (
-    <article className="relative overflow-hidden rounded-[24px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
-      <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${palette[tone]?.split(' text-')[0] || 'from-slate-400 to-slate-500'} opacity-80`} />
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className={`mt-2 text-3xl font-semibold ${palette[tone]?.split(' ').pop() || 'text-slate-50'}`}>{value}</p>
-    </article>
-  );
-}
 
 function FilterField({ label, children }) {
   return (
@@ -55,8 +39,8 @@ function FilterField({ label, children }) {
 }
 
 function severityTone(level) {
-  if (level === 'alta') return 'bg-red-50 text-red-700 ring-red-200';
-  if (level === 'media') return 'bg-amber-50 text-amber-700 ring-amber-200';
+  if (level === 'alta') return 'bg-red-950/30 text-red-300 ring-red-500/20';
+  if (level === 'media') return 'bg-amber-950/30 text-amber-300 ring-amber-500/20';
   return 'bg-slate-800/60 text-slate-200 ring-slate-700';
 }
 
@@ -365,7 +349,7 @@ export default function InconsistenciasCobrancaScreen({
             type="button"
             disabled={!canManageCharges || Boolean(runningAction)}
             onClick={() => runStatusAction(row, 'pendente', 'Registro marcado como pendente.')}
-            className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-xl border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs font-medium text-emerald-300 transition hover:bg-emerald-950/30 disabled:opacity-50"
           >
             {runningAction === `pendente-${row.id}` ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
             Marcar como pendente
@@ -374,7 +358,7 @@ export default function InconsistenciasCobrancaScreen({
             type="button"
             disabled={!canManageCharges || Boolean(runningAction)}
             onClick={() => runStatusAction(row, 'suspenso', 'Registro marcado como suspenso.')}
-            className="inline-flex items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-xl border border-amber-500/20 bg-amber-950/20 px-3 py-2 text-xs font-medium text-amber-300 transition hover:bg-amber-950/30 disabled:opacity-50"
           >
             {runningAction === `suspenso-${row.id}` ? <Loader2 size={12} className="animate-spin" /> : <AlertCircle size={12} />}
             Marcar como suspenso
@@ -393,12 +377,12 @@ export default function InconsistenciasCobrancaScreen({
 
   if (globalMode || !resolvedCompanyId) {
     return (
-      <section className="rounded-[28px] border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800 shadow-soft">
+      <section className="rounded-3xl border border-amber-500/20 bg-amber-500/10 p-6 text-sm text-amber-200">
         <div className="flex items-start gap-3">
           <ShieldAlert className="mt-0.5" size={18} />
           <div>
             <p className="font-semibold">Selecione uma empresa especifica</p>
-            <p className="mt-1 text-xs text-amber-700">
+            <p className="mt-1 text-xs text-amber-300">
               O painel de inconsistencias funciona por empresa para manter isolamento por company_id.
             </p>
           </div>
@@ -408,50 +392,50 @@ export default function InconsistenciasCobrancaScreen({
   }
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-red-700">
-              <AlertCircle size={13} />
-              Inconsistencias de cobranca
-            </div>
-            <h3 className="mt-4 text-2xl font-semibold text-slate-50">Painel preventivo da regua</h3>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-300">
-              Problemas que podem impedir ou prejudicar a cobranca automatica da empresa <span className="font-semibold text-slate-50">{companyName}</span>.
-            </p>
-          </div>
+    <PageShell>
+      <ScreenHeader
+        breadcrumb={['Cobranca', 'Inconsistencias']}
+        title="Painel preventivo da regua"
+        description={`Problemas que podem impedir ou prejudicar a cobranca automatica da empresa ${companyName}.`}
+        status={
+          <span className="inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-950/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-red-300">
+            <AlertCircle size={12} />
+            Inconsistencias de cobranca
+          </span>
+        }
+        actions={
           <button
             type="button"
             onClick={() => loadInconsistencies(appliedFilters)}
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition hover:bg-slate-800/40 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
           >
             {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCcw size={15} />}
             Atualizar inconsistencias
           </button>
-        </div>
-      </section>
+        }
+      />
+
+      <div className="space-y-6">
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <InconsistencyCard label="Sem telefone" value={cards.sem_telefone || 0} tone="red" />
-        <InconsistencyCard label="Telefone invalido" value={cards.telefone_invalido || 0} tone="red" />
-        <InconsistencyCard label="Sem boleto" value={cards.sem_boleto || 0} tone="amber" />
-        <InconsistencyCard label="Status invalido" value={cards.status_invalido || 0} tone="amber" />
-        <InconsistencyCard label="Vencimento ausente" value={cards.vencimento_ausente || 0} tone="red" />
-        <InconsistencyCard label="Valor zerado" value={cards.valor_zerado || 0} tone="red" />
-        <InconsistencyCard label="Duplicados" value={cards.duplicados || 0} tone="blue" />
-        <InconsistencyCard label="Suspensos" value={cards.suspensos || 0} tone="slate" />
+        <OperationalMetric label="Sem telefone" value={cards.sem_telefone || 0} hint="Contato ausente" tone="danger" />
+        <OperationalMetric label="Telefone invalido" value={cards.telefone_invalido || 0} hint="Numero inconsistente" tone="danger" />
+        <OperationalMetric label="Sem boleto" value={cards.sem_boleto || 0} hint="Anexo indisponivel" tone="warning" />
+        <OperationalMetric label="Status invalido" value={cards.status_invalido || 0} hint="Fluxo interrompido" tone="warning" />
+        <OperationalMetric label="Vencimento ausente" value={cards.vencimento_ausente || 0} hint="Dado obrigatorio" tone="danger" />
+        <OperationalMetric label="Valor zerado" value={cards.valor_zerado || 0} hint="Registro anomalo" tone="danger" />
+        <OperationalMetric label="Duplicados" value={cards.duplicados || 0} hint="Possivel conflito" tone="processing" />
+        <OperationalMetric label="Suspensos" value={cards.suspensos || 0} hint="Sem acao automatica" tone="info" />
       </section>
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <OperationalPanel title="Status dos boletos no Google Drive" subtitle="Resultado da ultima varredura inteligente de PDFs no Drive.">
         <div className="mb-4 flex items-center justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-blue-700/40 bg-blue-900/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-300">
-              <FileCheck size={13} />
-              Status dos boletos no Google Drive
-            </div>
-            <p className="mt-2 text-sm text-slate-400">Resultado da ultima varredura inteligente de PDFs no Drive.</p>
+            <OperationalStatusPill tone="processing">
+              <FileCheck size={12} />
+              Google Drive
+            </OperationalStatusPill>
           </div>
           <button
             type="button"
@@ -510,9 +494,9 @@ export default function InconsistenciasCobrancaScreen({
             {' '}detectado(s). Use o botao &quot;Reprocessar boleto&quot; na tabela abaixo para reanalise individual.
           </div>
         ) : null}
-      </section>
+      </OperationalPanel>
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <OperationalPanel title="Filtros de inconsistencias" subtitle="Refine problema, severidade, status e registros ignorados.">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
           <FilterField label="Cliente">
             <input
@@ -595,21 +579,21 @@ export default function InconsistenciasCobrancaScreen({
             Limpar filtros
           </button>
         </div>
-      </section>
+      </OperationalPanel>
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <OperationalPanel title="Registros com inconsistencias" subtitle="Lista operacional para reprocessar boletos, ajustar telefone e revisar severidade.">
         <DataTable
           columns={columns}
           rows={items}
           emptyTitle="Nenhuma inconsistencia encontrada."
           emptyDescription="Quando houver problemas de cobrança na empresa ativa, eles aparecerão aqui para revisão."
         />
-      </section>
+      </OperationalPanel>
 
       {phoneModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
-          <div className="w-full max-w-lg overflow-hidden rounded-[32px] border border-slate-700 bg-slate-900/60 shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+          <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-slate-700/60 bg-slate-950 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-700/60 px-6 py-5">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Editar telefone</p>
                 <h3 className="mt-2 text-2xl font-semibold text-slate-50">{phoneModal.nome || 'Cliente'}</h3>
@@ -633,11 +617,11 @@ export default function InconsistenciasCobrancaScreen({
                   className="input-premium w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-50 outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </FilterField>
-              <div className="rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-300">
+              <div className="rounded-2xl border border-slate-700/60 bg-slate-900/70 px-4 py-3 text-sm text-slate-300">
                 O telefone será salvo no registro financeiro da empresa ativa respeitando o company_id atual.
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4">
+            <div className="flex items-center justify-end gap-3 border-t border-slate-700/60 px-6 py-4">
               <button
                 type="button"
                 onClick={() => setPhoneModal(null)}
@@ -671,6 +655,7 @@ export default function InconsistenciasCobrancaScreen({
           </div>
         </div>
       ) : null}
-    </div>
+      </div>
+    </PageShell>
   );
 }

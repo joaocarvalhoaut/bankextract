@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Copy, RefreshCcw, Sparkles } from 'lucide-react';
 import CollectionToneSelector from './CollectionToneSelector';
 import { generateCollectionMessage, getDefaultCollectionTone } from '../services/collectionMessageService';
@@ -22,20 +22,52 @@ export default function CollectionMessagePreview({
   savingTemplate = false,
   extraActions = null,
 }) {
+  const contextKey = useMemo(() => JSON.stringify(context || {}), [context]);
   const [tone, setTone] = useState(() => getDefaultCollectionTone(context));
-  const [message, setMessage] = useState(initialMessage || '');
-  const [generated, setGenerated] = useState(() => generateCollectionMessage(context, getDefaultCollectionTone(context)));
+  const generated = useMemo(() => generateCollectionMessage(context, tone), [contextKey, context, tone]);
+  const [message, setMessage] = useState(() => initialMessage || generated.message);
+  const skipToneSyncRef = useRef(false);
+  const previousContextKeyRef = useRef(contextKey);
+  const previousInitialMessageRef = useRef(initialMessage);
+  const onMessageChangeRef = useRef(onMessageChange);
 
   useEffect(() => {
+    onMessageChangeRef.current = onMessageChange;
+  }, [onMessageChange]);
+
+  useEffect(() => {
+    if (previousContextKeyRef.current === contextKey) return;
+
+    previousContextKeyRef.current = contextKey;
+    previousInitialMessageRef.current = initialMessage;
     const defaultTone = getDefaultCollectionTone(context);
-    setTone(defaultTone);
     const nextGenerated = generateCollectionMessage(context, defaultTone);
-    setGenerated(nextGenerated);
+    skipToneSyncRef.current = true;
+    setTone(defaultTone);
     const nextMessage = initialMessage || nextGenerated.message;
     setMessage(nextMessage);
-  }, [context, initialMessage]);
+    onMessageChangeRef.current?.(nextMessage);
+  }, [context, contextKey, initialMessage]);
 
-  const activeRestoreMessage = restoreMessage || generated.message;
+  useEffect(() => {
+    if (previousInitialMessageRef.current === initialMessage) return;
+
+    previousInitialMessageRef.current = initialMessage;
+    setMessage(initialMessage || generated.message);
+  }, [generated.message, initialMessage]);
+
+  useEffect(() => {
+    if (skipToneSyncRef.current) {
+      skipToneSyncRef.current = false;
+      return;
+    }
+
+    setMessage(generated.message);
+    previousInitialMessageRef.current = generated.message;
+    onMessageChangeRef.current?.(generated.message);
+  }, [generated.message, tone]);
+
+  const activeRestoreMessage = generated.message || restoreMessage || '';
 
   const severityClass = useMemo(
     () => severityClasses[generated?.severity] || severityClasses.info,
@@ -43,11 +75,10 @@ export default function CollectionMessagePreview({
   );
 
   const handleGenerate = () => {
-    const next = generateCollectionMessage(context, tone);
-    setGenerated(next);
-    setMessage(next.message);
-    onMessageChange?.(next.message);
-    onGenerated?.(next);
+    setMessage(generated.message);
+    previousInitialMessageRef.current = generated.message;
+    onMessageChangeRef.current?.(generated.message);
+    onGenerated?.(generated);
   };
 
   const handleCopy = async () => {
@@ -60,7 +91,8 @@ export default function CollectionMessagePreview({
 
   const handleRestore = () => {
     setMessage(activeRestoreMessage);
-    onMessageChange?.(activeRestoreMessage);
+    previousInitialMessageRef.current = activeRestoreMessage;
+    onMessageChangeRef.current?.(activeRestoreMessage);
   };
 
   return (
@@ -127,7 +159,7 @@ export default function CollectionMessagePreview({
                 className="control-surface inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-200"
               >
                 <RefreshCcw size={13} />
-                Restaurar mensagem padrao
+                Restaurar padrao do estilo
               </button>
               {onSaveTemplate ? (
                 <button

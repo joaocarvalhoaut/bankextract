@@ -10,10 +10,7 @@ import {
   Loader2,
   RefreshCw,
   Search,
-  Settings2,
-  Trash2,
   TriangleAlert,
-  Unlink,
   X,
 } from 'lucide-react';
 import {

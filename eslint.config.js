@@ -5,13 +5,21 @@ import { defineConfig } from "eslint/config";
 
 export default defineConfig([
   {
-    ignores: ["dist/**", "dist*/**", "node_modules/**", "cronJobs/**", "src/hooks/useFinance.js"],
+    ignores: [".claude/**", "dist/**", "dist*/**", "node_modules/**", "cronJobs/**", "src/hooks/useFinance.js"],
   },
   {
     files: ["**/*.{js,mjs,cjs,jsx}"],
     plugins: { js },
     extends: ["js/recommended"],
     languageOptions: { globals: globals.browser },
+  },
+  {
+    files: ["scripts/**/*.js", "tests/**/*.js"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
   },
   {
     ...pluginReact.configs.flat.recommended,

@@ -7,7 +7,15 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "node --test tests/unit/env-example.test.js tests/unit/zapi-error-mapping.test.js tests/diagnostics/diagnostic-core.test.js",
+    "test:unit": "node --test tests/unit/env-example.test.js tests/unit/zapi-error-mapping.test.js",
+    "test:diagnostics": "node --test tests/diagnostics/diagnostic-core.test.js",
+    "diagnose:google-drive-boletos": "node scripts/diagnose-google-drive-boletos.js --dry-run",
+    "diagnose:whatsapp-zapi": "node scripts/diagnose-whatsapp-zapi.js --dry-run",
+    "diagnose:database-readiness": "node scripts/diagnose-database-readiness.js",
+    "diagnose:tenant-isolation": "node scripts/diagnose-tenant-isolation.js",
+    "diagnose:go-live-readiness": "node scripts/diagnose-go-live-readiness.js --write-report"
   },
   "dependencies": {
     "@sentry/react": "^10.52.0",

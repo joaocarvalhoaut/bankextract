@@ -549,6 +549,168 @@ export default function App() {
         ]);
 
       const dashboardFinancial = buildDashboardFinancialData(records || []);
+      const toDayKey = (value) => {
+        if (!value) return '';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      };
+      const todayKey = toDayKey(new Date().toISOString());
+      const isPaidLike = (statusValue) => ['liquidado', 'pago'].includes(String(statusValue || '').toLowerCase());
+      const normalizeChargeStatus = (statusValue, hasPhone = true) => {
+        const normalized = String(statusValue || '').trim().toLowerCase();
+        if (['read', 'lida'].includes(normalized)) return 'read';
+        if (['delivered', 'entregue'].includes(normalized)) return 'delivered';
+        if (['sent', 'enviado'].includes(normalized)) return 'sent';
+        if (['queued', 'fila'].includes(normalized)) return 'queued';
+        if (['failed', 'erro', 'falhou'].includes(normalized)) return 'failed';
+        if (['simulated', 'mock_enviado'].includes(normalized)) return 'simulated';
+        return hasPhone ? 'pending' : 'missing_phone';
+      };
+      const chargeStatusCounts = (charges || []).reduce((acc, row) => {
+        const bucket = normalizeChargeStatus(row?.status || row?.status_envio, Boolean(row?.telefone));
+        acc[bucket] = (acc[bucket] || 0) + 1;
+        return acc;
+      }, {
+        read: 0,
+        delivered: 0,
+        sent: 0,
+        queued: 0,
+        failed: 0,
+        simulated: 0,
+        pending: 0,
+        missing_phone: 0,
+      });
+      const importStatusCounts = (history || []).reduce((acc, row) => {
+        const bucket = String(row?.status || 'desconhecido').trim().toLowerCase();
+        acc[bucket] = (acc[bucket] || 0) + 1;
+        return acc;
+      }, {});
+      const recentImports = [...(history || [])]
+        .sort((a, b) => new Date(b?.data || 0).getTime() - new Date(a?.data || 0).getTime())
+        .slice(0, 5);
+      const failedMessages = (charges || [])
+        .filter((row) => normalizeChargeStatus(row?.status || row?.status_envio, Boolean(row?.telefone)) === 'failed' || row?.failure_reason)
+        .sort((a, b) => new Date(b?.failed_at || b?.created_at || 0).getTime() - new Date(a?.failed_at || a?.created_at || 0).getTime())
+        .slice(0, 6);
+      const billingQueue = [...(records || [])]
+        .filter((row) => !isPaidLike(row?.status))
+        .map((row) => {
+          const dueDate = row?.data_vencimento || row?.vencimento || null;
+          const dueMs = dueDate ? new Date(`${dueDate}T00:00:00`).getTime() : Number.POSITIVE_INFINITY;
+          const overdueDays = Number.isFinite(dueMs) ? Math.max(0, Math.floor((Date.now() - dueMs) / 86400000)) : 0;
+          return {
+            id: row?.id,
+            cliente: row?.nome || row?.cliente_nome || 'Cliente',
+            documento: row?.documento || row?.numero_boleto || row?.numero_nf || 'Sem documento',
+            valor: row?.valor || 0,
+            vencimento: dueDate,
+            status: row?.status || 'pendente',
+            telefone: row?.telefone || '',
+            overdueDays,
+            hasPhone: Boolean(row?.telefone),
+          };
+        })
+        .sort((a, b) => {
+          if (a.hasPhone !== b.hasPhone) return a.hasPhone ? 1 : -1;
+          if (a.overdueDays !== b.overdueDays) return b.overdueDays - a.overdueDays;
+          return new Date(a.vencimento || '2999-12-31').getTime() - new Date(b.vencimento || '2999-12-31').getTime();
+        })
+        .slice(0, 8);
+      const criticalIssues = billingQueue
+        .filter((row) => !row.hasPhone || row.overdueDays > 0)
+        .slice(0, 6)
+        .map((row) => ({
+          id: row.id,
+          cliente: row.cliente,
+          documento: row.documento,
+          status: !row.hasPhone ? 'missing_phone' : row.overdueDays > 30 ? 'overdue_high' : 'overdue',
+          detail: !row.hasPhone
+            ? 'Titulo sem telefone para envio.'
+            : `${row.overdueDays} dia(s) de atraso.`,
+          valor: row.valor,
+          vencimento: row.vencimento,
+        }));
+      const recentEvents = [
+        ...recentImports.map((row) => ({
+          id: `import-${row.id}`,
+          type: 'import',
+          title: row?.arquivo || 'Importacao',
+          detail: `${row?.registros || 0} registro(s) • ${row?.status || 'processado'}`,
+          timestamp: row?.data || null,
+          tone: row?.status === 'erro' ? 'danger' : row?.status === 'processando' ? 'processing' : 'success',
+        })),
+        ...(charges || []).slice(0, 6).map((row) => ({
+          id: `charge-${row.id}`,
+          type: 'charge',
+          title: row?.cliente || row?.documento || 'Envio WhatsApp',
+          detail: `${row?.status || 'pendente'}${row?.failure_reason ? ` • ${row.failure_reason}` : ''}`,
+          timestamp: row?.failed_at || row?.read_at || row?.delivered_at || row?.sent_at || row?.created_at || null,
+          tone: normalizeChargeStatus(row?.status || row?.status_envio, Boolean(row?.telefone)) === 'failed'
+            ? 'danger'
+            : normalizeChargeStatus(row?.status || row?.status_envio, Boolean(row?.telefone)) === 'queued'
+              ? 'processing'
+              : 'success',
+        })),
+      ]
+        .filter((item) => item.timestamp)
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, 8);
+      const activityToday = {
+        imports: recentImports.filter((row) => toDayKey(row?.data) === todayKey).length,
+        sends: (charges || []).filter((row) => toDayKey(row?.sent_at || row?.created_at) === todayKey).length,
+        failures: (charges || []).filter((row) => toDayKey(row?.failed_at || row?.created_at) === todayKey && normalizeChargeStatus(row?.status || row?.status_envio, Boolean(row?.telefone)) === 'failed').length,
+        audits: (metrics?.recentAuditLogs || []).filter((row) => toDayKey(row?.created_at) === todayKey).length,
+      };
+      const integrationHealth = [
+        {
+          id: 'sheets',
+          label: 'Google Sheets',
+          status: status?.googleSheetsConnected ? 'success' : 'warning',
+          detail: status?.googleSheetsConnected
+            ? `Planilha ${status?.googleSheetsSheetName || 'conectada'}`
+            : 'Planilha nao conectada',
+        },
+        {
+          id: 'automation',
+          label: 'Automacao de cobranca',
+          status: metrics?.autoChargeActive ? 'success' : 'warning',
+          detail: metrics?.autoChargeActive
+            ? `Janela ${metrics?.autoChargeHour || '08:00'}`
+            : 'Automacao inativa',
+        },
+        {
+          id: 'whatsapp',
+          label: 'Modo de envio',
+          status: metrics?.whatsappMockMode ? 'warning' : 'success',
+          detail: metrics?.whatsappMockMode ? 'WhatsApp em modo teste' : 'Envio real habilitavel',
+        },
+        {
+          id: 'audit',
+          label: 'Auditoria',
+          status: (metrics?.recentAuditLogs || []).length ? 'success' : 'empty',
+          detail: (metrics?.recentAuditLogs || []).length
+            ? `Ultima acao: ${metrics.recentAuditLogs[0].action}`
+            : 'Sem eventos recentes',
+        },
+      ];
+      const operationalAlerts = [];
+      if (metrics?.whatsappMockMode) {
+        operationalAlerts.push({ id: 'mock-mode', title: 'WhatsApp em modo teste', tone: 'warning', detail: 'Os envios estao protegidos por mock no backend.' });
+      }
+      if (!status?.googleSheetsConnected) {
+        operationalAlerts.push({ id: 'sheets-off', title: 'Google Sheets desconectado', tone: 'danger', detail: 'Exportacoes e sincronizacoes dependem desta integracao.' });
+      }
+      if (chargeStatusCounts.failed > 0) {
+        operationalAlerts.push({ id: 'failed-sends', title: 'Falhas de envio recentes', tone: 'danger', detail: `${chargeStatusCounts.failed} mensagem(ns) com falha no escopo atual.` });
+      }
+      if ((dashboardFinancial.summary?.coverageWithPhone || 0) < 85) {
+        operationalAlerts.push({ id: 'phone-coverage', title: 'Cobertura de telefone abaixo do ideal', tone: 'warning', detail: `${dashboardFinancial.summary?.coverageWithPhone || 0}% da carteira tem telefone valido.` });
+      }
+      if (criticalIssues.length > 0) {
+        operationalAlerts.push({ id: 'critical-queue', title: 'Pendencias criticas na fila', tone: 'warning', detail: `${criticalIssues.length} item(ns) exigem tratativa antes do disparo.` });
+      }
+
       setDashboardMetrics({
         ...(metrics || {}),
         kpis: [...(dashboardFinancial.kpis || []), ...(metrics?.whatsappTrackingKpis || [])],
@@ -567,6 +729,22 @@ export default function App() {
           lastAutoExecution: metrics?.lastAutoExecution || 'Nunca executada',
           nextRunHint: metrics?.autoChargeHour ? `Janela ${metrics.autoChargeHour}` : 'Automacao inativa',
           recentAuditAction: metrics?.recentAuditLogs?.[0]?.action || 'Sem atividade',
+          recentAuditLogs: metrics?.recentAuditLogs || [],
+          checklist: metrics?.checklist || [],
+          usersCount: settings?.usuarios?.length || 0,
+          googleSheetsConnected: status?.googleSheetsConnected || false,
+          googleSheetsSheetName: status?.googleSheetsSheetName || '',
+          googleSheetsLastSync: status?.googleSheetsLastSync || null,
+          importStatusCounts,
+          recentImports,
+          chargeStatusCounts,
+          failedMessages,
+          billingQueue,
+          criticalIssues,
+          recentEvents,
+          activityToday,
+          integrationHealth,
+          alerts: operationalAlerts,
         },
       });
       setFinancialRecords(records);
@@ -731,14 +909,12 @@ export default function App() {
     try {
       setProcessing(true);
       setPreview(null);
-      console.log('[IMPORTACAO] arquivo selecionado', selectedFile);
       for (const stage of ['Enviando arquivo', 'Executando OCR', 'Estruturando dados', 'Validando registros']) {
         setProcessingStage(stage);
         await sleep(180);
       }
 
       const result = await financeService.processImportFile(selectedFile, importType, currentCompanyId);
-      console.log('[IMPORTACAO] resposta OCR', result);
       const hasKnownArray =
         Array.isArray(result?.rows) ||
         Array.isArray(result?.data) ||
@@ -783,7 +959,6 @@ export default function App() {
         showToast('sucesso', 'Previa gerada com sucesso.');
       }
     } catch (error) {
-      console.error('[IMPORTACAO] erro OCR', error);
       setPreview(null);
       showToast('erro', error.message || 'Nao foi possivel processar o arquivo.');
     } finally {
@@ -802,26 +977,12 @@ export default function App() {
 
     try {
       const selectedRows = (preview?.rows || []).filter((row) => row.selected !== false);
-      console.log('[IMPORT] selecionados', selectedRows.length);
       const batchId = makeUuid();
-      const payload = selectedRows.map((row) => ({
-        company_id: currentCompanyId,
-        created_by: currentUserId,
-        cliente_fornecedor: row.cliente_fornecedor || row.nome || '',
-        documento: row.documento ?? row.numero_boleto ?? '',
-        vencimento: row.data_vencimento ?? '',
-        valor: Number(row.valor || 0),
-        status: row.status || 'pendente',
-        telefone: row.telefone || '',
-        observacoes: row.observacoes ?? row.observacao ?? '',
-        tipo_importacao: importType,
-      }));
-      const result = await financeService.importSelectedRows(preview?.rows || [], batchId, currentCompanyId, {
+      await financeService.importSelectedRows(preview?.rows || [], batchId, currentCompanyId, {
         fileName: preview.fileName,
         tipo: importType,
         companyName: currentCompanyName,
       });
-      console.log('[IMPORT] resultado', result);
       await auditLog.importConfirmed(currentCompanyId, {
         arquivo: preview.fileName,
         registros: selectedRows.length,
@@ -847,7 +1008,6 @@ export default function App() {
       setActiveTab(importType === 'liquidacao' ? 'historico' : 'visao-geral');
       showToast('sucesso', 'Lote processado com batch_id e salvo com sucesso.');
     } catch (error) {
-      console.error('[IMPORT] erro', error);
       showToast('erro', error.message || 'Nao foi possivel importar os registros selecionados.');
     }
   }, [currentCompanyId, currentCompanyName, currentUserId, currentUserRole, importType, preview, refreshAllData, showToast]);
@@ -1248,20 +1408,7 @@ export default function App() {
       ...chargePreviewModal.row,
       mensagem: chargePreviewModal.message,
     };
-    const registroId = String(nextRow.registro_id || nextRow.financeiro_id || nextRow.id || '').trim();
     const simulate = billingExecutionMode !== 'real';
-    const payload = {
-      action: 'send_single_charge',
-      companyId: nextRow.company_id || currentCompanyId,
-      company_id: nextRow.company_id || currentCompanyId,
-      registro_id: registroId,
-      charge_id: registroId,
-      simulate,
-      custom_message: nextRow.mensagem || '',
-      message: nextRow.mensagem || '',
-    };
-
-
     setChargePreviewSending(true);
     setChargeRows((prev) =>
       prev.map((item) => (item.id === nextRow.id ? { ...item, mensagem: nextRow.mensagem } : item))
@@ -1273,10 +1420,8 @@ export default function App() {
         customMessage: nextRow.mensagem || '',
       });
       if (data?.cancelled) return;
-      console.log('[SEND MODAL WHATSAPP RESPONSE]', data, null);
       setChargePreviewModal(null);
     } catch (error) {
-      console.log('[SEND MODAL WHATSAPP RESPONSE]', null, error);
       showToast('erro', error.message || 'Falha ao enviar cobranca via WhatsApp.');
     } finally {
       setChargePreviewSending(false);
@@ -1418,15 +1563,8 @@ export default function App() {
   const handleChoosePlan = useCallback(
     async (plan) => {
       const targetPlanCode = plan?.code || plan?.id;
-      console.log('[App] handleChoosePlan called', {
-        planCode: targetPlanCode,
-        planName: plan?.name,
-        currentPlanId: billingOverview?.currentPlan?.id,
-        currentCompanyId,
-      });
 
       if (!targetPlanCode) {
-        console.warn('[App] handleChoosePlan: targetPlanCode vazio, abortando');
         return;
       }
       if (!currentCompanyId) {
@@ -1436,7 +1574,6 @@ export default function App() {
 
       const currentPlanId = billingOverview?.currentPlan?.id;
       if (currentPlanId && targetPlanCode === currentPlanId) {
-        console.log('[App] handleChoosePlan: empresa ja esta no plano', targetPlanCode);
         showToast('aviso', `A empresa ja esta no plano ${plan.name}.`);
         setActiveTab('billing');
         return;
@@ -1446,20 +1583,12 @@ export default function App() {
       const successUrl = `${baseUrl}/billing?checkout=success&plan=${encodeURIComponent(targetPlanCode)}`;
       const cancelUrl = `${baseUrl}/planos?checkout=canceled`;
 
-
-      let result;
-      try {
-        result = await createStripeCheckoutSession({
-          companyId: currentCompanyId,
-          planCode: targetPlanCode,
-          successUrl,
-          cancelUrl,
-        });
-        console.log('[App] stripe checkout response', { url: result?.url, result });
-      } catch (err) {
-        console.error('[App] stripe checkout error:', err);
-        throw err; // propaga para BillingScreen/PlanosScreen mostrarem o toast
-      }
+      const result = await createStripeCheckoutSession({
+        companyId: currentCompanyId,
+        planCode: targetPlanCode,
+        successUrl,
+        cancelUrl,
+      });
 
       createAuditEvent(currentCompanyId, {
         action: 'billing_checkout_started',
@@ -1472,12 +1601,10 @@ export default function App() {
       }).catch(() => {});
 
       if (result?.url && typeof window !== 'undefined') {
-        console.log('[App] redirecionando para Stripe Checkout:', result.url);
         window.location.assign(result.url);
         return;
       }
 
-      console.warn('[App] stripe checkout sem URL. data recebido:', result);
       showToast('erro', 'Nao foi possivel abrir o checkout Stripe. Verifique o console para detalhes.');
     },
     [billingOverview?.currentPlan?.id, currentCompanyId, currentUserId, showToast]

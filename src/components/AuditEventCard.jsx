@@ -53,14 +53,14 @@ const ACTION_ICON = {
 };
 
 const COLOR_MAP = {
-  emerald: { bg: 'bg-emerald-100', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500' },
-  green: { bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-200', dot: 'bg-green-500' },
-  blue: { bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-700/40', dot: 'bg-blue-900/200' },
-  sky: { bg: 'bg-sky-100', text: 'text-sky-700', border: 'border-sky-200', dot: 'bg-sky-500' },
-  violet: { bg: 'bg-violet-100', text: 'text-violet-700', border: 'border-violet-200', dot: 'bg-violet-500' },
-  red: { bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-500' },
-  orange: { bg: 'bg-orange-100', text: 'text-orange-700', border: 'border-orange-200', dot: 'bg-orange-500' },
-  yellow: { bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-200', dot: 'bg-yellow-400' },
+  emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-200', border: 'border-emerald-500/25', dot: 'bg-emerald-400' },
+  green: { bg: 'bg-green-500/10', text: 'text-green-200', border: 'border-green-500/25', dot: 'bg-green-400' },
+  blue: { bg: 'bg-cyan-500/10', text: 'text-cyan-200', border: 'border-cyan-500/25', dot: 'bg-cyan-400' },
+  sky: { bg: 'bg-sky-500/10', text: 'text-sky-200', border: 'border-sky-500/25', dot: 'bg-sky-400' },
+  violet: { bg: 'bg-violet-500/10', text: 'text-violet-200', border: 'border-violet-500/25', dot: 'bg-violet-400' },
+  red: { bg: 'bg-red-500/10', text: 'text-red-200', border: 'border-red-500/25', dot: 'bg-red-400' },
+  orange: { bg: 'bg-orange-500/10', text: 'text-orange-200', border: 'border-orange-500/25', dot: 'bg-orange-400' },
+  yellow: { bg: 'bg-amber-500/10', text: 'text-amber-200', border: 'border-amber-500/25', dot: 'bg-amber-400' },
   slate: { bg: 'bg-slate-800/60', text: 'text-slate-300', border: 'border-slate-700', dot: 'bg-slate-400' },
 };
 
@@ -74,9 +74,9 @@ const GROUP_LABELS = {
 
 const SEVERITY_BADGE = {
   info: 'border-slate-700 bg-slate-800/40 text-slate-300',
-  success: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  warning: 'border-amber-200 bg-amber-50 text-amber-700',
-  danger: 'border-red-200 bg-red-50 text-red-700',
+  success: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200',
+  warning: 'border-amber-500/25 bg-amber-500/10 text-amber-200',
+  danger: 'border-red-500/25 bg-red-500/10 text-red-200',
 };
 
 function formatMetadata(metadata) {

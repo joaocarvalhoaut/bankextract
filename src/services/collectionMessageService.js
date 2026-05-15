@@ -2,22 +2,99 @@ const TONE_META = {
   amigavel: {
     label: 'Amigavel',
     severity: 'info',
-    actionLabel: 'Manter tom consultivo',
+    actionLabel: 'Manter lembrete acolhedor',
   },
   neutro: {
     label: 'Neutro',
     severity: 'info',
-    actionLabel: 'Reforcar acompanhamento',
+    actionLabel: 'Conduzir acompanhamento objetivo',
   },
   firme: {
     label: 'Firme',
     severity: 'warning',
-    actionLabel: 'Cobrar retorno prioritario',
+    actionLabel: 'Cobrar retorno com prioridade',
   },
   juridico: {
     label: 'Juridico',
     severity: 'danger',
-    actionLabel: 'Escalar para tratativa formal',
+    actionLabel: 'Formalizar tratativa administrativa',
+  },
+};
+
+const MESSAGE_STYLES = {
+  amigavel: {
+    subjectPrefix: 'Lembrete gentil do boleto',
+    summaryPrefix: 'Lembrete cordial',
+    actionSuggestion: 'Manter o contato aberto para apoio e comprovante de pagamento.',
+    greeting: (name) => `Ola, ${name}, tudo bem?`,
+    buildLines: (context) => [
+      'Passando para lembrar de forma tranquila sobre o boleto abaixo, que segue em nosso acompanhamento.',
+      '',
+      ...buildDetailsBlock(context),
+      '',
+      context.diasAtraso > 0
+        ? `Notei ${context.diasAtraso} dia(s) de atraso no momento. Se voce ja pagou, pode me enviar o comprovante para eu pedir a baixa.`
+        : 'Quis me adiantar para facilitar sua organizacao e evitar qualquer correria perto do vencimento.',
+      'Se precisar, posso reenviar os dados do boleto ou te ajudar a localizar as informacoes mais rapidamente.',
+      context.historyHint,
+      '',
+      `Fico a disposicao. Equipe ${context.empresa}.`,
+    ],
+  },
+  neutro: {
+    subjectPrefix: 'Acompanhamento financeiro',
+    summaryPrefix: 'Cobranca objetiva',
+    actionSuggestion: 'Acompanhar a resposta e atualizar o retorno do cliente na central.',
+    greeting: (name) => `Ola, ${name},`,
+    buildLines: (context) => [
+      'Segue o acompanhamento do titulo abaixo para sua verificacao.',
+      '',
+      ...buildDetailsBlock(context),
+      '',
+      context.diasAtraso > 0
+        ? `Atualmente o titulo registra ${context.diasAtraso} dia(s) de atraso em nosso controle financeiro.`
+        : 'O titulo esta no prazo informado e permanece em acompanhamento preventivo.',
+      'Solicitamos a confirmacao do pagamento ou o envio do comprovante para atualizacao do status.',
+      context.historyHint,
+      '',
+      `Atenciosamente, equipe financeira ${context.empresa}.`,
+    ],
+  },
+  firme: {
+    subjectPrefix: 'Regularizacao prioritaria',
+    summaryPrefix: 'Cobranca urgente',
+    actionSuggestion: 'Solicitar retorno imediato com previsao objetiva de pagamento.',
+    greeting: (name) => `Ola, ${name},`,
+    buildLines: (context) => [
+      'Precisamos tratar com prioridade a pendencia financeira abaixo.',
+      '',
+      ...buildDetailsBlock(context),
+      '',
+      `O titulo acumula ${context.diasAtraso} dia(s) de atraso e exige uma definicao imediata.`,
+      'Pedimos regularizacao ainda hoje ou retorno objetivo com a previsao de pagamento.',
+      'Sem um posicionamento, o caso segue em escalonamento interno para acompanhamento diario.',
+      context.historyHint,
+      '',
+      `Equipe de cobranca ${context.empresa}.`,
+    ],
+  },
+  juridico: {
+    subjectPrefix: 'Notificacao administrativa',
+    summaryPrefix: 'Aviso formal',
+    actionSuggestion: 'Registrar retorno formal e manter a tratativa administrativa documentada.',
+    greeting: (name) => `Prezado(a) ${name},`,
+    buildLines: (context) => [
+      'Comunicamos, para fins de registro administrativo, a permanencia da pendencia descrita abaixo.',
+      '',
+      ...buildDetailsBlock(context),
+      '',
+      `Consta em sistema atraso de ${context.diasAtraso} dia(s), sem regularizacao identificada ate o momento.`,
+      'Solicitamos manifestacao formal e a respectiva regularizacao financeira com a maior brevidade possivel.',
+      'Na ausencia de retorno, o caso permanece sujeito ao fluxo interno de cobranca administrativa da empresa.',
+      context.historyHint,
+      '',
+      `Atenciosamente, departamento administrativo ${context.empresa}.`,
+    ],
   },
 };
 
@@ -60,93 +137,18 @@ function inferDelayBand(daysLate) {
   return 'critico';
 }
 
-function buildGreeting(tone, name) {
-  const safeName = name || 'cliente';
-  if (tone === 'juridico') return `Prezado(a) ${safeName},`;
-  if (tone === 'firme') return `Ola, ${safeName},`;
-  return `Ola, ${safeName},`;
-}
-
-function buildBodyByTone(tone, context) {
-  const {
-    documento,
-    numeroBoleto,
-    valor,
-    vencimento,
-    diasAtraso,
-    empresa,
-    linhaDigitavel,
-    linkBoleto,
-    historyHint,
-  } = context;
-
-  const commonBlock = [
-    `Documento: ${documento}`,
-    `Boleto: ${numeroBoleto}`,
-    `Vencimento: ${vencimento}`,
-    `Valor: ${valor}`,
+function buildDetailsBlock(context) {
+  return [
+    `Documento: ${context.documento}`,
+    `Boleto: ${context.numeroBoleto}`,
+    `Vencimento: ${context.vencimento}`,
+    `Valor: ${context.valor}`,
     '',
     'Linha digitavel:',
-    linhaDigitavel,
+    context.linhaDigitavel,
     '',
     'Link do boleto:',
-    linkBoleto,
-  ];
-
-  if (tone === 'amigavel') {
-    return [
-      'Segue uma lembranca sobre o titulo abaixo, que permanece em acompanhamento em nosso sistema.',
-      '',
-      ...commonBlock,
-      '',
-      diasAtraso > 0
-        ? `Hoje identificamos ${diasAtraso} dia(s) de atraso. Se ja houver pagamento, basta nos enviar o comprovante para baixa.`
-        : 'Se precisar de apoio para localizar o boleto ou confirmar o vencimento, ficamos a disposicao.',
-      historyHint,
-      '',
-      `Atenciosamente, equipe ${empresa}.`,
-    ];
-  }
-
-  if (tone === 'firme') {
-    return [
-      'Identificamos pendencia em aberto e precisamos do seu retorno para regularizacao do titulo abaixo.',
-      '',
-      ...commonBlock,
-      '',
-      `O atraso atual e de ${diasAtraso} dia(s). Pedimos prioridade no pagamento ou no envio do comprovante ainda hoje.`,
-      historyHint,
-      '',
-      `Atenciosamente, equipe ${empresa}.`,
-    ];
-  }
-
-  if (tone === 'juridico') {
-    return [
-      'Consta em nosso controle financeiro a permanencia da inadimplencia do titulo abaixo.',
-      '',
-      ...commonBlock,
-      '',
-      `O atraso atual e de ${diasAtraso} dia(s). Solicitamos regularizacao imediata ou formalizacao de tratativa para evitar escalonamento interno.`,
-      historyHint,
-      '',
-      `Atenciosamente, ${empresa}.`,
-    ];
-  }
-
-  return [
-    'Segue a cobranca referente ao titulo abaixo em acompanhamento financeiro.',
-    '',
-    ...commonBlock,
-    '',
-    diasAtraso > 0
-      ? `No momento, o titulo registra ${diasAtraso} dia(s) de atraso em nosso sistema.`
-      : 'O titulo esta em acompanhamento no vencimento informado.',
-    historyHint,
-    '',
-    'Caso o pagamento ja tenha sido efetuado, desconsidere esta mensagem.',
-    '',
-    `Atenciosamente, equipe ${empresa}.`,
+    context.linkBoleto,
   ];
 }
 
@@ -154,6 +156,7 @@ export function generateCollectionMessage(input = {}, tone = 'neutro') {
   const normalizedTone = normalizeTone(tone);
   const delayBand = inferDelayBand(input.diasAtraso);
   const meta = TONE_META[normalizedTone];
+  const style = MESSAGE_STYLES[normalizedTone];
   const context = {
     nome: input.nome || input.cliente || 'cliente',
     telefone: input.telefone || 'nao localizado',
@@ -169,37 +172,20 @@ export function generateCollectionMessage(input = {}, tone = 'neutro') {
     historyHint: getHistoryHint(input.historico),
   };
 
-  const message = [
-    buildGreeting(normalizedTone, context.nome),
-    '',
-    ...buildBodyByTone(normalizedTone, context),
-  ]
+  const message = [style.greeting(context.nome), '', ...style.buildLines(context)]
     .filter(Boolean)
     .join('\n');
 
-  const subject =
-    normalizedTone === 'juridico'
-      ? `Regularizacao imediata - ${context.documento}`
-      : normalizedTone === 'firme'
-        ? `Pendencia financeira - ${context.documento}`
-        : normalizedTone === 'amigavel'
-          ? `Lembrete de pagamento - ${context.documento}`
-          : `Cobranca do titulo ${context.documento}`;
-
   return {
     tone: normalizedTone,
-    subject,
+    subject: `${style.subjectPrefix} - ${context.documento}`,
     message,
     severity: meta.severity,
     actionSuggestion:
-      normalizedTone === 'juridico'
-        ? 'Encaminhar para tratativa formal se nao houver retorno.'
-        : normalizedTone === 'firme'
-          ? 'Solicitar confirmacao de pagamento com prioridade.'
-          : delayBand === 'preventivo'
-            ? 'Manter acompanhamento consultivo ate o vencimento.'
-            : 'Acompanhar resposta do cliente e atualizar status na central.',
-    summary: `${meta.label} · ${context.numeroBoleto} · ${context.valor}`,
+      delayBand === 'preventivo' && normalizedTone === 'amigavel'
+        ? 'Manter o lembrete leve e preventivo ate a data de vencimento.'
+        : style.actionSuggestion,
+    summary: `${style.summaryPrefix} | ${context.numeroBoleto} | ${context.valor}`,
   };
 }
 

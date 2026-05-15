@@ -16,13 +16,65 @@ const LOG_LEVELS = {
   error: 'ERROR',
 };
 
+const REDACTED_KEYS = ['token', 'secret', 'password', 'authorization', 'client_token', 'private_key'];
+const PHONE_KEYS = ['phone', 'telefone', 'whatsapp', 'mobile', 'celular'];
+
+function maskSecret(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (raw.length <= 8) return `${raw.slice(0, 2)}***${raw.slice(-2)}`;
+  return `${raw.slice(0, 4)}***${raw.slice(-4)}`;
+}
+
+function maskPhone(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length <= 4) return `${digits.slice(0, 1)}***`;
+  return `${digits.slice(0, 4)}***${digits.slice(-2)}`;
+}
+
+function shouldRedactKey(key) {
+  const normalized = String(key || '').toLowerCase();
+  return REDACTED_KEYS.some((token) => normalized.includes(token));
+}
+
+function shouldMaskPhoneKey(key) {
+  const normalized = String(key || '').toLowerCase();
+  return PHONE_KEYS.some((token) => normalized.includes(token));
+}
+
+function sanitizeMetadata(value, parentKey = '') {
+  if (value == null) return value;
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeMetadata(item, parentKey));
+  }
+
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nestedValue]) => {
+        if (shouldRedactKey(key)) return [key, maskSecret(nestedValue)];
+        if (shouldMaskPhoneKey(key)) return [key, maskPhone(nestedValue)];
+        return [key, sanitizeMetadata(nestedValue, key)];
+      }),
+    );
+  }
+
+  if (typeof value === 'string') {
+    if (shouldRedactKey(parentKey)) return maskSecret(value);
+    if (shouldMaskPhoneKey(parentKey)) return maskPhone(value);
+  }
+
+  return value;
+}
+
 const normalizeError = (error) => {
   if (!error) return null;
   if (error instanceof Error) {
-    return { name: error.name, message: error.message, stack: error.stack || '' };
+    return { name: error.name, message: error.message, stack: '' };
   }
   if (typeof error === 'object') {
-    try { return JSON.parse(JSON.stringify(error)); } catch { return { message: String(error) }; }
+    try { return sanitizeMetadata(JSON.parse(JSON.stringify(error))); } catch { return { message: String(error) }; }
   }
   return { message: String(error) };
 };
@@ -37,7 +89,7 @@ const createEntry = ({
   request_id,
   company_id: company_id ?? runtimeContext.company_id ?? '',
   user_id: user_id ?? runtimeContext.user_id ?? '',
-  module, action, status, metadata,
+  module, action, status, metadata: sanitizeMetadata(metadata),
   error: normalizeError(error), message, duration_ms,
   level: LOG_LEVELS[level] || LOG_LEVELS.info,
   environment: runtimeContext.environment,
