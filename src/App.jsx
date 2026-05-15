@@ -4,6 +4,7 @@ import EmpresaModal from './components/EmpresaModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import MessagePreviewModal from './components/MessagePreviewModal';
 import Sidebar from './components/Sidebar';
+import ContextBar from './components/ContextBar';
 import { buildDashboardFinancialData } from './services/analyticsService';
 import { getCollectionToneMeta } from './services/collectionMessageService';
 import { useEmpresa } from './hooks/useEmpresa';
@@ -316,6 +317,7 @@ export default function App() {
 
   const initialPath = getCurrentPathname();
   const [activeTab, setActiveTab] = useState(() => resolveTabFromPath(initialPath));
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [publicScreen, setPublicScreen] = useState(() => resolvePublicScreenFromPath(initialPath));
   const [, setAppLoading] = useState(false);
   const [toast, setToast] = useState(null);
@@ -697,17 +699,6 @@ export default function App() {
     });
   }, [financialRecords, viewFilters]);
 
-  const sidebarStats = useMemo(() => {
-    const today = new Date();
-    const aVencer = financialRecords
-      .filter((row) => new Date(`${row.data_vencimento}T00:00:00`) >= today && row.status !== 'liquidado')
-      .reduce((sum, row) => sum + row.valor, 0);
-    const vencidos = financialRecords
-      .filter((row) => new Date(`${row.data_vencimento}T00:00:00`) < today && row.status !== 'liquidado')
-      .reduce((sum, row) => sum + row.valor, 0);
-    const semTelefone = financialRecords.filter((row) => !String(row.telefone || '').trim()).length;
-    return { aVencer, vencidos, semTelefone };
-  }, [financialRecords]);
 
   const handleProcessImport = useCallback(async () => {
     if (!canUserPerformAction(currentUserRole, 'import_files')) {
@@ -1898,92 +1889,101 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#071120]">
-      <div className="flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-[#060d19]">
+      <div className="flex min-h-screen flex-col lg:flex-row">
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          activeCompanyId={currentCompanyId}
-          setActiveCompanyId={empresa.setActiveCompanyId}
-          companies={empresa.companies}
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed((v) => !v)}
           activeCompany={empresa.activeCompany}
-          stats={sidebarStats}
-          billingExecutionMode={billingExecutionMode}
           isSystemAdmin={empresa.isSystemAdmin}
           canAccessBilling={empresa.isSystemAdmin || ['owner', 'admin'].includes(empresa.userRole)}
-          onOpenCompanyModal={handleOpenEmpresaModal}
-          onOpenPlans={() => setActiveTab('planos')}
         />
 
-        <div className="flex-1 px-4 py-6 lg:px-6">
-          <div className="mx-auto max-w-7xl space-y-6">
-            <Header
-              title={sectionHeader.title}
-              subtitle={sectionHeader.subtitle}
-              userEmail={auth.user?.email || ''}
-              onSignOut={handleSignOut}
-              companyName={currentCompanyName}
-              companyId={currentCompanyId}
-              onNavigate={handleHeaderNavigation}
-              onOpenNotifications={handleOpenNotifications}
-            />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Header
+            title={sectionHeader.title}
+            subtitle={sectionHeader.subtitle}
+            userEmail={auth.user?.email || ''}
+            onSignOut={handleSignOut}
+            companyId={currentCompanyId}
+            onNavigate={handleHeaderNavigation}
+            onOpenNotifications={handleOpenNotifications}
+          />
 
-            {billingOverview?.status === 'trialing' ? (
-              <div className="surface-card border-brand flex flex-col gap-3 rounded-[28px] px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Trial ativo</p>
-                  <p className="mt-1 text-sm text-slate-100">
-                    {billingOverview?.trialDaysRemaining > 0
-                      ? `Restam ${billingOverview.trialDaysRemaining} dia(s) no trial da empresa ativa.`
-                      : 'O trial termina hoje. Ative um plano para continuar operando sem interrupcao.'}
+          <main className="flex-1 px-4 py-5 lg:px-6 lg:py-5">
+            <div className="mx-auto max-w-7xl space-y-4">
+
+              <ContextBar
+                companies={empresa.companies}
+                activeCompanyId={currentCompanyId}
+                onChangeCompany={empresa.setActiveCompanyId}
+                activeCompany={empresa.activeCompany}
+                billingExecutionMode={billingExecutionMode}
+                isSystemAdmin={empresa.isSystemAdmin}
+                onOpenCompanyModal={handleOpenEmpresaModal}
+                onOpenPlans={() => setActiveTab('planos')}
+              />
+
+              {billingOverview?.status === 'trialing' ? (
+                <div className="flex flex-col gap-3 rounded-2xl border border-blue-500/20 bg-blue-500/10 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Trial ativo</p>
+                    <p className="mt-1 text-sm text-slate-200">
+                      {billingOverview?.trialDaysRemaining > 0
+                        ? `Restam ${billingOverview.trialDaysRemaining} dia(s) no trial da empresa ativa.`
+                        : 'O trial termina hoje. Ative um plano para continuar operando sem interrupcao.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('billing')}
+                    className="btn-brand rounded-xl px-4 py-2.5 text-sm font-semibold"
+                  >
+                    Ativar plano
+                  </button>
+                </div>
+              ) : null}
+
+              {billingOverview?.status === 'past_due' ? (
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-100">
+                  <p className="font-semibold text-amber-50">Pagamento pendente</p>
+                  <p className="mt-1">
+                    Identificamos uma pendencia de cobranca. Atualize a assinatura no Billing para evitar bloqueios operacionais.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('billing')}
-                  className="btn-brand rounded-2xl px-4 py-3 text-sm font-semibold"
+              ) : null}
+
+              {billingOverview?.blocked_by_limit ? (
+                <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-100">
+                  <p className="font-semibold text-red-50">Limite do plano atingido</p>
+                  <p className="mt-1">
+                    O volume mensal da empresa ativa foi consumido. Faca upgrade ou ajuste a assinatura para liberar novos envios.
+                  </p>
+                </div>
+              ) : null}
+
+              {toast && (
+                <div
+                  className={`rounded-2xl px-5 py-3.5 text-sm font-medium ${
+                    toast.type === 'erro'
+                      ? 'border border-red-500/30 bg-red-500/10 text-red-200'
+                      : 'border border-blue-500/30 bg-blue-500/10 text-blue-100'
+                  }`}
                 >
-                  Ativar plano
-                </button>
-              </div>
-            ) : null}
+                  {toast.text}
+                </div>
+              )}
 
-            {billingOverview?.status === 'past_due' ? (
-              <div className="rounded-[28px] border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-100 shadow-soft">
-                <p className="font-semibold text-amber-50">Pagamento pendente</p>
-                <p className="mt-1">
-                  Identificamos uma pendencia de cobranca. Atualize a assinatura no Billing para evitar bloqueios operacionais.
-                </p>
-              </div>
-            ) : null}
+              <ErrorBoundary>
+                <Suspense fallback={<ScreenFallback />}>
+                  {currentContent}
+                </Suspense>
+              </ErrorBoundary>
 
-            {billingOverview?.blocked_by_limit ? (
-              <div className="rounded-[28px] border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-100 shadow-soft">
-                <p className="font-semibold text-red-50">Limite do plano atingido</p>
-                <p className="mt-1">
-                  O volume mensal da empresa ativa foi consumido. Faca upgrade ou ajuste a assinatura para liberar novos envios.
-                </p>
-              </div>
-            ) : null}
-
-            {toast && (
-              <div
-                className={`rounded-2xl px-5 py-4 text-sm font-medium shadow-soft ${
-                  toast.type === 'erro'
-                    ? 'border border-red-500/30 bg-red-500/10 text-red-200'
-                    : 'border border-blue-500/30 bg-blue-500/10 text-blue-100'
-                }`}
-              >
-                {toast.text}
-              </div>
-            )}
-
-            <ErrorBoundary>
-              <Suspense fallback={<ScreenFallback />}>
-                {currentContent}
-              </Suspense>
-            </ErrorBoundary>
-          </div>
+            </div>
+          </main>
         </div>
       </div>
 

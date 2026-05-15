@@ -226,9 +226,8 @@ button,
 
 .nav-active-brand {
   position: relative;
-  background: rgba(0, 93, 255, 0.12);
-  color: #f8fafc;
-  border: 1px solid rgba(0, 93, 255, 0.18);
+  background: rgba(0, 93, 255, 0.10);
+  color: #f1f5f9;
 }
 
 .nav-active-brand::before {
@@ -236,11 +235,15 @@ button,
   position: absolute;
   left: 0;
   top: 50%;
-  height: 62%;
-  width: 3px;
+  height: 55%;
+  width: 2px;
   transform: translateY(-50%);
   border-radius: 999px;
   background: linear-gradient(180deg, #005dff 0%, #14d8ff 100%);
+}
+
+.sidebar-enterprise {
+  transition: width 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .hero-mesh {

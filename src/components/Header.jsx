@@ -1,15 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { Building2, ChevronDown, Globe2, LogOut, User2, Zap } from 'lucide-react';
+import { ChevronDown, LogOut, User2 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 
 export default function Header({
   title,
   subtitle,
-  companyName,
   actions = null,
   userEmail = '',
   companyId = '',
-  onViewPublicSite,
   onOpenNotifications,
   onNavigate,
   onSignOut,
@@ -17,129 +15,87 @@ export default function Header({
   onToast,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 16 });
   const menuRef = useRef(null);
   const buttonRef = useRef(null);
 
   useEffect(() => {
     if (!menuOpen) return undefined;
 
-    const updatePosition = () => {
-      const rect = buttonRef.current?.getBoundingClientRect();
-      if (!rect) return;
-
-      setMenuPosition({
-        top: rect.bottom + 8,
-        right: Math.max(16, window.innerWidth - rect.right),
-      });
-    };
-
     const handleClickOutside = (event) => {
-      const menuElement = menuRef.current;
-      const buttonElement = buttonRef.current;
-
-      if (menuElement?.contains(event.target) || buttonElement?.contains(event.target)) {
-        return;
-      }
-
+      if (menuRef.current?.contains(event.target) || buttonRef.current?.contains(event.target)) return;
       setMenuOpen(false);
     };
-
     const handleEscape = (event) => {
-      if (event.key === 'Escape') {
-        setMenuOpen(false);
-      }
+      if (event.key === 'Escape') setMenuOpen(false);
     };
 
-    updatePosition();
-
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleEscape);
-
     return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleEscape);
     };
   }, [menuOpen]);
 
   return (
-    <header className="accent-bar text-crisp surface-card relative z-30 mb-6 overflow-visible rounded-[30px]">
-      <div className="overflow-visible px-5 py-4 lg:px-6 lg:py-5">
-        <div className="flex flex-col gap-4 overflow-visible xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0 space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900/50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
-                <Building2 size={11} />
-                {companyName || 'Sem empresa ativa'}
-              </div>
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">
-                <Zap size={10} />
-                NC Finance
-              </div>
-            </div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-50 lg:text-2xl">{title}</h1>
-            {subtitle && <p className="text-sm text-slate-300">{subtitle}</p>}
-          </div>
+    <header className="sticky top-0 z-30 flex flex-shrink-0 items-center justify-between border-b border-slate-800/60 bg-[#060d19]/95 px-4 py-3 backdrop-blur-sm lg:px-6">
 
-          <div className="flex flex-wrap items-center gap-2 overflow-visible">
-            {actions}
-            <NotificationBell
-              companyId={companyId}
-              onOpenNotifications={onOpenNotifications}
-              onNavigate={onNavigate}
-              onToast={onToast}
+      {/* Left: page title */}
+      <div className="min-w-0 flex-1">
+        <h1 className="truncate text-[15px] font-semibold leading-tight tracking-tight text-slate-50 lg:text-base">
+          {title}
+        </h1>
+        {subtitle && (
+          <p className="mt-0.5 truncate text-[11px] text-slate-500">{subtitle}</p>
+        )}
+      </div>
+
+      {/* Right: actions + notifications + user */}
+      <div className="ml-4 flex flex-shrink-0 items-center gap-2">
+        {actions}
+
+        <NotificationBell
+          companyId={companyId}
+          onOpenNotifications={onOpenNotifications}
+          onNavigate={onNavigate}
+          onToast={onToast}
+        />
+
+        <div className="relative">
+          <button
+            ref={buttonRef}
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            className="flex h-8 items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/60 px-2.5 text-[12px] font-medium text-slate-300 transition hover:bg-slate-800 hover:text-slate-100"
+          >
+            <User2 size={13} />
+            <span className="hidden max-w-[100px] truncate sm:inline">{userEmail || 'Conta'}</span>
+            <ChevronDown
+              size={11}
+              className={menuOpen ? 'rotate-180 transition-transform' : 'transition-transform'}
             />
+          </button>
 
-            {onViewPublicSite && (
+          {menuOpen && (
+            <div
+              ref={menuRef}
+              className="absolute right-0 top-full z-[110] mt-1.5 min-w-[180px] rounded-xl border border-slate-700/80 bg-[#0d1b2e] py-1 shadow-xl"
+            >
+              <div className="border-b border-slate-700/60 px-3 py-2.5">
+                <p className="text-[12px] font-semibold text-slate-100">{userEmail || 'Conta'}</p>
+                <p className="mt-0.5 text-[10px] text-slate-500">Conta ativa</p>
+              </div>
               <button
                 type="button"
-                onClick={onViewPublicSite}
-                className="control-surface flex items-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-200"
+                onClick={() => { onSignOut?.(); setMenuOpen(false); }}
+                disabled={signOutLoading}
+                className="flex w-full items-center gap-2 px-3 py-2 text-[12px] font-medium text-red-300 transition hover:bg-red-500/10"
               >
-                <Globe2 size={13} />
-                Site
+                <LogOut size={13} />
+                {signOutLoading ? 'Saindo...' : 'Sair da conta'}
               </button>
-            )}
-
-            <div className="relative overflow-visible">
-              <button
-                ref={buttonRef}
-                type="button"
-                onClick={() => setMenuOpen((v) => !v)}
-                className="control-surface flex min-h-11 items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-200"
-              >
-                <User2 size={14} />
-                <span className="max-w-[120px] truncate">{userEmail || 'Conta'}</span>
-                <ChevronDown size={12} className={menuOpen ? 'rotate-180 transition-transform' : 'transition-transform'} />
-              </button>
-
-              {menuOpen && (
-                <div
-                  ref={menuRef}
-                  className="fixed z-[110] min-w-[200px] rounded-2xl border border-slate-700 bg-[#10213B]/96 py-1 shadow-xl backdrop-blur"
-                  style={{ top: menuPosition.top, right: menuPosition.right }}
-                >
-                  <div className="border-b border-slate-700 px-4 py-2.5">
-                    <p className="text-xs font-semibold text-slate-50">{userEmail || 'Conta'}</p>
-                    <p className="text-[11px] text-slate-300">Conta ativa</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => { onSignOut?.(); setMenuOpen(false); }}
-                    disabled={signOutLoading}
-                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-medium text-red-300 hover:bg-red-500/10"
-                  >
-                    <LogOut size={14} />
-                    {signOutLoading ? 'Saindo...' : 'Sair da conta'}
-                  </button>
-                </div>
-              )}
             </div>
-          </div>
+          )}
         </div>
       </div>
     </header>
