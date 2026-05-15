@@ -90,10 +90,10 @@ export default function AutomacoesScreen({
   return (
     <div className="space-y-6">
       {limitNotice ? <PlanLimitNotice {...limitNotice} /> : null}
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
+      <section className="rounded-2xl border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/100/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
               <Sparkles size={13} />
               Automacoes
             </div>

@@ -3,10 +3,10 @@ import { ArrowRight, Gem, ShieldCheck } from 'lucide-react';
 const DAY_IN_MS = 86400000;
 
 const statusTone = {
-  active: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  trialing: 'border-blue-700/40 bg-blue-900/20 text-blue-700',
-  past_due: 'border-amber-200 bg-amber-50 text-amber-700',
-  canceled: 'border-red-200 bg-red-50 text-red-700',
+  active:   'border-emerald-500/25 bg-emerald-500/10 text-emerald-300',
+  trialing: 'border-blue-500/25    bg-blue-500/10    text-blue-300',
+  past_due: 'border-amber-500/25   bg-amber-500/10   text-amber-300',
+  canceled: 'border-red-500/25     bg-red-500/10     text-red-300',
 };
 
 function getTrialDaysLeft(trialEndsAt) {
@@ -28,7 +28,7 @@ export default function SubscriptionBadge({ subscription, onOpenPlans, compact =
         <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Plano atual</p>
           <div className="mt-1 flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-300">
               <Gem size={15} />
             </div>
             <div className="min-w-0">
@@ -64,7 +64,7 @@ export default function SubscriptionBadge({ subscription, onOpenPlans, compact =
         <button
           type="button"
           onClick={onOpenPlans}
-          className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700 transition hover:bg-emerald-100"
+          className="inline-flex items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
         >
           Ver planos
           <ArrowRight size={12} />

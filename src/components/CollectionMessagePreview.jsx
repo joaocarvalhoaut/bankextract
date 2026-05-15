@@ -4,10 +4,10 @@ import CollectionToneSelector from './CollectionToneSelector';
 import { generateCollectionMessage, getDefaultCollectionTone } from '../services/collectionMessageService';
 
 const severityClasses = {
-  info: 'bg-blue-900/20 text-blue-700 ring-blue-200',
-  warning: 'bg-amber-50 text-amber-700 ring-amber-200',
-  danger: 'bg-red-50 text-red-700 ring-red-200',
-  success: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  info:    'bg-blue-500/10    text-blue-300    ring-blue-500/25',
+  warning: 'bg-amber-500/10   text-amber-300   ring-amber-500/25',
+  danger:  'bg-red-500/10     text-red-300     ring-red-500/25',
+  success: 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/25',
 };
 
 export default function CollectionMessagePreview({
@@ -64,7 +64,7 @@ export default function CollectionMessagePreview({
   };
 
   return (
-    <section className="text-crisp rounded-[24px] border border-slate-700 bg-slate-900/60 p-4 shadow-soft">
+    <section className="text-crisp rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-soft">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-sm font-semibold text-slate-50">{title}</p>
@@ -108,7 +108,7 @@ export default function CollectionMessagePreview({
               <button
                 type="button"
                 onClick={handleGenerate}
-                className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/15"
               >
                 <Sparkles size={13} />
                 Gerar mensagem

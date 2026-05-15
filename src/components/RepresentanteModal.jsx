@@ -29,7 +29,7 @@ export default function RepresentanteModal({ modalData, companyName, onClose, on
 
   return (
     <div className="modal-overlay fixed inset-0 z-[140] flex items-center justify-center overflow-y-auto p-4" onClick={(event) => event.target === event.currentTarget && onClose()}>
-      <div className="modal-shell w-full max-w-md overflow-hidden rounded-[28px]">
+      <div className="modal-shell w-full max-w-md overflow-hidden rounded-2xl">
         <div className="flex items-center justify-between border-b border-slate-700 px-5 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400">

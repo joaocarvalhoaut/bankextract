@@ -9,10 +9,10 @@ import {
 } from '../services/notificationService';
 
 const toneClass = {
-  info: 'border-slate-700 bg-slate-800/40 text-slate-200',
-  success: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  warning: 'border-amber-200 bg-amber-50 text-amber-700',
-  danger: 'border-red-200 bg-red-50 text-red-700',
+  info:    'border-slate-700      bg-slate-800/40      text-slate-200',
+  success: 'border-emerald-500/25 bg-emerald-500/10    text-emerald-300',
+  warning: 'border-amber-500/25   bg-amber-500/10      text-amber-300',
+  danger:  'border-red-500/25     bg-red-500/10        text-red-300',
 };
 
 const formatRelative = (value) => {
@@ -184,9 +184,9 @@ export default function NotificationBell({ companyId, onOpenNotifications, onNav
                   key={item.id}
                   type="button"
                   onClick={() => handleOpenItem(item)}
-                  className={`w-full rounded-2xl border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-soft ${
+                  className={`w-full rounded-2xl border px-4 py-3 text-left transition hover:brightness-110 ${
                     toneClass[item.severity] || toneClass.info
-                  } ${item.status !== 'read' ? 'ring-1 ring-emerald-100' : ''}`}
+                  } ${item.status !== 'read' ? 'ring-1 ring-emerald-500/30' : ''}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">

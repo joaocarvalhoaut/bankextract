@@ -538,7 +538,7 @@ export default function HistoricoCobrancaScreen({
               </button>
             </div>
             <div className="grid gap-6 px-6 py-6 lg:grid-cols-[1.1fr_1.2fr]">
-              <div className="space-y-3 rounded-[24px] border border-slate-700 bg-slate-800/40 p-5">
+              <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-800/40 p-5">
                 {[
                   ['Cliente', detailsRow.cliente_nome || '-'],
                   ['Telefone', detailsRow.telefone || '-'],
@@ -576,7 +576,7 @@ export default function HistoricoCobrancaScreen({
                     </div>
                   </div>
                 )}
-                <div className="rounded-[24px] border border-slate-700 bg-slate-900/60 p-5">
+                <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-5">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Payload formatado</p>
                   <pre className="mt-3 max-h-[360px] overflow-auto rounded-2xl border border-slate-700 bg-slate-950 p-4 text-xs leading-relaxed text-slate-100">
                     {detailsRow.payload ? JSON.stringify(detailsRow.payload, null, 2) : 'Nenhum payload registrado para este log.'}

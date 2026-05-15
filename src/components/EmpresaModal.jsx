@@ -82,7 +82,7 @@ export default function EmpresaModal({
               <button
                 type="button"
                 onClick={() => setMode('criar')}
-                className={`rounded-[26px] border px-4 py-4 text-left transition hover:-translate-y-0.5 ${
+                className={`rounded-2xl border px-4 py-4 text-left transition hover:-translate-y-0.5 ${
                   mode === 'criar'
                     ? 'notice-success shadow-sm'
                     : 'surface-panel text-slate-200 shadow-sm hover:bg-slate-800/70'
@@ -103,7 +103,7 @@ export default function EmpresaModal({
             <button
               type="button"
               onClick={() => setMode('entrar')}
-              className={`rounded-[26px] border px-4 py-4 text-left transition hover:-translate-y-0.5 ${
+              className={`rounded-2xl border px-4 py-4 text-left transition hover:-translate-y-0.5 ${
                 mode === 'entrar'
                   ? 'notice-success shadow-sm'
                   : 'surface-panel text-slate-200 shadow-sm hover:bg-slate-800/70'

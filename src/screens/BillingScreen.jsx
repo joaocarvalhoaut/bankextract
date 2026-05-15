@@ -207,7 +207,7 @@ export default function BillingScreen({
         />
       ) : null}
 
-      <section className="surface-card relative overflow-hidden rounded-[32px] px-6 py-6">
+      <section className="surface-card relative overflow-hidden rounded-2xl px-6 py-6">
         <div className="glow-brand pointer-events-none absolute -right-12 top-0 h-40 w-40 rounded-full" />
         <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-3xl">
@@ -245,7 +245,7 @@ export default function BillingScreen({
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map(({ label, value, sub, tone, icon: Icon }) => (
-          <article key={label} className="surface-elevated rounded-[28px] border border-cyan-500/10 p-5 shadow-soft">
+          <article key={label} className="surface-elevated rounded-2xl border border-cyan-500/10 p-5 shadow-soft">
             <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-300">
               <Icon size={18} />
             </div>
@@ -267,7 +267,7 @@ export default function BillingScreen({
       ) : null}
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <article className="surface-card rounded-[32px] p-6">
+        <article className="surface-card rounded-2xl p-6">
           <div className="mb-1 flex items-center gap-2">
             <h3 className="text-lg font-semibold text-slate-50">Limites do plano e consumo atual</h3>
             <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-300">
@@ -303,14 +303,14 @@ export default function BillingScreen({
             />
           ) : null}
 
-          <article className="surface-card flex flex-col rounded-[32px] p-6">
+          <article className="surface-card flex flex-col rounded-2xl p-6">
             <h3 className="text-lg font-semibold text-slate-50">Operacao comercial</h3>
             <p className="mt-1 text-sm text-slate-400">
               Controle o ciclo de trial, abra o portal do cliente e leve a empresa para um plano superior com poucos cliques.
             </p>
 
             <div className="mt-6 grid gap-3">
-              <div className="surface-elevated rounded-[24px] border border-cyan-500/10 p-4">
+              <div className="surface-elevated rounded-2xl border border-cyan-500/10 p-4">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-100">
                   <Layers3 size={16} className="text-cyan-300" />
                   Trial e periodo faturado
@@ -323,7 +323,7 @@ export default function BillingScreen({
                 </p>
               </div>
 
-              <div className="surface-elevated rounded-[24px] border border-cyan-500/10 p-4">
+              <div className="surface-elevated rounded-2xl border border-cyan-500/10 p-4">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-100">
                   <Users size={16} className="text-cyan-300" />
                   Limites elegantes

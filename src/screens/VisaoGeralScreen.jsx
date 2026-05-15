@@ -576,7 +576,7 @@ export default function VisaoGeralScreen({
 
   return (
     <div className="space-y-6">
-      <section className="hero-mesh text-crisp border-brand overflow-hidden rounded-[32px] border p-6 shadow-lifted lg:p-8">
+      <section className="hero-mesh text-crisp border-brand overflow-hidden rounded-2xl border p-6 shadow-lifted lg:p-8">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <div>
             <div className="notice-info mb-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em]">
@@ -624,7 +624,7 @@ export default function VisaoGeralScreen({
         saveLabel="Salvar configuracao"
       />
 
-      <section className="accent-bar text-crisp surface-card rounded-[28px] p-5">
+      <section className="accent-bar text-crisp surface-card rounded-2xl p-5">
         <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-slate-50">Carteira financeira</h3>

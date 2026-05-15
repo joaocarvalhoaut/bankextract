@@ -46,7 +46,7 @@ export default function OnboardingScreen({
       />
 
       {plans.length > 0 ? (
-        <section className="surface-card rounded-[28px] p-6 shadow-soft">
+        <section className="surface-card rounded-2xl p-6 shadow-soft">
           <h2 className="mb-1 text-lg font-semibold text-slate-50">Comparativo de planos para ativacao real</h2>
           <p className="mb-6 text-sm text-slate-400">
             Use o billing como parte do onboarding para acelerar trial, upgrade e operacao comercial.

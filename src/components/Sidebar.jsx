@@ -127,7 +127,7 @@ export default function Sidebar({
             return (
               <div key={group}>
                 {!collapsed && (
-                  <p className="mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-700">
+                  <p className="mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     {groupLabels[group]}
                   </p>
                 )}
@@ -157,13 +157,13 @@ export default function Sidebar({
             <>
               {activeCompany && (
                 <div className="mb-2 flex min-w-0 items-center gap-1.5">
-                  <Building2 size={10} className="flex-shrink-0 text-slate-700" />
+                  <Building2 size={10} className="flex-shrink-0 text-slate-500" />
                   <span className="truncate text-[11px] text-slate-600">
                     {activeCompany.isGlobal ? 'Todas as empresas' : (activeCompany.nome || 'Sem empresa')}
                   </span>
                 </div>
               )}
-              <div className="flex items-center gap-x-3 text-[10px] text-slate-700">
+              <div className="flex items-center gap-x-3 text-[10px] text-slate-500">
                 <button
                   type="button"
                   onClick={() => setActiveTab('privacy')}

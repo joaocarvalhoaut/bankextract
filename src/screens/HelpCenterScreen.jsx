@@ -35,7 +35,7 @@ export default function HelpCenterScreen({
 }) {
   return (
     <div className="space-y-6">
-      <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-700 bg-slate-900/60 px-6 py-8 shadow-soft">
+      <section className="hero-mesh overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/60 px-6 py-8 shadow-soft">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
@@ -53,7 +53,7 @@ export default function HelpCenterScreen({
               { label: 'FAQ', value: FAQ_ITEMS.length },
               { label: 'Etapas', value: onboarding?.total || 0 },
             ].map((item) => (
-              <div key={item.label} className="rounded-[24px] border border-slate-700 bg-slate-900/60 p-4 shadow-soft">
+              <div key={item.label} className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4 shadow-soft">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
                 <p className="mt-2 text-2xl font-semibold text-slate-50">{item.value}</p>
               </div>
@@ -73,7 +73,7 @@ export default function HelpCenterScreen({
         skippedStepIds={skippedStepIds}
       />
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="mb-5 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-900/20 text-blue-700">
             <HelpCircle size={20} />
@@ -91,7 +91,7 @@ export default function HelpCenterScreen({
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="mb-5 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-50 text-violet-700">
             <MessageSquareQuote size={20} />

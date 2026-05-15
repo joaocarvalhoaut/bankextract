@@ -36,15 +36,15 @@ import { formatCurrencyBRL } from '../utils/format';
 
 function CenterCard({ label, value, tone = 'slate' }) {
   const palette = {
-    slate: 'from-slate-400 to-slate-500 text-slate-50',
-    emerald: 'from-emerald-400 to-emerald-600 text-emerald-700',
-    blue: 'from-blue-400 to-blue-600 text-blue-700',
-    amber: 'from-amber-400 to-orange-400 text-amber-700',
-    red: 'from-red-400 to-red-600 text-red-700',
+    slate:   'from-slate-400   to-slate-500   text-slate-50',
+    emerald: 'from-emerald-400 to-emerald-600 text-emerald-300',
+    blue:    'from-blue-400    to-blue-600    text-blue-300',
+    amber:   'from-amber-400   to-orange-400  text-amber-300',
+    red:     'from-red-400     to-red-600     text-red-300',
   };
 
   return (
-    <article className="relative overflow-hidden rounded-[24px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
+    <article className="relative overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
       <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${palette[tone]?.split(' text-')[0] || 'from-slate-400 to-slate-500'} opacity-80`} />
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
       <p className={`mt-2 text-3xl font-semibold ${palette[tone]?.split(' ').pop() || 'text-slate-50'}`}>{value}</p>
@@ -53,20 +53,20 @@ function CenterCard({ label, value, tone = 'slate' }) {
 }
 
 const toneByStatus = {
-  pendente: 'bg-slate-800/60 text-slate-200 ring-slate-700',
-  pago: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  negociado: 'bg-blue-900/20 text-blue-700 ring-blue-200',
-  suspenso: 'bg-amber-50 text-amber-700 ring-amber-200',
+  pendente:  'bg-slate-800/60   text-slate-200   ring-slate-700',
+  pago:      'bg-emerald-500/100/10 text-emerald-300 ring-emerald-500/25',
+  negociado: 'bg-blue-500/10    text-blue-300    ring-blue-500/25',
+  suspenso:  'bg-amber-500/100/10   text-amber-300   ring-amber-500/25',
 };
 
 const boletoStatusTone = {
-  encontrado: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  baixa_confianca: 'bg-amber-50 text-amber-700 ring-amber-200',
-  pendente: 'bg-slate-800/60 text-slate-200 ring-slate-700',
-  sem_boleto: 'bg-red-50 text-red-700 ring-red-200',
-  nao_encontrado: 'bg-orange-50 text-orange-700 ring-orange-200',
-  conflito: 'bg-red-50 text-red-700 ring-red-200',
-  erro: 'bg-red-50 text-red-700 ring-red-200',
+  encontrado:      'bg-emerald-500/100/10 text-emerald-300 ring-emerald-500/25',
+  baixa_confianca: 'bg-amber-500/100/10   text-amber-300   ring-amber-500/25',
+  pendente:        'bg-slate-800/60   text-slate-200   ring-slate-700',
+  sem_boleto:      'bg-red-500/100/10     text-red-300     ring-red-500/25',
+  nao_encontrado:  'bg-orange-500/100/10  text-orange-300  ring-orange-500/25',
+  conflito:        'bg-red-500/100/10     text-red-300     ring-red-500/25',
+  erro:            'bg-red-500/100/10     text-red-300     ring-red-500/25',
 };
 
 function truncateLinhaDigitavel(value) {
@@ -707,9 +707,9 @@ export default function CentralCobrancaScreen({
           const confidence = Number(row.boleto_match_confidence || 0);
           const tone =
             confidence >= 80
-              ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+              ? 'bg-emerald-500/100/10 text-emerald-300 ring-emerald-500/25'
               : confidence >= 50
-                ? 'bg-amber-50 text-amber-700 ring-amber-200'
+                ? 'bg-amber-500/100/10 text-amber-300 ring-amber-500/25'
                 : 'bg-slate-800/60 text-slate-200 ring-slate-700';
           return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${tone}`}>{confidence.toFixed(0)}%</span>;
         },
@@ -738,12 +738,12 @@ export default function CentralCobrancaScreen({
         label: 'Boleto encontrado',
         render: (row) =>
           row.boleto_encontrado ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/100/10 px-3 py-1 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/25">
               <CheckCircle2 size={12} />
               Sim
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/100/10 px-3 py-1 text-xs font-semibold text-amber-300 ring-1 ring-amber-500/25">
               <AlertCircle size={12} />
               nao
             </span>
@@ -777,7 +777,7 @@ export default function CentralCobrancaScreen({
                   'Envio manual assistido preparado com sucesso.'
                 )
               }
-              className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-xl border border-emerald-500/25 bg-emerald-500/100/10 px-3 py-2 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/15 disabled:opacity-50"
             >
               {runningAction === `prepare-${row.id}` ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
               Preparar cobranca
@@ -911,12 +911,12 @@ export default function CentralCobrancaScreen({
 
   if (globalMode || !resolvedCompanyId) {
     return (
-      <section className="rounded-[28px] border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800 shadow-soft">
+      <section className="rounded-2xl border border-amber-500/25 bg-amber-500/100/10 p-6 text-sm text-amber-300 shadow-soft">
         <div className="flex items-start gap-3">
           <ShieldAlert className="mt-0.5" size={18} />
           <div>
             <p className="font-semibold">Selecione uma empresa especifica</p>
-            <p className="mt-1 text-xs text-amber-700">
+            <p className="mt-1 text-xs text-amber-300/80">
               A central de cobranca trabalha por empresa para manter isolamento por company_id.
             </p>
           </div>
@@ -947,10 +947,10 @@ export default function CentralCobrancaScreen({
           </div>
         </div>
       )}
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/100/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
               <Receipt size={13} />
               Central de cobranca
             </div>
@@ -1001,12 +1001,12 @@ export default function CentralCobrancaScreen({
       </section>
 
       {simulationResult ? (
-        <section className="rounded-[28px] border border-blue-700/40 bg-blue-500/10 p-6 shadow-soft">
+        <section className="rounded-2xl border border-blue-700/40 bg-blue-500/10 p-6 shadow-soft">
           <div className="flex items-start gap-3">
-            <CheckCircle2 className="mt-0.5 text-blue-700" size={18} />
+            <CheckCircle2 className="mt-0.5 text-blue-300" size={18} />
             <div className="w-full">
-              <p className="text-sm font-semibold text-blue-900">Ultima simulacao</p>
-              <p className="mt-1 text-xs text-blue-700">
+              <p className="text-sm font-semibold text-blue-200">Ultima simulacao</p>
+              <p className="mt-1 text-xs text-blue-300/80">
                 Arquivo encontrado: {simulationResult.arquivo_encontrado ? 'sim' : 'nao'}.
               </p>
               <pre className="mt-3 overflow-x-auto rounded-2xl border border-blue-100 bg-slate-900/60 p-4 text-xs leading-relaxed text-slate-200">
@@ -1047,7 +1047,7 @@ export default function CentralCobrancaScreen({
         </section>
       ) : null}
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <DataTable
           columns={columns}
           rows={rows}
@@ -1058,11 +1058,11 @@ export default function CentralCobrancaScreen({
 
       {previewResult ? (
         <div className="modal-overlay fixed inset-0 z-[140] flex items-center justify-center p-4">
-          <div className="modal-shell text-crisp max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[28px] p-6">
+          <div className="modal-shell text-crisp max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold text-emerald-900">Previa do envio</p>
-                <p className="mt-1 text-xs text-emerald-700">Simulacao - nao enviado.</p>
+                <p className="text-sm font-semibold text-emerald-100">Previa do envio</p>
+                <p className="mt-1 text-xs text-emerald-300">Simulacao - nao enviado.</p>
               </div>
               <button
                 type="button"
@@ -1116,11 +1116,11 @@ export default function CentralCobrancaScreen({
 
       {manualResult ? (
         <div className="modal-overlay fixed inset-0 z-[140] flex items-center justify-center p-4">
-          <div className="modal-shell text-crisp max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-[28px] p-6">
+          <div className="modal-shell text-crisp max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-2xl p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold text-emerald-900">Envio manual assistido</p>
-                <p className="mt-1 text-xs text-emerald-700">{manualResult.warning || 'Envio real ainda nao realizado.'}</p>
+                <p className="text-sm font-semibold text-emerald-100">Envio manual assistido</p>
+                <p className="mt-1 text-xs text-emerald-300">{manualResult.warning || 'Envio real ainda nao realizado.'}</p>
               </div>
               <div className="flex gap-2">
                 {manualResult.type === 'batch' ? (
@@ -1136,7 +1136,7 @@ export default function CentralCobrancaScreen({
                   type="button"
                   disabled={sendingReal || !(manualResult.items || []).length}
                   onClick={() => handleSendReal(manualResult.items || [], (manualResult.items || []).length > 1)}
-                  className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 disabled:opacity-50"
+                  className="rounded-xl border border-emerald-500/25 bg-emerald-500/100/10 px-3 py-2 text-xs font-semibold text-emerald-300 disabled:opacity-50"
                 >
                   {sendingReal ? 'Enviando lote...' : (manualResult.type === 'batch' ? 'Enviar lote real' : 'Enviar WhatsApp real')}
                 </button>
@@ -1256,7 +1256,7 @@ export default function CentralCobrancaScreen({
                           type="button"
                           disabled={sendingReal || sendingRealKeys.has(String(item?.registro_id || item?.id || item?.documento || item?.numero_boleto || ''))}
                           onClick={() => handleSendReal([item], false)}
-                          className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
+                          className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/100/10 px-3 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/15 disabled:opacity-50"
                         >
                           <Send size={13} />
                           {sendingRealKeys.has(String(item?.registro_id || item?.id || item?.documento || item?.numero_boleto || '')) ? 'Enviando...' : 'Enviar WhatsApp real'}
@@ -1265,12 +1265,12 @@ export default function CentralCobrancaScreen({
                     />
                   </div>
                   {item.send_status === 'enviado' ? (
-                    <p className="mt-3 text-xs font-medium text-emerald-700">
+                    <p className="mt-3 text-xs font-medium text-emerald-300">
                       Enviado com sucesso via Z-API.
                     </p>
                   ) : null}
                   {item.send_status === 'erro' ? (
-                    <p className="mt-3 text-xs font-medium text-red-700">
+                    <p className="mt-3 text-xs font-medium text-red-300">
                       Erro no envio real: {item.send_error || item.error || 'Falha nao identificada.'}
                     </p>
                   ) : null}

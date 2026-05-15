@@ -23,7 +23,7 @@ export default function LimitWarningModal({
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/40 px-4 py-8 backdrop-blur-sm">
-      <div className="surface-card w-full max-w-xl rounded-[32px] p-6 shadow-2xl">
+      <div className="surface-card w-full max-w-xl rounded-2xl p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-200">
@@ -44,7 +44,7 @@ export default function LimitWarningModal({
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">
-          <div className="surface-elevated rounded-[24px] border border-slate-700 p-4">
+          <div className="surface-elevated rounded-2xl border border-slate-700 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Seu plano atual</p>
             <h4 className="mt-2 text-lg font-semibold text-slate-50">{currentPlan?.name}</h4>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -56,7 +56,7 @@ export default function LimitWarningModal({
             </div>
           </div>
 
-          <div className="surface-elevated rounded-[24px] border border-cyan-500/20 p-4">
+          <div className="surface-elevated rounded-2xl border border-cyan-500/20 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300">Upgrade sugerido</p>
             <h4 className="mt-2 text-lg font-semibold text-slate-50">{targetPlan?.name}</h4>
             <div className="mt-3 flex flex-wrap gap-2">

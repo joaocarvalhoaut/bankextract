@@ -111,7 +111,7 @@ export default function ImportacaoScreen({
   return (
     <div className="space-y-6">
       {limitNotice ? <PlanLimitNotice {...limitNotice} actionLabel="Ver planos" onAction={onOpenPlans} /> : null}
-      <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-700 bg-slate-900/60 p-6 shadow-lifted lg:p-8">
+      <section className="hero-mesh overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-lifted lg:p-8">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
@@ -148,7 +148,7 @@ export default function ImportacaoScreen({
       </section>
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className="accent-bar rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+        <div className="accent-bar rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
           <div className="mb-6 flex items-center gap-3">
             <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-700">
               <UploadCloud size={24} />
@@ -207,7 +207,7 @@ export default function ImportacaoScreen({
               </label>
             </div>
 
-            <label className="card-hover block rounded-[28px] border-2 border-dashed border-slate-700 bg-slate-800/40 px-6 py-10 text-center transition hover:border-emerald-300 hover:bg-emerald-50/40">
+            <label className="card-hover block rounded-2xl border-2 border-dashed border-slate-700 bg-slate-800/40 px-6 py-10 text-center transition hover:border-emerald-300 hover:bg-emerald-50/40">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-900/60 text-emerald-700 shadow-soft">
                 {selectedFile?.type?.includes('image') ? <FileImage size={28} /> : <FileText size={28} />}
               </div>
@@ -241,7 +241,7 @@ export default function ImportacaoScreen({
           </div>
         </div>
 
-        <div className="accent-bar rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+        <div className="accent-bar rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
           <div className="mb-4">
             <h3 className="text-lg font-semibold text-slate-50">Pipeline de processamento</h3>
             <p className="text-sm text-slate-500">

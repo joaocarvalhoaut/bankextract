@@ -51,7 +51,7 @@ function SimulationDebug({ summary }) {
   const exemplos = Array.isArray(debug.exemplos_descartados) ? debug.exemplos_descartados : [];
 
   return (
-    <div className="surface-panel mt-4 space-y-4 rounded-[28px] p-4 shadow-sm">
+    <div className="surface-panel mt-4 space-y-4 rounded-2xl p-4 shadow-sm">
       <div>
         <p className="text-sm font-semibold text-slate-50">Debug da simulacao</p>
         <p className="mt-1 text-xs text-slate-500">Visibilidade completa para entender por que cada titulo entrou ou ficou fora da regra.</p>
@@ -214,7 +214,7 @@ export default function WhatsAppAutoConfig({ empresaId, empresaNome, globalMode 
 
   if (blockedMessage) {
     return (
-      <div className="surface-card rounded-[30px] p-5 shadow-soft">
+      <div className="surface-card rounded-2xl p-5 shadow-soft">
         <div className="mb-3 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-300">
             <MessageSquare size={18} />
@@ -232,7 +232,7 @@ export default function WhatsAppAutoConfig({ empresaId, empresaNome, globalMode 
   }
 
   return (
-    <div className="surface-card overflow-hidden rounded-[32px] shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+    <div className="surface-card overflow-hidden rounded-2xl shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
       <div className="hero-mesh border-b border-slate-700/50 px-5 py-5 sm:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-3">
@@ -373,7 +373,7 @@ export default function WhatsAppAutoConfig({ empresaId, empresaNome, globalMode 
             {status ? <StatusNotice status={status} /> : null}
 
             {lastTestSummary ? (
-              <div className="surface-panel-muted rounded-[28px] px-4 py-4 text-sm text-slate-200 shadow-sm">
+              <div className="surface-panel-muted rounded-2xl px-4 py-4 text-sm text-slate-200 shadow-sm">
                 <p className="font-semibold text-slate-50">Resultado da simulacao</p>
                 <p className="mt-1">
                   Empresas processadas: {lastTestSummary.processed_companies ?? 0} - Enviaria: {lastTestSummary.sent ?? 0} - Ignorados: {lastTestSummary.skipped ?? 0} - Erros: {lastTestSummary.errors ?? 0}

@@ -51,7 +51,7 @@ export default function SystemStatusScreen({ status }) {
   return (
     <div className="space-y-6">
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <article className="surface-card relative overflow-hidden rounded-[28px] p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
+        <article className="surface-card relative overflow-hidden rounded-2xl p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
           <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-blue-400 to-blue-600 opacity-70" />
           <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-900/20 text-blue-700">
             <ShieldCheck size={18} />
@@ -63,7 +63,7 @@ export default function SystemStatusScreen({ status }) {
           <p className="mt-1 truncate text-xs text-slate-400">{status?.companyName || 'Nenhuma empresa ativa'}</p>
         </article>
 
-        <article className="surface-card relative overflow-hidden rounded-[28px] p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
+        <article className="surface-card relative overflow-hidden rounded-2xl p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
           <div className={`absolute inset-x-0 top-0 h-0.5 ${status?.googleSheetsConnected ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' : 'bg-slate-200'}`} />
           <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl ${status?.googleSheetsConnected ? 'bg-emerald-500/10 text-emerald-300' : 'bg-slate-800/60 text-slate-400'}`}>
             {status?.googleSheetsConnected ? <Wifi size={18} /> : <WifiOff size={18} />}
@@ -75,7 +75,7 @@ export default function SystemStatusScreen({ status }) {
           <p className="mt-1 truncate text-xs text-slate-400">{status?.googleSheetsSheetName || 'Sem planilha vinculada'}</p>
         </article>
 
-        <article className="surface-card relative overflow-hidden rounded-[28px] p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
+        <article className="surface-card relative overflow-hidden rounded-2xl p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
           <div className={`absolute inset-x-0 top-0 h-0.5 ${status?.whatsappMockMode ? 'bg-gradient-to-r from-amber-400 to-orange-400' : 'bg-gradient-to-r from-emerald-400 to-emerald-600'}`} />
           <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl ${status?.whatsappMockMode ? 'bg-amber-500/10 text-amber-300' : 'bg-emerald-500/10 text-emerald-300'}`}>
             <Activity size={18} />
@@ -89,7 +89,7 @@ export default function SystemStatusScreen({ status }) {
           </p>
         </article>
 
-        <article className="surface-card relative overflow-hidden rounded-[28px] p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
+        <article className="surface-card relative overflow-hidden rounded-2xl p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card">
           <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-violet-400 to-purple-500 opacity-70" />
           <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-300">
             <ShieldCheck size={18} />
@@ -103,7 +103,7 @@ export default function SystemStatusScreen({ status }) {
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <article className="surface-card rounded-[28px] p-5 shadow-soft">
+        <article className="surface-card rounded-2xl p-5 shadow-soft">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Itens prontos</p>
@@ -118,7 +118,7 @@ export default function SystemStatusScreen({ status }) {
           <p className="mt-1 text-right text-[10px] text-slate-400">{readyPct}% completo</p>
         </article>
 
-        <article className="surface-card rounded-[28px] p-5 shadow-soft">
+        <article className="surface-card rounded-2xl p-5 shadow-soft">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Pendencias</p>
@@ -129,7 +129,7 @@ export default function SystemStatusScreen({ status }) {
           </div>
         </article>
 
-        <article className="surface-card rounded-[28px] p-5 shadow-soft">
+        <article className="surface-card rounded-2xl p-5 shadow-soft">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Atencao</p>
@@ -141,7 +141,7 @@ export default function SystemStatusScreen({ status }) {
         </article>
       </section>
 
-      <section className="surface-card rounded-[28px] p-6 shadow-soft">
+      <section className="surface-card rounded-2xl p-6 shadow-soft">
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-slate-50">Checklist de prontidao</h3>
@@ -164,7 +164,7 @@ export default function SystemStatusScreen({ status }) {
         )}
       </section>
 
-      <section className="surface-card rounded-[28px] p-6 shadow-soft">
+      <section className="surface-card rounded-2xl p-6 shadow-soft">
         <div className="mb-5">
           <h3 className="text-lg font-semibold text-slate-50">Ultimos audit logs</h3>
           <p className="text-sm text-slate-500">Historico recente de operacoes sensiveis no escopo atual.</p>

@@ -343,7 +343,7 @@ export default function GoogleSheetsConfig({
 
   if (globalMode) {
     return (
-      <div className="surface-card rounded-[30px] p-5 shadow-soft">
+      <div className="surface-card rounded-2xl p-5 shadow-soft">
         <div className="mb-3 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-300">
             <Sheet size={18} />
@@ -362,7 +362,7 @@ export default function GoogleSheetsConfig({
 
   if (!empresaId) {
     return (
-      <div className="surface-card rounded-[30px] p-5 shadow-soft">
+      <div className="surface-card rounded-2xl p-5 shadow-soft">
         <div className="mb-3 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-300">
             <Sheet size={18} />
@@ -446,9 +446,9 @@ export default function GoogleSheetsConfig({
     const syncToneClass = healthStyles[effectiveSyncHealthMeta.tone] || healthStyles.neutral;
 
     return (
-      <section className="group rounded-[32px] border border-slate-700/90 bg-slate-900/60 p-7 shadow-[0_22px_70px_rgba(15,23,42,0.08)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_28px_90px_rgba(15,23,42,0.1)] lg:p-8">
+      <section className="group rounded-2xl border border-slate-700/90 bg-slate-900/60 p-7 shadow-[0_22px_70px_rgba(15,23,42,0.08)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_28px_90px_rgba(15,23,42,0.1)] lg:p-8">
         <div className="flex items-start gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-[24px] bg-blue-500/10 text-blue-300 shadow-sm ring-1 ring-blue-500/20">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-300 shadow-sm ring-1 ring-blue-500/20">
             <Sheet size={22} />
           </div>
           <div className="flex-1">
@@ -471,7 +471,7 @@ export default function GoogleSheetsConfig({
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-2">
-          <div className="surface-elevated rounded-[28px] bg-slate-800/40 p-5 shadow-sm">
+          <div className="surface-elevated rounded-2xl bg-slate-800/40 p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Conexao</p>
@@ -507,7 +507,7 @@ export default function GoogleSheetsConfig({
             </div>
           </div>
 
-          <div className="surface-elevated rounded-[28px] bg-slate-800/40 p-5 shadow-sm">
+          <div className="surface-elevated rounded-2xl bg-slate-800/40 p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-[0.16em]">Operacao</p>
@@ -653,7 +653,7 @@ export default function GoogleSheetsConfig({
   }
 
   return (
-    <div className="surface-card overflow-hidden rounded-[32px] shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+    <div className="surface-card overflow-hidden rounded-2xl shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
       <div className="hero-mesh border-b border-slate-700/50 px-5 py-5 sm:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-3">

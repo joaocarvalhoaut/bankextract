@@ -265,7 +265,7 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
 
   if (!companyId) {
     return (
-      <div className="rounded-[32px] border border-dashed border-slate-700 bg-slate-900/60 p-12 text-center shadow-soft">
+      <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-12 text-center shadow-soft">
         <ClipboardCheck className="mx-auto mb-4 text-slate-300" size={30} />
         <h2 className="text-xl font-semibold text-slate-50">Selecione uma empresa para validar o piloto</h2>
         <p className="mt-2 text-sm text-slate-500">
@@ -277,7 +277,7 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
 
   return (
     <div className="space-y-6">
-      <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-700/50 bg-slate-900/70 px-6 py-7 shadow-soft">
+      <section className="hero-mesh overflow-hidden rounded-2xl border border-slate-700/50 bg-slate-900/70 px-6 py-7 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
@@ -304,14 +304,14 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         {cards.map((card) => (
-          <article key={card.key} className={`rounded-[26px] border p-5 shadow-soft ${card.tone}`}>
+          <article key={card.key} className={`rounded-2xl border p-5 shadow-soft ${card.tone}`}>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] opacity-80">{card.label}</p>
             <p className="mt-3 text-3xl font-bold tracking-tight">{card.value}</p>
           </article>
         ))}
       </section>
 
-      <section className="rounded-[30px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="mb-5 flex items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold text-slate-50">Itens de validacao</h3>
@@ -346,7 +346,7 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3, 4].map((item) => (
-              <div key={item} className="rounded-[24px] border border-slate-700 p-5">
+              <div key={item} className="rounded-2xl border border-slate-700 p-5">
                 <div className="skeleton h-5 w-56 rounded-full" />
                 <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                   <div className="skeleton h-12 rounded-2xl" />
@@ -370,7 +370,7 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
               const hasEvidence = Boolean(item.evidence?.found);
 
               return (
-                <article key={item.item_key} className="rounded-[26px] border border-slate-700 bg-slate-800/40 p-5">
+                <article key={item.item_key} className="rounded-2xl border border-slate-700 bg-slate-800/40 p-5">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -489,7 +489,7 @@ export default function ProductionChecklistScreen({ companyId, companyName, onTo
       </section>
 
       {!loading && filteredItems.length === 0 ? (
-        <section className="rounded-[30px] border border-dashed border-slate-700 bg-slate-900/60 p-12 text-center shadow-soft">
+        <section className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-12 text-center shadow-soft">
           <CircleDashed className="mx-auto mb-4 text-slate-300" size={30} />
           <h3 className="text-lg font-semibold text-slate-50">Nenhum item encontrado</h3>
           <p className="mt-2 text-sm text-slate-500">

@@ -293,17 +293,17 @@ const resolvePublicScreenFromPath = (pathname) => {
 function ScreenFallback() {
   return (
     <div className="space-y-4">
-      <div className="hero-mesh overflow-hidden rounded-[32px] border border-slate-200/80 bg-white/90 px-6 py-8 shadow-soft">
+      <div className="hero-mesh overflow-hidden rounded-2xl border border-slate-700/80 px-6 py-8 shadow-soft">
         <div className="skeleton h-5 w-40 rounded-full" />
         <div className="mt-4 skeleton h-10 w-72 rounded-2xl" />
         <div className="mt-3 skeleton h-4 w-full max-w-2xl rounded-full" />
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className="skeleton h-52 rounded-[28px]" />
-        <div className="skeleton h-52 rounded-[28px]" />
-        <div className="skeleton h-52 rounded-[28px]" />
+        <div className="skeleton h-52 rounded-2xl" />
+        <div className="skeleton h-52 rounded-2xl" />
+        <div className="skeleton h-52 rounded-2xl" />
       </div>
-      <div className="skeleton h-[360px] rounded-[32px]" />
+      <div className="skeleton h-[360px] rounded-2xl" />
     </div>
   );
 }
@@ -1480,7 +1480,7 @@ export default function App() {
 
   if (shouldBlockCompanyViews) {
     currentContent = (
-      <div className="surface-card rounded-[32px] p-10 text-center">
+      <div className="surface-card rounded-2xl p-10 text-center">
         <h2 className="text-2xl font-semibold text-slate-50">Configure sua primeira empresa</h2>
         <p className="mt-3 text-sm text-slate-300">
           Sua conta ainda nao possui uma empresa ativa. Crie uma empresa ou entre por codigo de convite para continuar usando o NC Finance sem quebrar a operacao.
@@ -1837,7 +1837,7 @@ export default function App() {
       return (
         <div className="min-h-screen bg-[#071120] px-4 py-6 lg:px-6">
           <div className="mx-auto max-w-6xl space-y-6">
-            <div className="surface-card flex flex-wrap items-center justify-between gap-3 rounded-[28px] px-5 py-4">
+            <div className="surface-card flex flex-wrap items-center justify-between gap-3 rounded-2xl px-5 py-4">
               <div>
                 <h1 className="text-2xl font-semibold text-slate-50">Planos do NC Finance</h1>
                 <p className="text-sm text-slate-300">Compare os pacotes comerciais antes do login.</p>

@@ -63,7 +63,7 @@ function KpiCard({ label, value, sub, icon: Icon, tone = 'default', loading = fa
   const currentTone = tones[tone] || tones.default;
 
   return (
-    <article className={`relative overflow-hidden rounded-[24px] border border-slate-700 ${currentTone.bg} p-5 shadow-soft`}>
+    <article className={`relative overflow-hidden rounded-2xl border border-slate-700 ${currentTone.bg} p-5 shadow-soft`}>
       {currentTone.bar ? <div className={`absolute inset-x-0 top-0 h-0.5 ${currentTone.bar}`} /> : null}
       <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl ${currentTone.icon}`}>
         <Icon size={18} />
@@ -86,7 +86,7 @@ function KpiCard({ label, value, sub, icon: Icon, tone = 'default', loading = fa
 
 function EmptyState({ title, description }) {
   return (
-    <div className="rounded-[28px] border border-dashed border-slate-700 bg-slate-900/40 py-12 text-center">
+    <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/40 py-12 text-center">
       <h3 className="text-base font-semibold text-slate-200">{title}</h3>
       <p className="mt-1 text-sm text-slate-400">{description}</p>
     </div>
@@ -191,7 +191,7 @@ function AlertRow({ alert, onAcknowledgeToggle }) {
 
 function SectionCard({ title, subtitle, action, children }) {
   return (
-    <section className="text-crisp rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+    <section className="text-crisp rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-base font-semibold text-slate-50">{title}</h3>
@@ -389,7 +389,7 @@ export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
 
   if (!isSystemAdminUser) {
     return (
-      <div className="rounded-[32px] border border-red-500/20 bg-slate-900/60 p-12 text-center shadow-soft">
+      <div className="rounded-2xl border border-red-500/20 bg-slate-900/60 p-12 text-center shadow-soft">
         <ShieldCheck className="mx-auto mb-4 text-red-400" size={30} />
         <h2 className="text-xl font-semibold text-slate-50">Acesso restrito</h2>
         <p className="mt-2 text-sm text-slate-400">A Central Operacional esta disponivel apenas para administradores globais.</p>
@@ -401,7 +401,7 @@ export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
 
   return (
     <div className="text-crisp space-y-6">
-      <section className="relative overflow-hidden rounded-[32px] border border-slate-700/50 bg-slate-900/70 px-7 py-6 shadow-soft">
+      <section className="relative overflow-hidden rounded-2xl border border-slate-700/50 bg-slate-900/70 px-7 py-6 shadow-soft">
         <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-blue-500 via-violet-500 to-cyan-400 opacity-70" />
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div className="flex items-center gap-4">

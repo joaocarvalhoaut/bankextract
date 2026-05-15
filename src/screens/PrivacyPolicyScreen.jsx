@@ -1,7 +1,7 @@
 export default function PrivacyPolicyScreen() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <section className="surface-card rounded-[32px] px-6 py-8">
+      <section className="surface-card rounded-2xl px-6 py-8">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Privacidade</p>
         <h1 className="mt-3 text-3xl font-semibold text-slate-50">Politica de Privacidade</h1>
         <p className="mt-3 text-sm leading-7 text-slate-300">
@@ -10,7 +10,7 @@ export default function PrivacyPolicyScreen() {
         </p>
       </section>
 
-      <section className="surface-card rounded-[32px] px-6 py-8 text-sm leading-7 text-slate-300">
+      <section className="surface-card rounded-2xl px-6 py-8 text-sm leading-7 text-slate-300">
         <h2 className="text-lg font-semibold text-slate-50">Dados tratados</h2>
         <p className="mt-3">
           Podemos tratar dados de contato, registros financeiros, status de cobranca, logs operacionais,

@@ -16,7 +16,7 @@ export default function PlanCard({
 
   return (
     <article
-      className={`relative overflow-hidden rounded-[28px] border p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card ${
+      className={`relative overflow-hidden rounded-2xl border p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card ${
         highlight ? 'surface-card border-cyan-400/30 ring-1 ring-cyan-500/20' : 'surface-card border-cyan-500/10'
       }`}
     >

@@ -349,16 +349,16 @@ function ZapiIntegrationCard({
 
   if (globalMode || !companyId) {
     return (
-      <section className="rounded-[28px] border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800 shadow-soft">
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800 shadow-soft">
         Selecione uma empresa especifica para configurar a integracao WhatsApp Business (Z-API).
       </section>
     );
   }
 
   return (
-    <section className="text-crisp group rounded-[32px] border border-slate-700/90 bg-slate-900/60 p-7 shadow-[0_22px_70px_rgba(15,23,42,0.08)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_28px_90px_rgba(15,23,42,0.1)] lg:p-8">
+    <section className="text-crisp group rounded-2xl border border-slate-700/90 bg-slate-900/60 p-7 shadow-[0_22px_70px_rgba(15,23,42,0.08)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_28px_90px_rgba(15,23,42,0.1)] lg:p-8">
       <div className="flex items-start gap-4">
-        <div className="flex h-14 w-14 items-center justify-center rounded-[24px] bg-blue-900/20 text-blue-700 shadow-sm ring-1 ring-blue-100">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-900/20 text-blue-700 shadow-sm ring-1 ring-blue-100">
           <Smartphone size={22} />
         </div>
         <div className="flex-1">
@@ -374,7 +374,7 @@ function ZapiIntegrationCard({
         </div>
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-[28px] border border-slate-700 bg-slate-800/50 shadow-inner">
+      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-700 bg-slate-800/50 shadow-inner">
         <button
           type="button"
           onClick={() => setHelperOpen((current) => !current)}
@@ -504,7 +504,7 @@ function ZapiIntegrationCard({
         </div>
 
         {editingCredentials ? (
-          <div className="grid grid-cols-1 gap-4 rounded-[28px] border border-slate-700 bg-slate-800/50 p-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-700 bg-slate-800/50 p-5 md:grid-cols-2">
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-slate-200">Instance ID</span>
               <input
@@ -738,7 +738,7 @@ export default function IntegracoesScreen({
 
   return (
     <div className="space-y-6">
-      <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-700 bg-slate-900/60 p-6 shadow-lifted lg:p-8">
+      <section className="hero-mesh overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-lifted lg:p-8">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-700/40 bg-blue-900/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
@@ -806,7 +806,7 @@ export default function IntegracoesScreen({
       </section>
 
       {!globalMode && companyId ? (
-        <section className="rounded-[32px] border border-slate-700/90 bg-slate-900/60 p-7 shadow-card">
+        <section className="rounded-2xl border border-slate-700/90 bg-slate-900/60 p-7 shadow-card">
           <div className="mb-5 flex items-start gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-[20px] bg-amber-500/10 text-amber-400 shadow-soft">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

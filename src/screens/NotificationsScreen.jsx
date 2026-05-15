@@ -92,7 +92,7 @@ export default function NotificationsScreen({ companyId, companyName, onToast })
 
   if (!companyId) {
     return (
-      <div className="rounded-[32px] border border-dashed border-slate-700 bg-slate-900/60 p-12 text-center shadow-soft">
+      <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-12 text-center shadow-soft">
         <BellRing className="mx-auto mb-4 text-slate-300" size={30} />
         <h2 className="text-xl font-semibold text-slate-50">Selecione uma empresa para abrir as notificacoes</h2>
         <p className="mt-2 text-sm text-slate-500">O centro de notificacoes acompanha eventos comerciais e operacionais por company_id.</p>
@@ -102,7 +102,7 @@ export default function NotificationsScreen({ companyId, companyName, onToast })
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[30px] border border-slate-700 bg-slate-900/60 p-7 shadow-soft">
+      <section className="rounded-2xl border border-slate-700 bg-slate-900/60 p-7 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Centro de notificacoes</p>
@@ -128,7 +128,7 @@ export default function NotificationsScreen({ companyId, companyName, onToast })
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
+      <section className="rounded-2xl border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
         <div className="flex flex-wrap items-center gap-3">
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800/40 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
             <Filter size={13} />
@@ -153,14 +153,14 @@ export default function NotificationsScreen({ companyId, companyName, onToast })
 
       <section className="space-y-3">
         {loading ? (
-          <div className="rounded-[28px] border border-slate-700 bg-slate-900/60 px-6 py-10 text-center text-sm text-slate-500 shadow-soft">
+          <div className="rounded-2xl border border-slate-700 bg-slate-900/60 px-6 py-10 text-center text-sm text-slate-500 shadow-soft">
             Carregando notificacoes...
           </div>
         ) : filteredNotifications.length ? (
           filteredNotifications.map((item) => (
             <article
               key={item.id}
-              className={`rounded-[24px] border bg-slate-900/60 p-5 shadow-soft transition hover:-translate-y-0.5 ${
+              className={`rounded-2xl border bg-slate-900/60 p-5 shadow-soft transition hover:-translate-y-0.5 ${
                 severityStyles[item.severity] || severityStyles.info
               }`}
             >
@@ -189,7 +189,7 @@ export default function NotificationsScreen({ companyId, companyName, onToast })
             </article>
           ))
         ) : (
-          <div className="rounded-[28px] border border-dashed border-slate-700 bg-slate-900/60 px-6 py-14 text-center shadow-soft">
+          <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 px-6 py-14 text-center shadow-soft">
             <BellRing className="mx-auto mb-4 text-slate-300" size={30} />
             <h3 className="text-lg font-semibold text-slate-50">Nenhuma notificacao encontrada</h3>
             <p className="mt-2 text-sm text-slate-500">
