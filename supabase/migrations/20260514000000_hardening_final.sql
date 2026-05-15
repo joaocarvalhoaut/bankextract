@@ -49,13 +49,15 @@ comment on table public.automation_audit_logs is
 -- RLS: only service role can write; users can read their own company
 alter table public.automation_audit_logs enable row level security;
 
-create policy if not exists "aal_company_read"
-  on public.automation_audit_logs for select
-  using (
-    company_id in (
-      select company_id from public.usuarios_empresas where user_id = auth.uid()
-    )
-  );
+do $$ begin
+  create policy "aal_company_read" on public.automation_audit_logs
+    for select using (
+      company_id in (
+        select company_id from public.usuarios_empresas where user_id = auth.uid()
+      )
+    );
+exception when duplicate_object then null;
+end $$;
 
 -- ── 2. Queue / retry management on automation_dispatches ─────────────────────
 alter table public.automation_dispatches
@@ -107,7 +109,8 @@ comment on table public.zapi_circuit_state is
 
 alter table public.zapi_circuit_state enable row level security;
 
-create policy if not exists "zcs_service_role_all"
-  on public.zapi_circuit_state for all
-  using (true)
-  with check (true);
+do $$ begin
+  create policy "zcs_service_role_all" on public.zapi_circuit_state
+    for all using (true) with check (true);
+exception when duplicate_object then null;
+end $$;
