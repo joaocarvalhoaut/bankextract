@@ -862,7 +862,7 @@ export default function App() {
   const handleDeleteHistory = useCallback(
     async (item) => {
       const confirmed = window.confirm(
-        item.tipo === 'vencidos'
+        (item.tipo === 'vencidos' || item.tipo === 'a_vencer')
           ? 'Excluir este historico removera os registros financeiros do lote usando company_id + batch_id. Deseja continuar?'
           : 'Excluir este historico de liquidacao nao apagara registros financeiros. Deseja continuar?'
       );

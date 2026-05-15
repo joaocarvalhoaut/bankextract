@@ -380,15 +380,15 @@ export default function ChecklistEnvioRealScreen({
             title="IA de cobranca para simulacao operacional"
             context={{
               nome: companyName || 'Cliente Exemplo',
-              valor: cards.titulos_monitorados ? 2500 : 0,
+              valor: 0,
               vencimento: new Date().toISOString().slice(0, 10),
-              diasAtraso: Number(cards.inconsistencias_criticas || 0) > 0 ? 10 : 2,
-              documento: `CHECKLIST-${resolvedCompanyId}`,
-              telefone: 'nao localizado',
+              diasAtraso: 0,
+              documento: 'não informado',
+              telefone: 'não informado',
               empresa: companyName || 'Empresa Exemplo',
-              linha_digitavel: 'nao localizado',
-              link_boleto: 'nao localizado',
-              codigo_barras: 'nao localizado',
+              linha_digitavel: 'não informado',
+              link_boleto: 'não informado',
+              codigo_barras: 'não informado',
               historico: (data?.recommendations || []).slice(0, 2).join('; '),
             }}
             initialMessage={checklistAiMessage}

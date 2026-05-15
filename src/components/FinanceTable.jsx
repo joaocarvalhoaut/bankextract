@@ -344,12 +344,13 @@ export default function FinanceTable({
                                   className="w-full rounded border border-emerald-500 bg-slate-800 px-2 py-1.5 text-sm text-slate-100 outline-none"
                                 >
                                   <option value="vencidos">Vencidos</option>
+                                  <option value="a_vencer">A vencer</option>
                                   <option value="liquidacao">Liquidação</option>
                                 </select>
                               ) : (
                                 <button className="w-full text-left" onDoubleClick={() => (canEdit ? startCellEdit(row.id, 'tipo', row.tipo || 'vencidos') : null)}>
                                   <span className="inline-flex rounded-full border border-slate-700 bg-slate-800/40 px-2 py-0.5 text-xs font-medium text-slate-200">
-                                    {row.tipo === 'liquidacao' ? 'Liquidação' : 'Vencidos'}
+                                    {row.tipo === 'a_vencer' ? 'A vencer' : row.tipo === 'liquidacao' ? 'Liquidação' : 'Vencidos'}
                                   </span>
                                 </button>
                               )}

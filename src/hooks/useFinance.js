@@ -589,7 +589,7 @@ Total Geral: 24.479,32`;
           batchId,
           arquivo: preview.origem,
           data: importTimestamp,
-          status: 'vencidos'
+          status: preview.tipo || 'vencidos'
         };
         const newRows = selectedPreviewRows
           .filter((row) => {
@@ -613,7 +613,7 @@ Total Geral: 24.479,32`;
           {
             ...historyEntry,
             registros: newRows.length,
-            tipo: 'vencidos',
+            tipo: preview.tipo || 'vencidos',
             status: 'concluida'
           },
           {

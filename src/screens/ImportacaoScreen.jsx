@@ -7,6 +7,7 @@ import { canUserPerformAction } from '../security/permissions';
 
 const importTypeOptions = [
   { value: 'vencidos', label: 'Vencidos', hint: 'Popula a carteira financeira da empresa ativa.' },
+  { value: 'a_vencer', label: 'A vencer', hint: 'Títulos com vencimento futuro — popula a carteira ativa.' },
   { value: 'liquidacao', label: 'Liquidacao', hint: 'Marca registros como liquidados sem apagar historico.' },
 ];
 

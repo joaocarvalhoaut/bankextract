@@ -36,7 +36,7 @@ export default function PreviewScreen({
             <div>
               <h2 className="text-lg font-semibold text-slate-50">Pré-visualização dos dados</h2>
               <p className="mt-0.5 text-sm text-slate-300">
-                Revise, edite ou remova registros antes da acao manual · Origem: <span className="font-medium">{preview.origem}</span> · Destino: <span className="font-medium">{companyName}</span> · Tipo: <span className="font-medium">{preview.tipo === 'liquidacao' ? 'Liquidacao' : 'Vencidos'}</span>
+                Revise, edite ou remova registros antes da acao manual · Origem: <span className="font-medium">{preview.origem}</span> · Destino: <span className="font-medium">{companyName}</span> · Tipo: <span className="font-medium">{preview.tipo === 'a_vencer' ? 'A vencer' : preview.tipo === 'liquidacao' ? 'Liquidacao' : 'Vencidos'}</span>
               </p>
             </div>
           </div>

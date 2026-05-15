@@ -726,6 +726,7 @@ export default function VisaoGeralScreen({
           >
             <option value="todos">Todos os tipos</option>
             <option value="vencidos">Vencidos</option>
+            <option value="a_vencer">A vencer</option>
             <option value="liquidacao">Liquidacao</option>
           </select>
           <div className="surface-panel flex items-center gap-2 rounded-2xl px-4 py-3 shadow-soft">
