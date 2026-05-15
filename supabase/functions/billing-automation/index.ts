@@ -5767,6 +5767,7 @@ Deno.serve(async (req: Request) => {
           cards: checklist.cards,
           checklist: checklist.checklist,
           recommendations: checklist.recommendations,
+          sample_charge: checklist.sample_charge,
         }, 200);
       } catch (error) {
         console.error('get_real_send_checklist error', error);
