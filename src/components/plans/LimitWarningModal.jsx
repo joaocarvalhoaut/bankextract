@@ -18,11 +18,6 @@ export default function LimitWarningModal({
   if (!open) return null;
 
   const handleUpgradeClick = () => {
-    console.log('[LimitWarningModal] upgrade clicked', {
-      currentPlan: currentPlan?.id || currentPlan?.code,
-      targetPlan: targetPlan?.id || targetPlan?.code,
-      hasOnUpgrade: typeof onUpgrade === 'function',
-    });
     onUpgrade?.();
   };
 

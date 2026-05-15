@@ -169,21 +169,7 @@ export default function BillingScreen({
   // FIX: guard usa plan?.code || plan?.id (objetos do DB tem code, constantes locais tem id)
   const handleCheckout = async (plan = upgrade?.target) => {
     const planCode = plan?.code || plan?.id;
-    console.log('[BillingScreen] handleCheckout called', {
-      planCode,
-      planId: plan?.id,
-      planName: plan?.name,
-      hasUpgrade: !!upgrade,
-      upgradeTarget: upgrade?.target?.id,
-      hasOnChoosePlan: typeof onChoosePlan === 'function',
-    });
-
-    if (!planCode || !onChoosePlan) {
-      console.warn('[BillingScreen] handleCheckout blocked:', {
-        reason: !planCode ? 'planCode vazio - upgrade.target ausente' : 'onChoosePlan nao fornecido',
-      });
-      return;
-    }
+    if (!planCode || !onChoosePlan) return;
 
     setCheckoutLoading(true);
     try {

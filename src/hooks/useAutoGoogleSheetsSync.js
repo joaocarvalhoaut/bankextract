@@ -94,7 +94,7 @@ export function useAutoGoogleSheetsSync({ activeCompanyId, isGlobalView, enabled
         try {
           await syncGoogleSheets(activeCompanyId);
           setSyncStatus(SYNC_STATUS.SYNCED);
-          console.log('[AutoSync] Google Sheets sincronizado — motivo: ' + safeReason);
+          if (import.meta.env.DEV) console.log('[AutoSync] Google Sheets sincronizado — motivo: ' + safeReason);
 
           clearTimeout(clearSyncRef.current);
           clearSyncRef.current = setTimeout(() => setSyncStatus(SYNC_STATUS.IDLE), 4000);

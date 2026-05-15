@@ -690,7 +690,7 @@ export default function App() {
       if (viewFilters.dateStart && row.data_vencimento < viewFilters.dateStart) return false;
       if (viewFilters.dateEnd && row.data_vencimento > viewFilters.dateEnd) return false;
       if (viewFilters.search) {
-        const haystack = normalizeText(`${row.nome} ${row.numero_boleto}`);
+        const haystack = normalizeText(`${row.nome} ${row.numero_boleto} ${row.documento || ''}`);
         if (!haystack.includes(normalizeText(viewFilters.search))) return false;
       }
       return true;
@@ -731,7 +731,7 @@ export default function App() {
     try {
       setProcessing(true);
       setPreview(null);
-      console.log('[IMPORTACAO] arquivo selecionado', selectedFile);
+      if (import.meta.env.DEV) console.log('[IMPORTACAO] arquivo selecionado', selectedFile);
       for (const stage of ['Enviando arquivo', 'Executando OCR', 'Estruturando dados', 'Validando registros']) {
         setProcessingStage(stage);
         await sleep(180);
@@ -1389,7 +1389,7 @@ export default function App() {
   const handleChoosePlan = useCallback(
     async (plan) => {
       const targetPlanCode = plan?.code || plan?.id;
-      console.log('[App] handleChoosePlan called', {
+      if (import.meta.env.DEV) console.log('[App] handleChoosePlan called', {
         planCode: targetPlanCode,
         planName: plan?.name,
         currentPlanId: billingOverview?.currentPlan?.id,
@@ -1397,7 +1397,6 @@ export default function App() {
       });
 
       if (!targetPlanCode) {
-        console.warn('[App] handleChoosePlan: targetPlanCode vazio, abortando');
         return;
       }
       if (!currentCompanyId) {
@@ -1407,7 +1406,6 @@ export default function App() {
 
       const currentPlanId = billingOverview?.currentPlan?.id;
       if (currentPlanId && targetPlanCode === currentPlanId) {
-        console.log('[App] handleChoosePlan: empresa ja esta no plano', targetPlanCode);
         showToast('aviso', `A empresa ja esta no plano ${plan.name}.`);
         setActiveTab('billing');
         return;
@@ -1417,7 +1415,6 @@ export default function App() {
       const successUrl = `${baseUrl}/billing?checkout=success&plan=${encodeURIComponent(targetPlanCode)}`;
       const cancelUrl = `${baseUrl}/planos?checkout=canceled`;
 
-
       let result;
       try {
         result = await createStripeCheckoutSession({
@@ -1426,7 +1423,6 @@ export default function App() {
           successUrl,
           cancelUrl,
         });
-        console.log('[App] stripe checkout response', { url: result?.url, result });
       } catch (err) {
         console.error('[App] stripe checkout error:', err);
         throw err; // propaga para BillingScreen/PlanosScreen mostrarem o toast
@@ -1443,7 +1439,6 @@ export default function App() {
       }).catch(() => {});
 
       if (result?.url && typeof window !== 'undefined') {
-        console.log('[App] redirecionando para Stripe Checkout:', result.url);
         window.location.assign(result.url);
         return;
       }

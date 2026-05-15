@@ -51,7 +51,7 @@ const toTableRow = (row, config) => {
     company_id: row.company_id,
     empresaNome: row.empresa_nome || 'Empresa',
     nome: row.nome || '',
-    numeroBoleto: row.numero_boleto || '',
+    numeroBoleto: (row.numero_boleto || row.documento || '').trim(),
     dataVencimento: row.data_vencimento || '',
     valor: Number(row.valor || 0),
     telefone: row.telefone || '',

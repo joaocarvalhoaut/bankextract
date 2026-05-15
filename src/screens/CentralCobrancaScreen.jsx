@@ -1091,10 +1091,7 @@ export default function CentralCobrancaScreen({
                 initialMessage={previewResult.message || ''}
                 restoreMessage={previewResult.message || ''}
                 onMessageChange={(value) =>
-                  {
-                    console.log('[MENSAGEM TEMPLATE]', value);
-                    setPreviewResult((current) => (current ? { ...current, message: value } : current));
-                  }
+                  setPreviewResult((current) => (current ? { ...current, message: value } : current))
                 }
                 onGenerated={(result) => {
                   handleCollectionMessageGenerated(result.tone, previewResult.payload).catch(() => {});
