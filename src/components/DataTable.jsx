@@ -5,7 +5,7 @@ export default function DataTable({
   emptyDescription = 'Ajuste os filtros ou importe uma nova carteira.',
 }) {
   return (
-    <div className="text-crisp overflow-hidden rounded-[28px] border border-slate-700 bg-slate-900/60 shadow-card">
+    <div className="text-crisp overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/60 shadow-card">
       <div className="table-scroll max-h-[70vh]">
         <table className="table-sticky-head min-w-[920px] divide-y divide-slate-800">
           <thead className="border-b border-slate-700 bg-[#10213B]/92">
@@ -13,7 +13,7 @@ export default function DataTable({
               {columns.map((column) => (
                 <th
                   key={column.key}
-                  className={`px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300 ${column.className || ''}`}
+                  className={`px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.10em] text-slate-300 ${column.className || ''}`}
                 >
                   {column.label}
                 </th>
@@ -34,7 +34,7 @@ export default function DataTable({
                   {columns.map((column) => (
                     <td
                       key={column.key}
-                      className={`px-4 py-3.5 align-top text-sm text-slate-100 ${column.cellClassName || ''}`}
+                      className={`px-4 py-3 align-top text-sm text-slate-100 ${column.cellClassName || ''}`}
                     >
                       {column.render ? column.render(row, index) : row[column.key]}
                     </td>
