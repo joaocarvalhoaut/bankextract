@@ -1709,6 +1709,7 @@ export default function App() {
             companyName={currentCompanyName}
             globalMode={globalMode}
             onToast={showToast}
+            financialRecords={financialRecords}
           />
         );
         break;

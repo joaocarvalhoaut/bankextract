@@ -68,6 +68,7 @@ export default function ChecklistEnvioRealScreen({
   companyName,
   globalMode,
   onToast,
+  financialRecords = [],
 }) {
   const resolvedCompanyId =
     companyId ||
@@ -125,6 +126,53 @@ export default function ChecklistEnvioRealScreen({
     inconsistencias_criticas: 0,
     zapi: 'Pendente / bloqueado',
   };
+
+  /* ── Sample record: most-overdue non-liquidated title for this company ──
+     Used to populate the CollectionMessagePreview with real financial data.
+     Falls back to the oldest pending record if no overdue ones exist,
+     then to null (all fields revert to 'não informado' as legitimate fallback). */
+  const sampleRecord = useMemo(() => {
+    if (!Array.isArray(financialRecords) || !financialRecords.length) return null;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const companyRows = financialRecords.filter((row) => {
+      if (resolvedCompanyId && row.company_id !== resolvedCompanyId) return false;
+      const status = String(row.status || '').toLowerCase();
+      return status !== 'liquidado' && status !== 'cancelado';
+    });
+
+    // Prefer overdue records (most overdue first)
+    const overdue = companyRows
+      .filter((row) => {
+        const due = row.data_vencimento || row.dataVencimento || '';
+        return due && due < today;
+      })
+      .sort((a, b) => {
+        const da = a.data_vencimento || a.dataVencimento || '';
+        const db = b.data_vencimento || b.dataVencimento || '';
+        return da < db ? -1 : da > db ? 1 : 0; // oldest first → most overdue
+      });
+
+    if (overdue.length) return overdue[0];
+
+    // Fall back to any pending record (oldest first)
+    const pending = companyRows.sort((a, b) => {
+      const da = a.data_vencimento || a.dataVencimento || '';
+      const db = b.data_vencimento || b.dataVencimento || '';
+      return da < db ? -1 : da > db ? 1 : 0;
+    });
+
+    return pending[0] || null;
+  }, [financialRecords, resolvedCompanyId]);
+
+  /* ── Compute days overdue from the sample record's due date ── */
+  const sampleDiasAtraso = useMemo(() => {
+    if (!sampleRecord) return 0;
+    const due = sampleRecord.data_vencimento || sampleRecord.dataVencimento || '';
+    if (!due) return 0;
+    const diffMs = Date.now() - new Date(`${due}T00:00:00`).getTime();
+    return Math.max(0, Math.floor(diffMs / 86400000));
+  }, [sampleRecord]);
 
   const handleSimulateBatch = useCallback(async () => {
     if (!resolvedCompanyId || globalMode) {
@@ -379,16 +427,31 @@ export default function ChecklistEnvioRealScreen({
           <CollectionMessagePreview
             title="IA de cobranca para simulacao operacional"
             context={{
-              nome: companyName || 'Cliente Exemplo',
-              valor: 0,
-              vencimento: new Date().toISOString().slice(0, 10),
-              diasAtraso: 0,
-              documento: 'não informado',
-              telefone: 'não informado',
+              /* ── Fields sourced from the most-overdue imported record ── */
+              nome: sampleRecord?.nome || companyName || 'Cliente Exemplo',
+              valor: sampleRecord?.valor ?? 0,
+              vencimento:
+                sampleRecord?.data_vencimento ||
+                sampleRecord?.dataVencimento ||
+                new Date().toISOString().slice(0, 10),
+              diasAtraso: sampleDiasAtraso,
+              documento:
+                sampleRecord?.documento ||
+                sampleRecord?.numeroBoleto ||
+                sampleRecord?.numero_boleto ||
+                'não informado',
+              numero_boleto:
+                sampleRecord?.numeroBoleto ||
+                sampleRecord?.numero_boleto ||
+                sampleRecord?.documento ||
+                'não informado',
+              telefone: sampleRecord?.telefone || 'não informado',
               empresa: companyName || 'Empresa Exemplo',
+              /* ── Fields unavailable in imported records (require Drive sync) ── */
               linha_digitavel: 'não informado',
               link_boleto: 'não informado',
               codigo_barras: 'não informado',
+              /* ── Operational context ── */
               historico: (data?.recommendations || []).slice(0, 2).join('; '),
             }}
             initialMessage={checklistAiMessage}
