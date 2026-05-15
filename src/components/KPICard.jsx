@@ -1,31 +1,32 @@
-import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import { formatCurrencyBRL } from '../utils/format';
 
 /* ─────────────────────────────────────────────────────────────
-   Tone palette — dot accent + trend arrow colour only.
-   Background and border come from .surface-card.
+   Tone palette
+   dot accent colour only — background comes from .surface-card
 ───────────────────────────────────────────────────────────── */
 const toneMap = {
-  green:   { dot: 'bg-cyan-400',    delta: 'text-cyan-400'    },
-  red:     { dot: 'bg-red-500',     delta: 'text-red-400'     },
-  blue:    { dot: 'bg-blue-500',    delta: 'text-blue-400'    },
-  gold:    { dot: 'bg-amber-500',   delta: 'text-amber-400'   },
-  amber:   { dot: 'bg-yellow-500',  delta: 'text-yellow-400'  },
-  slate:   { dot: 'bg-slate-400',   delta: 'text-slate-400'   },
-  emerald: { dot: 'bg-emerald-400', delta: 'text-emerald-400' },
+  green:   'bg-cyan-400',
+  red:     'bg-red-500',
+  blue:    'bg-blue-500',
+  gold:    'bg-amber-500',
+  amber:   'bg-yellow-500',
+  slate:   'bg-slate-400',
+  emerald: 'bg-emerald-400',
 };
 
 /* ─────────────────────────────────────────────────────────────
-   Optional text-badge tone map (badge="Info" | "OK" | "Atenção")
+   Status-badge colour map
+   Only meaningful operational states render a badge.
+   badge prop must be one of: "OK" | "Atenção" | "Atraso" | "Crítico"
+   Any other value (including null / undefined / "Info") = no badge.
 ───────────────────────────────────────────────────────────── */
-const badgeToneMap = {
-  info:    'border-blue-500/30   bg-blue-500/10   text-blue-300',
+const STATUS_BADGE = {
   ok:      'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
-  atenção: 'border-amber-500/30  bg-amber-500/10  text-amber-300',
-  atencao: 'border-amber-500/30  bg-amber-500/10  text-amber-300',
-  alerta:  'border-amber-500/30  bg-amber-500/10  text-amber-300',
-  erro:    'border-red-500/30    bg-red-500/10    text-red-300',
-  danger:  'border-red-500/30    bg-red-500/10    text-red-300',
+  atenção: 'border-amber-500/30  bg-amber-500/10   text-amber-300',
+  atencao: 'border-amber-500/30  bg-amber-500/10   text-amber-300',
+  atraso:  'border-amber-500/30  bg-amber-500/10   text-amber-300',
+  crítico: 'border-red-500/30    bg-red-500/10     text-red-300',
+  critico: 'border-red-500/30    bg-red-500/10     text-red-300',
 };
 
 /* ─────────────────────────────────────────────────────────────
@@ -41,82 +42,74 @@ const formatValue = (value) => {
 };
 
 /* ─────────────────────────────────────────────────────────────
-   KPICard — three-zone layout with absolute-positioned badge
+   KPICard — CSS-grid 3-zone layout
    ─────────────────────────────────────────────────────────────
-   Zone 1  label row   — full-width, right-padded to clear badge
-   Zone 2  value       — own block, no horizontal neighbours
-   Zone 3  hint footer — bottom-pinned via mt-auto
 
-   The trend-pill badge is taken OUT of document flow
-   (position: absolute, top-right corner).  This makes it
-   PHYSICALLY IMPOSSIBLE for it to share horizontal space with
-   any other zone, regardless of card width or zoom level.
+   Layout uses named grid areas:
+     ┌──────────────────┐
+     │   header (row 1) │  ← label + optional status badge
+     ├──────────────────┤
+     │   value  (row 2) │  ← financial value, full width
+     ├──────────────────┤
+     │   hint   (row 3) │  ← description / footer
+     └──────────────────┘
 
-   Optional `badge` prop ("Info" | "OK" | "Atenção" | etc.)
-   renders a text pill inside Zone 1.
+   Each zone is in its own dedicated grid row.
+   It is PHYSICALLY IMPOSSIBLE for any element in row 2
+   to share horizontal space with anything in row 1.
+
+   The trend-icon pill has been REMOVED:
+   · It was never connected to real trend data
+   · It was the element users saw as a phantom "Info badge"
+   · Status is shown only through the optional `badge` prop
+     with meaningful labels: "OK" | "Atenção" | "Atraso" | "Crítico"
 ───────────────────────────────────────────────────────────── */
 export default function KPICard({
   title,
   value,
   hint,
-  trend  = null,
-  tone   = 'slate',
-  badge  = null,
+  tone  = 'slate',
+  badge = null,         /* "OK" | "Atenção" | "Atraso" | "Crítico" — any other value is ignored */
 }) {
-  const palette   = toneMap[tone] || toneMap.slate;
-  const TrendIcon = trend === 'up' ? ArrowUpRight
-                  : trend === 'down' ? ArrowDownRight
-                  : Minus;
+  const dotColor  = toneMap[tone] || toneMap.slate;
   const formatted = formatValue(value);
 
-  /* badge tone — look up by lower-cased key, fall back to 'info' */
-  const badgeCls  = badge
-    ? (badgeToneMap[badge.toLowerCase()] || badgeToneMap.info)
-    : null;
+  /* Only render a badge when it maps to a known operational state */
+  const badgeKey  = typeof badge === 'string' ? badge.toLowerCase() : null;
+  const badgeCls  = badgeKey ? STATUS_BADGE[badgeKey] : null;
 
   return (
     <article
-      className={[
-        'surface-card',
-        'relative',                   /* anchor for the absolute badge      */
-        'flex min-h-[96px] flex-col', /* vertical stack — zones never share rows */
-        'overflow-hidden',            /* hard outer clip                    */
-        'rounded-2xl',
-        'px-5 pb-4 pt-4',
-      ].join(' ')}
+      className="surface-card overflow-hidden rounded-2xl px-5 pb-4 pt-4"
+      style={{
+        display: 'grid',
+        gridTemplateRows: 'auto auto 1fr',
+        minHeight: '96px',
+      }}
     >
 
-      {/* ══ Trend-pill badge — ABSOLUTE, outside document flow ══════
-          Right-4 Top-4 exactly matches the article's px-5 / pt-4
-          inset.  No zone can flow into this space.               */}
-      <span
-        aria-hidden
-        className={[
-          'absolute right-4 top-4',
-          'flex items-center justify-center rounded-full',
-          'border border-slate-700/50 bg-slate-800/50 p-[3px]',
-          trend === null ? 'opacity-20' : palette.delta,
-        ].join(' ')}
-      >
-        <TrendIcon size={10} strokeWidth={2.5} />
-      </span>
+      {/* ── Row 1 — Header ────────────────────────────────────────
+          label (dot + title) on the left.
+          Optional status badge on the right — still in the SAME
+          grid row, never bleeding into the value row below.     */}
+      <div className="flex min-w-0 items-center justify-between gap-2 overflow-hidden">
 
-      {/* ── Zone 1 — Label ────────────────────────────────────────
-          pr-8 (32 px) reserves clearance for the absolute badge
-          (badge pill: ~22 px wide + 4 px gap ≈ 26 px → pr-8 safe).
-          Optional text-badge lives here, not near the value.    */}
-      <div className="flex min-w-0 items-center gap-1.5 overflow-hidden pr-8">
-        <span
-          className={`h-1.5 w-1.5 shrink-0 rounded-full ${palette.dot}`}
-          aria-hidden
-        />
-        <span className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-          {title}
-        </span>
+        {/* Left: dot + title */}
+        <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+          <span
+            className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotColor}`}
+            aria-hidden
+          />
+          <span className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            {title}
+          </span>
+        </div>
+
+        {/* Right: status badge — only when operationally meaningful */}
         {badgeCls && (
           <span
             className={[
-              'ml-1 shrink-0 inline-flex items-center',
+              'shrink-0 inline-flex items-center',
               'rounded-full border px-2 py-0.5',
               'text-[10px] font-semibold leading-none',
               badgeCls,
@@ -127,14 +120,14 @@ export default function KPICard({
         )}
       </div>
 
-      {/* ── Zone 2 — Main value ───────────────────────────────────
-          Own block element — never on the same line as the badge.
-          w-full + max-w-full + truncate = hard containment at
-          card boundary.  title attr exposes full value on hover. */}
+      {/* ── Row 2 — Main value ────────────────────────────────────
+          Lives in its own grid row — cannot share space with Row 1.
+          Hard overflow clip + truncate prevents bleed at any width.
+          title attr provides full value on hover (accessibility).  */}
       <p
         className={[
           'mt-2.5',
-          'block w-full max-w-full min-w-0',
+          'w-full min-w-0 max-w-full',
           'overflow-hidden truncate',
           'font-mono text-[20px] font-semibold',
           'leading-none tabular-nums tracking-tight',
@@ -145,10 +138,13 @@ export default function KPICard({
         {formatted}
       </p>
 
-      {/* ── Zone 3 — Hint footer ──────────────────────────────────
-          mt-auto pins it to the card bottom so all cards in a row
-          share a consistent baseline regardless of content height. */}
-      <p className="mt-auto w-full truncate pt-2.5 text-[11px] leading-none text-slate-500">
+      {/* ── Row 3 — Hint footer ───────────────────────────────────
+          `align-self: end` pins it to the grid cell's bottom edge,
+          keeping all cards in a row aligned at the same baseline.  */}
+      <p
+        className="w-full truncate pt-2.5 text-[11px] leading-none text-slate-500"
+        style={{ alignSelf: 'end' }}
+      >
         {hint ?? <span className="opacity-0" aria-hidden>·</span>}
       </p>
 

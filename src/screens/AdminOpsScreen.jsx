@@ -63,22 +63,40 @@ function KpiCard({ label, value, sub, icon: Icon, tone = 'default', loading = fa
   const currentTone = tones[tone] || tones.default;
 
   return (
-    <article className={`relative overflow-hidden rounded-2xl border border-slate-700 ${currentTone.bg} p-5 shadow-soft`}>
+    /* 3-zone grid: icon-row / label+value / sub — no zone can overlap another */
+    <article
+      className={`relative overflow-hidden rounded-2xl border border-slate-700 ${currentTone.bg} p-5 shadow-soft`}
+      style={{ display: 'grid', gridTemplateRows: 'auto auto 1fr', minHeight: '110px' }}
+    >
+      {/* top accent bar — decorative only, 0.5 px, no height impact */}
       {currentTone.bar ? <div className={`absolute inset-x-0 top-0 h-0.5 ${currentTone.bar}`} /> : null}
+
+      {/* Row 1 — icon */}
       <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl ${currentTone.icon}`}>
         <Icon size={18} />
       </div>
+
+      {/* Row 2 — label + value, own block row */}
       {loading ? (
-        <>
+        <div>
           <div className="skeleton mb-2 h-3 w-20 rounded-full" />
-          <div className="skeleton h-8 w-24 rounded-full" />
-        </>
+          <div className="skeleton h-7 w-24 rounded-full" />
+        </div>
       ) : (
-        <>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-          <p className="mt-1.5 text-3xl font-bold text-slate-50">{value}</p>
-          {sub ? <p className="mt-1 text-xs text-slate-400">{sub}</p> : null}
-        </>
+        <div className="min-w-0">
+          <p className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
+          {/* text-2xl (24px) instead of text-3xl (30px) — prevents overflow at narrow grid cells */}
+          <p className="mt-1.5 w-full truncate font-mono text-2xl font-bold tabular-nums text-slate-50" title={String(value ?? '')}>
+            {value}
+          </p>
+        </div>
+      )}
+
+      {/* Row 3 — sub text, bottom-pinned */}
+      {sub ? (
+        <p className="truncate pt-1.5 text-xs text-slate-400" style={{ alignSelf: 'end' }}>{sub}</p>
+      ) : (
+        <span aria-hidden />
       )}
     </article>
   );
@@ -466,7 +484,7 @@ export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+      <section className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
         <KpiCard label="Envios totais" value={metrics?.whatsapp?.total ?? '—'} sub={`${period} dias`} icon={Send} tone="blue" loading={loadingMetrics} />
         <KpiCard label="Falhas" value={metrics?.whatsapp?.falha ?? '—'} sub={`${metrics?.whatsapp?.timeouts || 0} timeout(s)`} icon={XCircle} tone={metrics?.whatsapp?.falha > 0 ? 'red' : 'default'} loading={loadingMetrics} />
         <KpiCard label="Taxa de sucesso" value={metrics?.whatsapp ? `${metrics.whatsapp.taxaSucesso}%` : '—'} sub="real + mock" icon={CheckCircle2} tone={metrics?.whatsapp?.taxaSucesso >= 90 ? 'emerald' : metrics?.whatsapp?.taxaSucesso >= 70 ? 'amber' : 'red'} loading={loadingMetrics} />
