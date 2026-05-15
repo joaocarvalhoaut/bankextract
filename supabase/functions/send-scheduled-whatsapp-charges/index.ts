@@ -365,26 +365,28 @@ async function checkCircuitBreaker(
 ): Promise<{ open: boolean; reason: string }> {
   const { data, error } = await supabaseAdmin
     .from('zapi_circuit_state')
-    .select('circuit_open, circuit_opened_at, consecutive_failures')
+    .select('state, opened_at, failure_count')
     .eq('company_id', companyId)
+    .eq('provider', 'zapi')
     .maybeSingle();
 
   if (error || !data) return { open: false, reason: 'no_state' };
-  if (!data.circuit_open) return { open: false, reason: 'closed' };
+  if (data.state !== 'open') return { open: false, reason: 'closed' };
 
   // Auto-reset after 15 minutes
-  const openedAt = data.circuit_opened_at ? new Date(data.circuit_opened_at).getTime() : 0;
+  const openedAt = data.opened_at ? new Date(data.opened_at).getTime() : 0;
   if (Date.now() - openedAt > 15 * 60 * 1000) {
     await supabaseAdmin.from('zapi_circuit_state').upsert({
       company_id: companyId,
-      circuit_open: false,
-      consecutive_failures: 0,
+      provider: 'zapi',
+      state: 'closed',
+      failure_count: 0,
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'company_id' }).catch(() => {});
+    }, { onConflict: 'company_id,provider' }).catch(() => {});
     return { open: false, reason: 'auto_reset' };
   }
 
-  return { open: true, reason: `Circuit aberto após ${data.consecutive_failures} falhas consecutivas.` };
+  return { open: true, reason: `Circuit aberto após ${data.failure_count} falhas consecutivas.` };
 }
 
 async function recordCircuitSuccess(
@@ -393,11 +395,12 @@ async function recordCircuitSuccess(
 ) {
   await supabaseAdmin.from('zapi_circuit_state').upsert({
     company_id: companyId,
-    consecutive_failures: 0,
-    circuit_open: false,
+    provider: 'zapi',
+    state: 'closed',
+    failure_count: 0,
     last_success_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'company_id' }).catch(() => {});
+  }, { onConflict: 'company_id,provider' }).catch(() => {});
 }
 
 async function recordCircuitFailure(
@@ -406,22 +409,24 @@ async function recordCircuitFailure(
 ) {
   const { data } = await supabaseAdmin
     .from('zapi_circuit_state')
-    .select('consecutive_failures')
+    .select('failure_count')
     .eq('company_id', companyId)
+    .eq('provider', 'zapi')
     .maybeSingle();
 
-  const current = Number(data?.consecutive_failures ?? 0);
+  const current = Number(data?.failure_count ?? 0);
   const next = current + 1;
   const shouldOpen = next >= 3;
 
   await supabaseAdmin.from('zapi_circuit_state').upsert({
     company_id: companyId,
-    consecutive_failures: next,
-    circuit_open: shouldOpen,
-    circuit_opened_at: shouldOpen ? new Date().toISOString() : null,
+    provider: 'zapi',
+    failure_count: next,
+    state: shouldOpen ? 'open' : 'closed',
+    opened_at: shouldOpen ? new Date().toISOString() : null,
     last_failure_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'company_id' }).catch(() => {});
+  }, { onConflict: 'company_id,provider' }).catch(() => {});
 }
 
 // ── Forensic audit log ──────────────────────────────────────────────────────
@@ -429,24 +434,24 @@ async function appendAuditLog(
   supabaseAdmin: ReturnType<typeof createClient>,
   entry: {
     company_id: string;
+    module: string;
     action: string;
-    registro_id?: string | null;
-    telefone?: string | null;
-    zapi_status?: string | null;
-    provider_message_id?: string | null;
-    blocked_reason?: string | null;
-    duration_ms?: number | null;
+    status?: string;
+    entity?: string | null;
+    entity_id?: string | null;
+    message?: string | null;
+    metadata?: Record<string, unknown>;
   },
 ) {
   await supabaseAdmin.from('automation_audit_logs').insert({
     company_id: entry.company_id,
+    module: entry.module,
     action: entry.action,
-    registro_id: entry.registro_id ?? null,
-    telefone: entry.telefone ?? null,
-    zapi_status: entry.zapi_status ?? null,
-    provider_message_id: entry.provider_message_id ?? null,
-    blocked_reason: entry.blocked_reason ?? null,
-    duration_ms: entry.duration_ms ?? null,
+    status: entry.status ?? 'ok',
+    entity: entry.entity ?? null,
+    entity_id: entry.entity_id ?? null,
+    message: entry.message ?? null,
+    metadata: entry.metadata ?? {},
   }).catch(() => {});
 }
 
@@ -846,13 +851,18 @@ async function processCompany(
     // Forensic audit log
     await appendAuditLog(supabaseAdmin, {
       company_id: config.empresa_id,
+      module: 'whatsapp_scheduled',
       action: sendResult.ok ? 'whatsapp_scheduled_sent' : 'whatsapp_scheduled_error',
-      registro_id: registro.id,
-      telefone: phone,
-      zapi_status: sendResult.status,
-      provider_message_id: sendResult.zapiMessageId ?? null,
-      blocked_reason: sendResult.error ?? null,
-      duration_ms: sendDurationMs,
+      status: sendResult.ok ? 'ok' : 'error',
+      entity: 'cobrancas_whatsapp',
+      entity_id: registro.id,
+      message: sendResult.error ?? null,
+      metadata: {
+        telefone: phone,
+        zapi_status: sendResult.status,
+        provider_message_id: sendResult.zapiMessageId ?? null,
+        duration_ms: sendDurationMs,
+      },
     });
 
     const { error: trackingError } = await supabaseAdmin.from('cobrancas_whatsapp').insert({
