@@ -368,9 +368,9 @@ export default function DashboardScreen({
       <ConsoleStatusBar operational={operational} />
 
       {/* 2 ─ KPI strip */}
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {(metrics.kpis || []).slice(0, 5).map((item, idx) => (
-          <div key={item.title} className={`stagger-${Math.min(idx + 1, 6)}`}>
+          <div key={item.title} className={`min-w-0 stagger-${Math.min(idx + 1, 6)}`}>
             <KPICard title={item.title} value={item.value} hint={item.hint} tone={item.tone} />
           </div>
         ))}
