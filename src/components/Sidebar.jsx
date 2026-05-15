@@ -121,8 +121,10 @@ export default function Sidebar({
   });
 
   return (
-    <aside className="text-crisp w-full border-r border-slate-700 bg-slate-900/60 lg:min-h-screen lg:w-[286px] lg:px-3 lg:py-5">
-      <div className="space-y-4 lg:sticky lg:top-0 lg:max-h-screen lg:overflow-y-auto lg:pr-1">
+    <aside className="text-crisp w-full border-r border-slate-700 bg-slate-900/60 lg:w-[286px] lg:px-3 lg:py-5">
+      <div className="flex flex-col lg:sticky lg:top-0 lg:h-screen">
+        {/* ── Scrollable nav area ── */}
+        <div className="flex-1 space-y-4 overflow-y-auto lg:pr-1">
         {/* ── Brand header ── */}
         <div
           className="overflow-hidden rounded-[26px] shadow-lifted"
@@ -251,10 +253,10 @@ export default function Sidebar({
             </NavGroup>
           );
         })}
-      </div>
+        </div>{/* ── /Scrollable nav area ── */}
 
-        {/* ── Rodapé LGPD ─────────────────────────────────────── */}
-        <div className="mt-4 border-t border-slate-700/40 px-4 pb-4 pt-3">
+        {/* ── Rodapé LGPD — fixo no rodapé ── */}
+        <div className="shrink-0 border-t border-slate-700/40 px-1 pb-3 pt-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <button
               type="button"
@@ -263,7 +265,7 @@ export default function Sidebar({
             >
               Privacidade
             </button>
-            <span className="text-slate-700 text-[10px]">·</span>
+            <span className="text-[10px] text-slate-700">·</span>
             <button
               type="button"
               onClick={() => setActiveTab('terms')}
@@ -273,6 +275,7 @@ export default function Sidebar({
             </button>
           </div>
         </div>
+      </div>{/* ── /flex-col outer ── */}
     </aside>
   );
 }
