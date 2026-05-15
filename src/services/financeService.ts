@@ -48,7 +48,9 @@ const blockedMockNames = new Set([
 const normalizeImportRecord = (row = {}, index = 0, tipo = 'vencidos', companyId = '') => {
   const nome = row.nome || row.cliente || row.cliente_fornecedor || row.customer_name || row.pagador || row.sacado || '';
   const documento = row.documento || row.numero_documento || row.doc || row.titulo || '';
-  const numeroBoleto = row.numero_boleto || row.boleto_numero || row.nosso_numero || '';
+  const numeroBoleto =
+    row.numero_boleto || row.boleto_numero || row.nosso_numero ||
+    row.documento || row.numero_documento || '';
   const dueDate = row.data_vencimento || row.vencimento || row.due_date || '';
   const status = row.status || (tipo === 'liquidacao' ? 'liquidado' : 'pendente');
   const telefone = row.telefone || row.phone || row.celular || '';
@@ -58,8 +60,8 @@ const normalizeImportRecord = (row = {}, index = 0, tipo = 'vencidos', companyId
     ...row,
     id: row.id || `preview-${index + 1}-${makeUuid().slice(0, 8)}`,
     nome: String(nome || ''),
-    documento: String(documento || ''),
-    numero_boleto: String(numeroBoleto || ''),
+    documento: String(documento || '').trim(),
+    numero_boleto: String(numeroBoleto || '').trim(),
     data_vencimento: dueDate ? toIsoDate(dueDate) : '',
     valor: normalizeMoney(row.valor ?? row.amount ?? row.valor_original ?? row.valor_boleto ?? 0),
     status: String(status || 'pendente').toLowerCase(),
@@ -263,8 +265,8 @@ const toUiRecord = (row, companies = []) => {
     batchId,
     nome: row.nome || '',
     empresa_nome: row.empresa_nome || row.empresaNome || companyNames.get(companyId) || 'Empresa',
-    numero_boleto: row.numero_boleto ?? row.numeroBoleto ?? row.documento ?? '',
-    documento: row.documento ?? row.numero_boleto ?? row.numeroBoleto ?? '',
+    numero_boleto: (row.numero_boleto || row.numeroBoleto || row.documento || '').trim(),
+    documento: (row.documento || row.numero_boleto || row.numeroBoleto || '').trim(),
     data_vencimento: dueDate,
     valor: normalizeMoney(row.valor),
     representante_id: row.representante_id ?? row.representanteId ?? null,
@@ -287,7 +289,7 @@ const toLegacyRecord = (row, context) => ({
   user_id: context.userId || null,
   batchId: row.batch_id ?? row.batchId ?? null,
   nome: row.nome || '',
-  numeroBoleto: row.numero_boleto ?? row.documento ?? row.numeroBoleto ?? '',
+  numeroBoleto: (row.numero_boleto || row.documento || row.numeroBoleto || '').trim(),
   dataVencimento: row.data_vencimento ?? row.dataVencimento ?? '',
   valor: normalizeMoney(row.valor),
   representanteId: row.representante_id ?? row.representanteId ?? null,

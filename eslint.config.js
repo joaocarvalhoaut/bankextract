@@ -8,6 +8,10 @@ export default defineConfig([
     ignores: [".claude/**", "dist/**", "dist*/**", "node_modules/**", "cronJobs/**", "src/hooks/useFinance.js"],
   },
   {
+    files: ["src/tests/**/*.{js,mjs,cjs}"],
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
+  },
+  {
     files: ["**/*.{js,mjs,cjs,jsx}"],
     plugins: { js },
     extends: ["js/recommended"],

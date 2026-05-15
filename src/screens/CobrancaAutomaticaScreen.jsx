@@ -43,11 +43,11 @@ import { getCollectionToneMeta } from '../services/collectionMessageService';
 import { incrementUsage } from '../services/usageService';
 
 const statusTone = {
-  sucesso: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  sucesso_simulado: 'bg-blue-900/20 text-blue-700 ring-blue-200',
-  simulado: 'bg-blue-900/20 text-blue-700 ring-blue-200',
-  erro: 'bg-red-50 text-red-700 ring-red-200',
-  ignorado: 'bg-amber-50 text-amber-700 ring-amber-200',
+  sucesso: 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/25',
+  sucesso_simulado: 'bg-blue-500/10 text-blue-300 ring-blue-500/25',
+  simulado: 'bg-blue-500/10 text-blue-300 ring-blue-500/25',
+  erro: 'bg-red-500/10 text-red-300 ring-red-500/25',
+  ignorado: 'bg-amber-500/10 text-amber-300 ring-amber-500/25',
 };
 
 const tabItems = [
@@ -86,14 +86,14 @@ const delaySteps = [1, 3, 5, 10, 15, 30];
 function StatCard({ label, value, helper, tone = 'slate' }) {
   const palette = {
     slate: 'from-slate-400 to-slate-500 text-slate-50',
-    emerald: 'from-emerald-400 to-emerald-600 text-emerald-700',
-    blue: 'from-blue-400 to-blue-600 text-blue-700',
-    red: 'from-red-400 to-red-600 text-red-700',
-    amber: 'from-amber-400 to-orange-400 text-amber-700',
+    emerald: 'from-emerald-400 to-emerald-600 text-emerald-300',
+    blue: 'from-blue-400 to-blue-600 text-blue-300',
+    red: 'from-red-400 to-red-600 text-red-300',
+    amber: 'from-amber-400 to-orange-400 text-amber-300',
   };
 
   return (
-    <article className="relative overflow-hidden rounded-[24px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
+    <article className="relative overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
       <div
         className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${
           palette[tone]?.split(' text-')[0] || 'from-slate-400 to-slate-500'
@@ -123,7 +123,7 @@ function TabButton({ active, icon: Icon, label, onClick }) {
       onClick={onClick}
       className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
         active
-          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 shadow-soft'
+          ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300 shadow-soft'
           : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/40 hover:text-slate-50'
       }`}
     >
@@ -135,7 +135,7 @@ function TabButton({ active, icon: Icon, label, onClick }) {
 
 function SectionCard({ title, description, children, aside = null }) {
   return (
-    <section className="rounded-[24px] border border-slate-700 bg-slate-800/40/80 p-5 shadow-soft">
+    <section className="rounded-2xl border border-slate-700 bg-slate-800/40/80 p-5 shadow-soft">
       <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-sm font-semibold text-slate-50">{title}</p>
@@ -532,7 +532,7 @@ export default function CobrancaAutomaticaScreen({
                       ? 'Esta linha nao possui um titulo financeiro associado.'
                       : ''
               }
-              className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/15 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {sending ? <Loader2 size={14} className="animate-spin" /> : <MessageSquareText size={14} />}
               Enviar
@@ -559,11 +559,11 @@ export default function CobrancaAutomaticaScreen({
         render: (row) => (
           <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
             row.status === 'encontrado'
-              ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+              ? 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/25'
               : row.status === 'baixa_confianca'
-                ? 'bg-amber-50 text-amber-700 ring-amber-200'
+                ? 'bg-amber-500/10 text-amber-300 ring-amber-500/25'
                 : row.status === 'conflito' || row.status === 'erro'
-                  ? 'bg-red-50 text-red-700 ring-red-200'
+                  ? 'bg-red-500/10 text-red-300 ring-red-500/25'
                   : 'bg-slate-800/60 text-slate-200 ring-slate-700'
           }`}>
             {row.status || '-'}
@@ -859,12 +859,12 @@ export default function CobrancaAutomaticaScreen({
 
   if (globalMode || !resolvedCompanyId) {
     return (
-      <section className="rounded-[28px] border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800 shadow-soft">
+      <section className="rounded-2xl border border-amber-500/25 bg-amber-500/10 p-6 text-sm text-amber-200 shadow-soft">
         <div className="flex items-start gap-3">
           <AlertCircle className="mt-0.5" size={18} />
           <div>
             <p className="font-semibold">Selecione uma empresa especifica</p>
-            <p className="mt-1 text-xs text-amber-700">
+            <p className="mt-1 text-xs text-amber-300">
               A cobranca automatica financeira opera por empresa para evitar qualquer vazamento entre carteiras.
             </p>
           </div>
@@ -874,10 +874,10 @@ export default function CobrancaAutomaticaScreen({
   }
 
   return (
-    <section className="space-y-6 rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+    <section className="space-y-6 rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
             <CheckCircle2 size={13} />
             Cobranca automatica
           </div>
@@ -900,7 +900,7 @@ export default function CobrancaAutomaticaScreen({
                 onClick={() => onBillingExecutionModeChange?.('simulate')}
                 className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
                   simulationMode
-                    ? 'bg-amber-500 text-white shadow-soft'
+                    ? 'bg-amber-500/100 text-white shadow-soft'
                     : 'border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/40'
                 }`}
               >
@@ -921,11 +921,11 @@ export default function CobrancaAutomaticaScreen({
           </div>
 
           {simulationMode ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
               Simulacao ativa — nenhuma mensagem real sera enviada.
             </div>
           ) : (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
               Envio real ativo — a execucao chamara a Edge Function com simulate: false.
             </div>
           )}
@@ -943,7 +943,7 @@ export default function CobrancaAutomaticaScreen({
             disabled={Boolean(executingAction)}
             className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold shadow-soft transition disabled:opacity-50 ${
               simulationMode
-                ? 'bg-amber-500 text-white hover:bg-amber-600'
+                ? 'bg-amber-500/100 text-white hover:bg-amber-600'
                 : 'bg-emerald-600 text-white hover:bg-emerald-700'
             }`}
           >
@@ -1007,7 +1007,7 @@ export default function CobrancaAutomaticaScreen({
               <button
                 type="button"
                 onClick={() => setUpgradeModalOpen(true)}
-                className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                className="inline-flex items-center gap-2 rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/15"
               >
                 Ver planos
                 <span aria-hidden="true">→</span>
@@ -1107,7 +1107,7 @@ export default function CobrancaAutomaticaScreen({
                     onClick={() => toggleDelayRule(day)}
                     className={`relative rounded-[22px] border p-4 text-left transition ${
                       active
-                        ? 'border-emerald-200 bg-emerald-50 shadow-soft'
+                        ? 'border-emerald-500/25 bg-emerald-500/10 shadow-soft'
                         : 'border-slate-700 bg-slate-900/60 hover:bg-slate-800/40'
                     }`}
                   >
@@ -1115,9 +1115,9 @@ export default function CobrancaAutomaticaScreen({
                       <span className="pointer-events-none absolute left-[calc(100%-8px)] top-1/2 hidden h-px w-4 -translate-y-1/2 bg-slate-200 xl:block" />
                     ) : null}
                     <div className="flex items-center justify-between gap-3">
-                      <span className={`text-lg font-semibold ${active ? 'text-emerald-700' : 'text-slate-50'}`}>D+{day}</span>
+                      <span className={`text-lg font-semibold ${active ? 'text-emerald-300' : 'text-slate-50'}`}>D+{day}</span>
                       <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
-                        active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-800/60 text-slate-500'
+                        active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800/60 text-slate-500'
                       }`}>
                         {active ? 'Ativo' : 'Inativo'}
                       </span>
@@ -1153,7 +1153,7 @@ export default function CobrancaAutomaticaScreen({
                 onClick={() => setActiveTemplateTab(tab.id)}
                 className={`rounded-2xl border px-4 py-2.5 text-sm font-semibold transition ${
                   activeTemplateTab === tab.id
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 shadow-soft'
+                    ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300 shadow-soft'
                     : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800/40'
                 }`}
               >
@@ -1262,9 +1262,9 @@ export default function CobrancaAutomaticaScreen({
               <div
                 className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
                   driveConfig.status === 'sucesso'
-                    ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                    ? 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/25'
                     : driveConfig.status === 'erro'
-                      ? 'bg-red-50 text-red-700 ring-red-200'
+                      ? 'bg-red-500/10 text-red-300 ring-red-500/25'
                       : 'bg-slate-800/60 text-slate-300 ring-slate-700'
                 }`}
               >
@@ -1273,15 +1273,15 @@ export default function CobrancaAutomaticaScreen({
             }
           >
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-sm">
+              <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10/70 p-4 shadow-sm">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900/60 text-emerald-700 shadow-soft">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900/60 text-emerald-300 shadow-soft">
                     <ShieldCheck size={18} />
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">Credencial Google Drive</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-300">Credencial Google Drive</p>
                     <p className="mt-1 text-sm font-semibold text-slate-50">Configurada com seguranca</p>
-                    <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-slate-900/60 px-3 py-1 text-xs font-semibold text-emerald-700">
+                    <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-slate-900/60 px-3 py-1 text-xs font-semibold text-emerald-300">
                       <CheckCircle2 size={13} />
                       Conectada
                     </div>
@@ -1352,9 +1352,9 @@ export default function CobrancaAutomaticaScreen({
             aside={
               <div className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
                 driveConfig.last_source_sync_status === 'success'
-                  ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                  ? 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/25'
                   : driveConfig.last_source_sync_status === 'error'
-                    ? 'bg-red-50 text-red-700 ring-red-200'
+                    ? 'bg-red-500/10 text-red-300 ring-red-500/25'
                     : 'bg-slate-800/60 text-slate-300 ring-slate-700'
               }`}>
                 {driveConfig.last_source_sync_status === 'success'
@@ -1463,7 +1463,7 @@ export default function CobrancaAutomaticaScreen({
             title="Z-API"
             description="Envio real via WhatsApp ainda esta bloqueado. Configure e valide a Z-API apenas quando o produto estiver pronto para envio real."
             aside={
-              <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+              <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/25 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300">
                 <ShieldAlert size={13} />
                 Pendente / bloqueado
               </div>
@@ -1490,7 +1490,7 @@ export default function CobrancaAutomaticaScreen({
           {loading ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, index) => (
-                <div key={index} className="skeleton h-28 rounded-[24px]" />
+                <div key={index} className="skeleton h-28 rounded-2xl" />
               ))}
             </div>
           ) : (

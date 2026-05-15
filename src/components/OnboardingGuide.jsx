@@ -28,7 +28,7 @@ export default function OnboardingGuide({
   const canMark = Boolean(companyId);
 
   return (
-    <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+    <section className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
       <div className="mb-5 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-50">Primeiros passos guiados</h2>
@@ -49,7 +49,7 @@ export default function OnboardingGuide({
           const article = HELP_ARTICLE_MAP[step.helpArticleId || STEP_ARTICLE_MAP[step.id]];
 
           return (
-            <article key={step.id} className={`rounded-[24px] border p-4 shadow-soft transition ${statusTone(done, skipped)}`}>
+            <article key={step.id} className={`rounded-2xl border p-4 shadow-soft transition ${statusTone(done, skipped)}`}>
               <div className="flex items-start gap-4">
                 <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl ${done ? 'bg-gradient-to-r from-blue-500 to-cyan-400 text-white' : skipped ? 'bg-amber-500 text-white' : 'bg-slate-800/60 text-slate-500'}`}>
                   {done ? <CheckCircle2 size={18} /> : <CircleDashed size={18} />}

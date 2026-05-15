@@ -1,93 +1,106 @@
 /**
  * NC Finance - WhatsApp Service (Frontend)
  *
- * Mantem compatibilidade com o modal legado, mas roteia o envio
- * para o pipeline principal de cobranca via billing-automation.
+ * Pipeline oficial: billing-automation (action: send_real / send_single_charge)
+ * A edge function send-whatsapp-charge está DEPRECIADA e não deve ser invocada
+ * diretamente pelo frontend. Toda chamada de envio passa por billing-automation.
+ *
+ * Tokens da Z-API continuam exclusivamente no backend.
+ * O frontend apenas invoca a Edge Function e registra observabilidade local.
  */
 
-import { sendRealCharge } from './billingAutomationService';
+import { supabase } from './supabaseClient';
 import { createScopedLogger } from './loggerService';
 
-const logger = createScopedLogger('send-whatsapp-charge');
+const logger = createScopedLogger('billing-automation.send');
 
 const buildError = (err, fallback) => {
   if (err instanceof Error) return err;
   return new Error(err?.message || err?.error || fallback);
 };
 
-const normalizeBatchResponse = (data = {}) => {
-  const sent = Array.isArray(data?.sent) ? data.sent : [];
-  const failed = Array.isArray(data?.failed) ? data.failed : [];
-  const results = [
-    ...sent.map((item) => ({
-      registro_id: item?.registro_id || item?.id || '',
-      ok: true,
-      error: '',
-      mocked: false,
-      duplicate: false,
-      provider_message_id: item?.provider_message_id || null,
-      status: item?.status || 'sent',
-    })),
-    ...failed.map((item) => ({
-      registro_id: item?.registro_id || item?.id || '',
-      ok: false,
-      error: item?.error || 'Falha ao enviar cobranca por WhatsApp.',
-      mocked: false,
-      duplicate: item?.duplicate === true,
-      provider_message_id: null,
-      status: item?.status || 'failed',
-    })),
-  ];
+export async function getWhatsAppConfig(empresaId) {
+  if (!empresaId || !supabase) return null;
 
-  return {
-    ok: true,
-    mocked: false,
-    sent,
-    failed,
-    results,
-    summary: {
-      sent: sent.length,
-      failed: failed.length,
-      total: sent.length + failed.length,
-    },
-  };
-};
+  const { data, error } = await supabase
+    .from('whatsapp_config')
+    .select('id, empresa_id, ativo, sender_name, mensagem_template, updated_at')
+    .eq('empresa_id', empresaId)
+    .maybeSingle();
 
-export async function getWhatsAppConfig() {
-  return null;
+  if (error) throw buildError(error, 'Falha ao buscar configuracao WhatsApp.');
+  return data || null;
 }
 
-export async function saveWhatsAppConfig() {
-  throw new Error('A configuracao legado do WhatsApp nao esta mais disponivel nesta interface.');
+export async function saveWhatsAppConfig(empresaId, config) {
+  if (!supabase) throw new Error('Supabase nao configurado.');
+  if (!empresaId) throw new Error('Nenhuma empresa ativa selecionada.');
+
+  const { data, error } = await supabase
+    .from('whatsapp_config')
+    .upsert(
+      { empresa_id: empresaId, ...config },
+      { onConflict: 'empresa_id' },
+    )
+    .select()
+    .single();
+
+  if (error) throw buildError(error, 'Falha ao salvar configuracao WhatsApp.');
+  return data;
 }
 
 export async function sendWhatsAppCharges(empresaId, charges) {
+  if (!supabase) throw new Error('Supabase nao configurado.');
   if (!empresaId) throw new Error('Nenhuma empresa ativa selecionada.');
   if (!charges?.length) throw new Error('Nenhuma cobranca informada.');
 
   logger.info('batch_send_requested', {
     company_id: empresaId,
     charges_count: charges.length,
-    registro_ids: charges.map((item) => item?.registro_id || item?.id).filter(Boolean),
+    registro_ids: charges.map((item) => item?.registro_id).filter(Boolean),
   });
 
-  try {
-    const data = await sendRealCharge(empresaId, charges);
-    const normalized = normalizeBatchResponse(data);
-
-    logger.info('batch_send_response', {
+  const { data, error } = await supabase.functions.invoke('billing-automation', {
+    body: {
+      action: 'send_real',
       company_id: empresaId,
-      sent: normalized.summary.sent,
-      failed: normalized.summary.failed,
-      total: normalized.summary.total,
-    });
+      items: charges,
+    },
+  });
 
-    return normalized;
-  } catch (error) {
-    logger.error('batch_send_failed', error, {
+  // billing-automation.send_real retorna { ok, sent, failed }
+  // Normaliza para o shape esperado pelo caller: { ok, mocked, summary, results }
+  const sentCount = Number(data?.sent ?? data?.summary?.sent ?? 0);
+  const failedCount = Number(data?.failed ?? data?.summary?.failed ?? 0);
+
+  logger.info('batch_send_response', {
+    company_id: empresaId,
+    mocked: data?.mocked === true,
+    sent: sentCount,
+    failed: failedCount,
+    total: sentCount + failedCount,
+  });
+
+  if (error) {
+    logger.error('batch_send_transport_failed', error, {
       company_id: empresaId,
       charges_count: charges.length,
     });
-    throw buildError(error, 'Falha ao enviar cobrancas por WhatsApp.');
+    throw buildError(error, 'Falha ao chamar Edge Function de WhatsApp.');
   }
+
+  if (!data?.ok) {
+    const responseError = new Error(data?.error || 'Resposta inesperada da Edge Function.');
+    logger.error('batch_send_failed', responseError, { company_id: empresaId });
+    throw responseError;
+  }
+
+  return {
+    ok: data.ok,
+    mocked: data?.mocked || false,
+    request_id: data?.request_id || '',
+    results: data?.results || [],
+    summary: { sent: sentCount, failed: failedCount, total: sentCount + failedCount },
+  };
 }
+

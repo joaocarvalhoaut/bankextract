@@ -2,7 +2,7 @@ import { Building2, KeyRound, Shield, Users2 } from 'lucide-react';
 
 function InfoCard({ icon: Icon, title, children, badge = null }) {
   return (
-    <article className="accent-bar rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+    <article className="accent-bar rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-slate-800/40 text-slate-200">
@@ -30,7 +30,7 @@ export default function ConfiguracoesScreen({
 }) {
   return (
     <div className="space-y-6">
-      <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-700 bg-slate-900/60 p-6 shadow-lifted lg:p-8">
+      <section className="hero-mesh overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-lifted lg:p-8">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-200">

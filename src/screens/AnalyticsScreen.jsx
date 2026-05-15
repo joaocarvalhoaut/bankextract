@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, BarChart3 } from 'lucide-react';
+import { Activity, BarChart3, Brain, GitBranch, LayoutDashboard, Lock, Radio, Rocket, Users } from 'lucide-react';
 import PlanLimitNotice from '../components/PlanLimitNotice';
 import AnalyticsFiltersBar from '../components/analytics/AnalyticsFiltersBar';
 import AnalyticsMetricGrid from '../components/analytics/AnalyticsMetricGrid';
 import AnalyticsTimelineChart from '../components/analytics/AnalyticsTimelineChart';
 import OperationalAiPanel from '../components/analytics/OperationalAiPanel';
+import ExecutiveDashboard from '../components/analytics/ExecutiveDashboard';
+import RealtimeMonitorPanel from '../components/analytics/RealtimeMonitorPanel';
+import EventTimelinePanel from '../components/analytics/EventTimelinePanel';
+import CollectionIntelligencePanel from '../components/analytics/CollectionIntelligencePanel';
+import CustomerProfileCard from '../components/analytics/CustomerProfileCard';
+import EnterpriseAuditPanel from '../components/analytics/EnterpriseAuditPanel';
+import GoLiveDiagnosticPanel from '../components/analytics/GoLiveDiagnosticPanel';
 import { checkFeatureAccess } from '../services/subscriptionService';
 import { getCompanyAnalytics, getOperationalAnalytics } from '../services/analyticsService';
 import { getUsageSummary } from '../services/usageService';
@@ -20,7 +27,19 @@ function SummaryPill({ label, value }) {
   );
 }
 
+const TABS = [
+  { id: 'executive',    label: 'Dashboard',       icon: LayoutDashboard },
+  { id: 'realtime',     label: 'Monitor Live',     icon: Radio },
+  { id: 'events',       label: 'Event Bus',        icon: GitBranch },
+  { id: 'collection',   label: 'Cobrança IA',      icon: Brain },
+  { id: 'customers',    label: 'Clientes',         icon: Users },
+  { id: 'audit',        label: 'Auditoria',        icon: Lock },
+  { id: 'golive',       label: 'Go-Live',          icon: Rocket },
+  { id: 'operational',  label: 'Analytics',        icon: BarChart3 },
+];
+
 export default function AnalyticsScreen({ companyId, companyName, onToast }) {
+  const [activeTab, setActiveTab] = useState('executive');
   const [loading, setLoading] = useState(false);
   const [analytics, setAnalytics] = useState(null);
   const [operational, setOperational] = useState(null);
@@ -119,7 +138,7 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
 
   if (!companyId) {
     return (
-      <div className="rounded-[32px] border border-dashed border-slate-700 bg-slate-900/60 p-12 text-center shadow-soft">
+      <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-12 text-center shadow-soft">
         <BarChart3 className="mx-auto mb-4 text-slate-300" size={30} />
         <h2 className="text-xl font-semibold text-slate-50">Selecione uma empresa para abrir o analytics</h2>
         <p className="mt-2 text-sm text-slate-500">As leituras operacionais e comerciais sao calculadas por company_id.</p>
@@ -145,7 +164,7 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
         />
       ) : null}
 
-      <section className="surface-card rounded-[30px] p-7 shadow-soft">
+      <section className="surface-card rounded-2xl p-7 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Analytics operacional e comercial</p>
@@ -161,12 +180,48 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
         </div>
       </section>
 
+      {/* Tab navigation — scrollável no mobile */}
+      <div className="overflow-x-auto -mx-1 px-1 pb-0.5">
+        <div className="flex gap-1 rounded-2xl border border-slate-800 bg-slate-900/60 p-1 w-max min-w-full sm:w-fit sm:min-w-0">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
+                activeTab === id
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              <Icon size={13} />
+              <span className="hidden sm:inline">{label}</span>
+              <span className="sm:hidden">{label.split(' ')[0]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {activeTab === 'executive' && <ExecutiveDashboard companyId={companyId} />}
+
+      {activeTab === 'realtime' && <RealtimeMonitorPanel companyId={companyId} />}
+
+      {activeTab === 'events' && <EventTimelinePanel companyId={companyId} />}
+
+      {activeTab === 'collection' && <CollectionIntelligencePanel companyId={companyId} />}
+
+      {activeTab === 'customers' && <CustomerProfileCard companyId={companyId} />}
+
+      {activeTab === 'audit' && <EnterpriseAuditPanel companyId={companyId} />}
+
+      {activeTab === 'golive' && <GoLiveDiagnosticPanel companyId={companyId} />}
+
+      {activeTab === 'operational' && <>
       <AnalyticsFiltersBar filters={filters} onChange={setFilters} onRefresh={load} loading={loading} />
 
       <AnalyticsMetricGrid cards={operational?.cards || []} />
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-        <article className="surface-card rounded-[28px] p-6 shadow-soft">
+        <article className="surface-card rounded-2xl p-6 shadow-soft">
           <div className="mb-5">
             <h3 className="text-lg font-semibold text-slate-50">Evolucao mensal</h3>
             <p className="text-sm text-slate-400">Linha do tempo de importacoes, envios e atividade financeira da empresa.</p>
@@ -174,7 +229,7 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
           <AnalyticsTimelineChart items={operational?.timeline || []} />
         </article>
 
-        <article className="surface-card rounded-[28px] p-6 shadow-soft">
+        <article className="surface-card rounded-2xl p-6 shadow-soft">
           <div className="mb-5">
             <h3 className="text-lg font-semibold text-slate-50">Saude operacional</h3>
             <p className="text-sm text-slate-400">KPIs rapidos para acompanhar execucao real, leitura e risco operacional.</p>
@@ -188,7 +243,7 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
         </article>
       </section>
 
-      <section className="surface-card rounded-[28px] p-6 shadow-soft">
+      <section className="surface-card rounded-2xl p-6 shadow-soft">
         <div className="mb-5">
           <h3 className="text-lg font-semibold text-slate-50">Uso do plano no ciclo atual</h3>
           <p className="text-sm text-slate-400">Medição multi-tenant por empresa para importações, cobranças, automações, usuários e integrações.</p>
@@ -233,7 +288,7 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
       />
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <article className="surface-card rounded-[28px] p-6 shadow-soft">
+        <article className="surface-card rounded-2xl p-6 shadow-soft">
           <div className="mb-5">
             <h3 className="text-lg font-semibold text-slate-50">Resumo financeiro consolidado</h3>
             <p className="text-sm text-slate-400">Leitura executiva da carteira e da recuperação no período.</p>
@@ -246,7 +301,7 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
           </div>
         </article>
 
-        <article className="surface-card rounded-[28px] p-6 shadow-soft">
+        <article className="surface-card rounded-2xl p-6 shadow-soft">
           <div className="mb-5">
             <h3 className="text-lg font-semibold text-slate-50">Base operacional</h3>
             <p className="text-sm text-slate-400">Volume ativo de empresas, usuários e envios com leitura comercial.</p>
@@ -259,6 +314,7 @@ export default function AnalyticsScreen({ companyId, companyName, onToast }) {
           </div>
         </article>
       </section>
+      </>}
     </div>
   );
 }

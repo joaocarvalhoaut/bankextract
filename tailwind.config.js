@@ -8,23 +8,23 @@ export default {
     extend: {
       colors: {
         brand: {
-          50:  '#edfdf6',
-          100: '#d3f9e8',
-          200: '#aaf1d3',
-          300: '#72e4b6',
-          400: '#38cd93',
-          500: '#10b174',
-          600: '#0E9F6E',
-          700: '#0c7a54',
-          800: '#0d6145',
-          900: '#0c503b',
+          50:  '#eef4ff',
+          100: '#e0ecff',
+          200: '#c7dbfe',
+          300: '#a5c2fd',
+          400: '#6b9dfb',
+          500: '#005dff',
+          600: '#0051e0',
+          700: '#0043c0',
+          800: '#0037a0',
+          900: '#002d80',
         },
       },
       boxShadow: {
         soft:   '0 1px 4px 0 rgba(15,23,42,0.06), 0 1px 2px -1px rgba(15,23,42,0.04)',
         card:   '0 4px 24px -4px rgba(15,23,42,0.10), 0 1px 4px -2px rgba(15,23,42,0.06)',
         lifted: '0 12px 40px -8px rgba(15,23,42,0.16), 0 4px 16px -4px rgba(15,23,42,0.08)',
-        glow:   '0 0 0 3px rgba(14,159,110,0.18)',
+        glow:   '0 0 0 3px rgba(0,93,255,0.22)',
         inner:  'inset 0 1px 2px rgba(15,23,42,0.08)',
       },
       borderRadius: {
@@ -63,7 +63,7 @@ export default {
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'mesh-dark': 'radial-gradient(at 20% 20%, rgba(14,159,110,0.15) 0, transparent 50%), radial-gradient(at 80% 80%, rgba(30,58,138,0.2) 0, transparent 50%), radial-gradient(at 50% 50%, rgba(15,23,42,0.6) 0, transparent 60%)',
+        'mesh-dark': 'radial-gradient(at 20% 20%, rgba(0,93,255,0.12) 0, transparent 50%), radial-gradient(at 80% 80%, rgba(20,216,255,0.08) 0, transparent 50%), radial-gradient(at 50% 50%, rgba(7,17,32,0.6) 0, transparent 60%)',
       },
       transitionTimingFunction: {
         spring: 'cubic-bezier(0.34,1.56,0.64,1)',

@@ -1,3 +1,25 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// DEPRECIADA — NÃO USAR PARA NOVOS DESENVOLVIMENTOS
+//
+// Pipeline oficial de envio: billing-automation (action: send_real)
+// Esta edge function está mantida apenas para:
+//   • compatibilidade com integrações externas legadas (webhooks, cron externos)
+//   • rollback de emergência
+//
+// O frontend não deve invocar esta função diretamente.
+// Remover após confirmação de 30 dias sem tráfego nos logs do Supabase.
+//
+// Idempotência e concorrência:
+//   • automation_dispatches: registra uma única operação efetiva por chave
+//     (company_id + customer_id + due_date + template). Envios duplicados
+//     dentro da janela de idempotência são rejeitados e não geram cobrança.
+//   • logs_cobranca: o registro duplicado é inserido com status "ignorado"
+//     para auditoria, permitindo rastrear tentativas sem afetar o contador
+//     de cobranças enviadas.
+//   • Dois usuários da mesma empresa que dispararem o envio simultaneamente
+//     para o mesmo título receberão resultado divergente: o primeiro sucede,
+//     o segundo retorna ok=false com duplicate=true.
+// ─────────────────────────────────────────────────────────────────────────────
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
   corsHeaders,

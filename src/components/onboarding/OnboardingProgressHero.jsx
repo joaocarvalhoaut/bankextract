@@ -38,7 +38,7 @@ export default function OnboardingProgressHero({
   onOpenStep,
 }) {
   return (
-    <section className="surface-card overflow-hidden rounded-[28px] p-6 shadow-soft">
+    <section className="surface-card overflow-hidden rounded-2xl p-6 shadow-soft">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-5">
           <div className="relative flex-shrink-0">

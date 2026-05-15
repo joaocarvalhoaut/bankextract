@@ -2,7 +2,7 @@ import { CalendarRange, RefreshCcw } from 'lucide-react';
 
 export default function AnalyticsFiltersBar({ filters, onChange, onRefresh, loading = false }) {
   return (
-    <section className="surface-card rounded-[28px] p-5 shadow-soft">
+    <section className="surface-card rounded-2xl p-5 shadow-soft">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-2 text-sm text-slate-300">

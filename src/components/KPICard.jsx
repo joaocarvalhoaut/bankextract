@@ -1,87 +1,153 @@
-import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import { formatCurrencyBRL } from '../utils/format';
 
+/* ─────────────────────────────────────────────────────────────
+   Tone palette
+   dot accent colour only — background comes from .surface-card
+───────────────────────────────────────────────────────────── */
 const toneMap = {
-  green: {
-    accent:   'text-cyan-300',
-    bar:      'from-blue-500 to-cyan-400',
-    surface:  'bg-blue-900/200/10',
-    badge:    'border-blue-500/20 bg-blue-900/200/10 text-cyan-200',
-    dot:      'bg-cyan-400',
-  },
-  red: {
-    accent:   'text-red-300',
-    bar:      'from-red-500 to-red-400',
-    surface:  'bg-red-500/10',
-    badge:    'border-red-500/20 bg-red-500/10 text-red-200',
-    dot:      'bg-red-500',
-  },
-  blue: {
-    accent:   'text-cyan-300',
-    bar:      'from-blue-500 to-cyan-400',
-    surface:  'bg-blue-900/200/10',
-    badge:    'border-blue-500/20 bg-blue-900/200/10 text-blue-100',
-    dot:      'bg-blue-600',
-  },
-  gold: {
-    accent:   'text-amber-300',
-    bar:      'from-amber-500 to-amber-400',
-    surface:  'bg-amber-500/10',
-    badge:    'border-amber-500/20 bg-amber-500/10 text-amber-200',
-    dot:      'bg-amber-500',
-  },
-  amber: {
-    accent:   'text-yellow-300',
-    bar:      'from-yellow-500 to-yellow-400',
-    surface:  'bg-yellow-500/10',
-    badge:    'border-yellow-500/20 bg-yellow-500/10 text-yellow-200',
-    dot:      'bg-yellow-500',
-  },
-  slate: {
-    accent:   'text-slate-50',
-    bar:      'from-slate-500 to-slate-300',
-    surface:  'bg-slate-800',
-    badge:    'border-slate-700 bg-slate-800 text-slate-300',
-    dot:      'bg-slate-400',
-  },
+  green:   'bg-cyan-400',
+  red:     'bg-red-500',
+  blue:    'bg-blue-500',
+  gold:    'bg-amber-500',
+  amber:   'bg-yellow-500',
+  slate:   'bg-slate-400',
+  emerald: 'bg-emerald-400',
 };
 
+/* ─────────────────────────────────────────────────────────────
+   Status-badge colour map
+   Only meaningful operational states render a badge.
+   badge prop must be one of: "OK" | "Atenção" | "Atraso" | "Crítico"
+   Any other value (including null / undefined / "Info") = no badge.
+───────────────────────────────────────────────────────────── */
+const STATUS_BADGE = {
+  ok:      'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  atenção: 'border-amber-500/30  bg-amber-500/10   text-amber-300',
+  atencao: 'border-amber-500/30  bg-amber-500/10   text-amber-300',
+  atraso:  'border-amber-500/30  bg-amber-500/10   text-amber-300',
+  crítico: 'border-red-500/30    bg-red-500/10     text-red-300',
+  critico: 'border-red-500/30    bg-red-500/10     text-red-300',
+};
+
+/* ─────────────────────────────────────────────────────────────
+   Value formatter
+   Numbers > 999 → BRL currency
+   Other numbers  → pt-BR formatted
+   Strings        → passthrough
+───────────────────────────────────────────────────────────── */
 const formatValue = (value) => {
   if (typeof value === 'number' && Math.abs(value) > 999) return formatCurrencyBRL(value);
   if (typeof value === 'number') return new Intl.NumberFormat('pt-BR').format(value);
-  return value;
+  return String(value ?? '—');
 };
 
-export default function KPICard({ title, value, hint, trend = null, tone = 'slate' }) {
-  const palette = toneMap[tone] || toneMap.slate;
+/* ─────────────────────────────────────────────────────────────
+   KPICard — CSS-grid 3-zone layout
+   ─────────────────────────────────────────────────────────────
+
+   Layout uses named grid areas:
+     ┌──────────────────┐
+     │   header (row 1) │  ← label + optional status badge
+     ├──────────────────┤
+     │   value  (row 2) │  ← financial value, full width
+     ├──────────────────┤
+     │   hint   (row 3) │  ← description / footer
+     └──────────────────┘
+
+   Each zone is in its own dedicated grid row.
+   It is PHYSICALLY IMPOSSIBLE for any element in row 2
+   to share horizontal space with anything in row 1.
+
+   The trend-icon pill has been REMOVED:
+   · It was never connected to real trend data
+   · It was the element users saw as a phantom "Info badge"
+   · Status is shown only through the optional `badge` prop
+     with meaningful labels: "OK" | "Atenção" | "Atraso" | "Crítico"
+───────────────────────────────────────────────────────────── */
+export default function KPICard({
+  title,
+  value,
+  hint,
+  tone  = 'slate',
+  badge = null,         /* "OK" | "Atenção" | "Atraso" | "Crítico" — any other value is ignored */
+}) {
+  const dotColor  = toneMap[tone] || toneMap.slate;
+  const formatted = formatValue(value);
+
+  /* Only render a badge when it maps to a known operational state */
+  const badgeKey  = typeof badge === 'string' ? badge.toLowerCase() : null;
+  const badgeCls  = badgeKey ? STATUS_BADGE[badgeKey] : null;
 
   return (
-    <article className="card-hover surface-card group relative overflow-hidden rounded-[24px] p-5">
-      <div className={`absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r ${palette.bar}`} />
+    <article
+      className="surface-card overflow-hidden rounded-2xl px-5 pb-4 pt-4"
+      style={{
+        display: 'grid',
+        gridTemplateRows: 'auto auto 1fr',
+        minHeight: '96px',
+      }}
+    >
 
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="flex items-start gap-2.5 pt-0.5">
-          <div className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${palette.dot}`} />
-          <p className="text-sm font-semibold leading-snug text-slate-200">{title}</p>
+      {/* ── Row 1 — Header ────────────────────────────────────────
+          label (dot + title) on the left.
+          Optional status badge on the right — still in the SAME
+          grid row, never bleeding into the value row below.     */}
+      <div className="flex min-w-0 items-center justify-between gap-2 overflow-hidden">
+
+        {/* Left: dot + title */}
+        <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+          <span
+            className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotColor}`}
+            aria-hidden
+          />
+          <span className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            {title}
+          </span>
         </div>
 
-        <div className={`flex-shrink-0 rounded-xl p-1.5 ring-1 ring-black/5 ${palette.surface}`}>
-          {trend === 'up'   ? <ArrowUpRight   size={14} className={palette.accent} />
-          : trend === 'down' ? <ArrowDownRight  size={14} className={palette.accent} />
-          :                    <Minus           size={14} className={`${palette.accent} opacity-60`} />}
-        </div>
+        {/* Right: status badge — only when operationally meaningful */}
+        {badgeCls && (
+          <span
+            className={[
+              'shrink-0 inline-flex items-center',
+              'rounded-full border px-2 py-0.5',
+              'text-[10px] font-semibold leading-none',
+              badgeCls,
+            ].join(' ')}
+          >
+            {badge}
+          </span>
+        )}
       </div>
 
-      <p className={`text-[2rem] font-bold tracking-tight ${palette.accent}`}>
-        {formatValue(value)}
+      {/* ── Row 2 — Main value ────────────────────────────────────
+          Lives in its own grid row — cannot share space with Row 1.
+          Hard overflow clip + truncate prevents bleed at any width.
+          title attr provides full value on hover (accessibility).  */}
+      <p
+        className={[
+          'mt-2.5',
+          'w-full min-w-0 max-w-full',
+          'overflow-hidden truncate',
+          'font-mono text-[20px] font-semibold',
+          'leading-none tabular-nums tracking-tight',
+          'text-slate-50',
+        ].join(' ')}
+        title={formatted}
+      >
+        {formatted}
       </p>
 
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold leading-none shadow-sm ${palette.badge}`}>
-          {hint}
-        </span>
-        <span className="text-[11px] font-medium text-slate-400">Atualizado</span>
-      </div>
+      {/* ── Row 3 — Hint footer ───────────────────────────────────
+          `align-self: end` pins it to the grid cell's bottom edge,
+          keeping all cards in a row aligned at the same baseline.  */}
+      <p
+        className="w-full truncate pt-2.5 text-[11px] leading-none text-slate-500"
+        style={{ alignSelf: 'end' }}
+      >
+        {hint ?? <span className="opacity-0" aria-hidden>·</span>}
+      </p>
+
     </article>
   );
 }

@@ -6,14 +6,14 @@ import { formatCurrencyBRL } from '../utils/format';
 
 function DashboardCard({ title, value, tone = 'slate', subtitle = '', badges = [], action = null }) {
   const tones = {
-    slate: 'text-slate-50 border-slate-700 bg-slate-900/60',
-    red: 'text-red-700 border-red-200 bg-red-50',
-    blue: 'text-blue-700 border-blue-700/40 bg-blue-900/20',
-    green: 'text-emerald-700 border-emerald-200 bg-emerald-50',
-    orange: 'text-orange-700 border-orange-200 bg-orange-50',
-    yellow: 'text-amber-700 border-amber-200 bg-amber-50',
-    darkred: 'text-rose-800 border-rose-200 bg-rose-50',
-    neutral: 'text-slate-200 border-slate-700 bg-slate-800/40',
+    slate:   'text-slate-50  border-slate-700      bg-slate-900/60',
+    red:     'text-red-300   border-red-500/25     bg-red-500/10',
+    blue:    'text-blue-300  border-blue-500/25    bg-blue-500/10',
+    green:   'text-emerald-300 border-emerald-500/25 bg-emerald-500/10',
+    orange:  'text-orange-300 border-orange-500/25  bg-orange-500/10',
+    yellow:  'text-amber-300  border-amber-500/25   bg-amber-500/10',
+    darkred: 'text-rose-300   border-rose-500/25    bg-rose-500/10',
+    neutral: 'text-slate-200  border-slate-700      bg-slate-800/40',
   };
 
   return (
@@ -145,7 +145,7 @@ export default function CobrancaIndicators({
       </div>
 
       {metaError ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
           {metaError}
         </div>
       ) : null}
@@ -168,8 +168,8 @@ export default function CobrancaIndicators({
           value={meta.totalWhatsAppCharges}
           tone="green"
           badges={[
-            { label: `Manual ${meta.manualWhatsAppCharges}`, className: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
-            { label: `Auto ${meta.autoWhatsAppCharges}`, className: 'border-blue-700/40 bg-blue-900/20 text-blue-700' },
+            { label: `Manual ${meta.manualWhatsAppCharges}`, className: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300' },
+            { label: `Auto ${meta.autoWhatsAppCharges}`, className: 'border-blue-500/25 bg-blue-500/10 text-blue-300' },
           ]}
           action={<MessageCircleMore size={18} className="shrink-0 text-emerald-500" />}
         />
@@ -184,7 +184,7 @@ export default function CobrancaIndicators({
           value={indicators.clientesSemTelefone}
           tone="yellow"
           badges={[
-            { label: 'Acao necessaria', className: 'border-amber-200 bg-amber-50 text-amber-700' },
+            { label: 'Acao necessaria', className: 'border-amber-500/25 bg-amber-500/10 text-amber-300' },
           ]}
           action={<PhoneOff size={18} className="shrink-0 text-amber-500" />}
         />
@@ -193,7 +193,7 @@ export default function CobrancaIndicators({
           value={indicators.titulosProtesto}
           tone="darkred"
           badges={[
-            { label: 'Protesto', className: 'border-rose-200 bg-rose-50 text-rose-700' },
+            { label: 'Protesto', className: 'border-rose-500/25 bg-rose-500/10 text-rose-300' },
           ]}
           action={<AlertTriangle size={18} className="shrink-0 text-rose-600" />}
         />

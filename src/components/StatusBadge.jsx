@@ -1,8 +1,8 @@
 const statusMap = {
-  pendente: 'bg-slate-800/60 text-slate-200 border-slate-700',
-  negociacao: 'bg-amber-50 text-amber-700 border-amber-200',
-  promessa: 'bg-blue-900/20 text-blue-700 border-blue-700/40',
-  liquidado: 'bg-emerald-50 text-emerald-700 border-emerald-200'
+  pendente:   'border-slate-700/80 bg-slate-800/40 text-slate-400',
+  negociacao: 'border-amber-500/25 bg-amber-500/10 text-amber-300',
+  promessa:   'border-blue-500/25 bg-blue-500/10 text-blue-300',
+  liquidado:  'border-emerald-500/25 bg-emerald-500/10 text-emerald-300',
 };
 
 const statusLabelMap = {

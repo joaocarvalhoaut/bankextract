@@ -82,7 +82,6 @@ export default function AuditTimelineScreen({ companyId, companyName, onToast, a
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [groupMode, setGroupMode] = useState('day');
   const mountedRef = useRef(true);
-
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -115,7 +114,6 @@ export default function AuditTimelineScreen({ companyId, companyName, onToast, a
   const grouped = useMemo(() => (groupMode === 'request' ? groupAuditByRequest(events) : groupAuditByDay(events)), [events, groupMode]);
   const totalEvents = events.length;
   const totalGroups = grouped.length;
-
   const byGroup = useMemo(() => {
     const counts = {};
     for (const event of events) {
@@ -153,7 +151,7 @@ export default function AuditTimelineScreen({ companyId, companyName, onToast, a
 
   if (!companyId && !allCompanies) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-[32px] border border-dashed border-slate-700 bg-slate-900/60 p-12 text-center shadow-soft">
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-12 text-center shadow-soft">
         <ClipboardList className="mb-4 text-slate-300" size={30} />
         <h2 className="text-xl font-semibold text-slate-50">Selecione uma empresa para abrir a auditoria</h2>
         <p className="mt-2 text-sm text-slate-500">Os eventos operacionais e comerciais sao exibidos por company_id.</p>
@@ -163,7 +161,7 @@ export default function AuditTimelineScreen({ companyId, companyName, onToast, a
 
   return (
     <div className="space-y-6">
-      <div className="hero-mesh text-crisp overflow-hidden rounded-[32px] border border-slate-700/50 bg-slate-900/70 px-6 py-7 shadow-soft">
+      <div className="hero-mesh text-crisp overflow-hidden rounded-2xl border border-slate-700/50 bg-slate-900/70 px-6 py-7 shadow-soft">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-violet-700 shadow-lg shadow-violet-900/25">
@@ -219,10 +217,10 @@ export default function AuditTimelineScreen({ companyId, companyName, onToast, a
         <div className="mt-5 flex flex-wrap gap-3">
           {[
             { label: 'Total', value: totalEvents, color: 'bg-slate-800/60 text-slate-200' },
-            { label: 'Financeiro', value: byGroup.financeiro || 0, color: 'bg-blue-900/20 text-blue-700' },
-            { label: 'Cobranca', value: byGroup.cobranca || 0, color: 'bg-green-50 text-green-700' },
-            { label: 'Automacoes', value: byGroup.automacao || 0, color: 'bg-violet-50 text-violet-700' },
-            { label: 'Danger', value: bySeverity.danger || 0, color: 'bg-red-50 text-red-700' },
+            { label: 'Financeiro', value: byGroup.financeiro || 0, color: 'bg-blue-500/10 text-blue-300' },
+            { label: 'Cobranca', value: byGroup.cobranca || 0, color: 'bg-emerald-500/10 text-emerald-300' },
+            { label: 'Automacoes', value: byGroup.automacao || 0, color: 'bg-violet-500/10 text-violet-300' },
+            { label: 'Danger', value: bySeverity.danger || 0, color: 'bg-red-500/10 text-red-300' },
             { label: groupMode === 'request' ? 'Requests' : 'Dias', value: totalGroups, color: 'bg-slate-800/60 text-slate-200' },
           ].map((item) => (
             <div key={item.label} className={`flex items-center gap-2 rounded-2xl px-3 py-1.5 ${item.color}`}>
@@ -251,7 +249,7 @@ export default function AuditTimelineScreen({ companyId, companyName, onToast, a
           ))}
         </div>
       ) : grouped.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-[32px] border border-dashed border-slate-700 bg-slate-900/60 py-20 text-center">
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 py-20 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-800/60">
             <ClipboardList size={28} className="text-slate-400" />
           </div>

@@ -39,9 +39,9 @@ export const mapRepresentanteToApp = (row) => ({
 });
 
 export const mapRepresentanteToDb = (row) => ({
-  id: row.id,
+  ...(row.id ? { id: row.id } : {}),
   company_id: row.company_id,
-  user_id: row.user_id,
+  ...(row.user_id ? { user_id: row.user_id } : {}),
   nome: row.nome,
   telefone: row.telefone || '',
   email: row.email || '',
@@ -56,8 +56,8 @@ export const mapRegistroToApp = (row) => ({
   batchId: row.batch_id ?? row.batchId ?? null,
   nome: row.nome,
   empresaNome: row.empresaNome || row.empresa_nome || '',
-  numeroBoleto: row.numero_boleto ?? row.numeroBoleto ?? '',
-  documento: row.documento ?? row.numero_boleto ?? row.numeroBoleto ?? '',
+  numeroBoleto: (row.numero_boleto || row.numeroBoleto || row.documento || '').trim(),
+  documento: (row.documento || row.numero_boleto || row.numeroBoleto || '').trim(),
   numero_nf: row.numero_nf ?? row.numeroNf ?? '',
   dataVencimento: row.data_vencimento ?? row.dataVencimento ?? '',
   valor: Number(row.valor || 0),
@@ -75,8 +75,8 @@ export const mapRegistroToDb = (row) => ({
   user_id: row.user_id,
   batch_id: row.batchId ?? row.batch_id ?? null,
   nome: row.nome,
-  documento: row.documento ?? row.numero_boleto ?? row.numeroBoleto ?? row.numero_nf ?? '',
-  numero_boleto: row.numeroBoleto ?? row.numero_boleto ?? '',
+  documento: (row.documento || row.numero_boleto || row.numeroBoleto || row.numero_nf || '').trim(),
+  numero_boleto: (row.numeroBoleto || row.numero_boleto || row.documento || '').trim(),
   numero_nf: row.numero_nf ?? row.numeroNf ?? null,
   data_vencimento: row.dataVencimento ?? row.data_vencimento ?? null,
   valor: Number(row.valor || 0),

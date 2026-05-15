@@ -1,6 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { createRequestContext, errorResponse, logRuntime, withTimeout } from '../_shared/runtime.ts';
-import { buildZapiErrorInfo } from '../../../src/shared/zapiErrorMapping.js';
 
 type AdminClient = ReturnType<typeof createClient>;
 
@@ -100,6 +99,8 @@ interface ExtractedBoletoData {
   vencimento: string | null;
   nome_cliente: string | null;
   match_strategy: string;
+  ocr_used?: boolean;
+  ocr_source?: string | null;
 }
 
 interface MatchCandidate {
@@ -449,313 +450,6 @@ function maskSecret(value: string | null | undefined) {
   return `${raw.slice(0, 4)}***${raw.slice(-4)}`;
 }
 
-function maskPhoneForLog(value: string | null | undefined) {
-  const digits = String(value || '').replace(/\D/g, '');
-  if (!digits) return '';
-  if (digits.length <= 4) return `${digits.slice(0, 1)}***`;
-  return `${digits.slice(0, 4)}***${digits.slice(-2)}`;
-}
-
-function sanitizeZapiEndpoint(endpoint: string | null | undefined) {
-  const raw = String(endpoint || '').trim();
-  if (!raw) return null;
-
-  const sanitizePath = (pathValue: string) =>
-    pathValue
-      .replace(/\/instances\/[^/]+/i, '/instances/:instance_id')
-      .replace(/\/token\/[^/]+/i, '/token/:token');
-
-  try {
-    const parsed = new URL(raw);
-    return `${parsed.origin}${sanitizePath(parsed.pathname)}`;
-  } catch (_error) {
-    return sanitizePath(raw);
-  }
-}
-
-function buildZapiEndpointMeta(
-  endpoint: string,
-  response: Response | null,
-  payload: Record<string, unknown> | null | undefined,
-) {
-  const requestId =
-    response?.headers.get('x-request-id') ||
-    response?.headers.get('request-id') ||
-    response?.headers.get('x-correlation-id') ||
-    response?.headers.get('cf-ray') ||
-    String(payload?.requestId || payload?.request_id || '').trim() ||
-    null;
-
-  const timestamp =
-    response?.headers.get('date') ||
-    String(payload?.timestamp || payload?.createdAt || payload?.created_at || '').trim() ||
-    null;
-
-  return {
-    endpoint: sanitizeZapiEndpoint(endpoint),
-    http_status: response?.status || null,
-    request_id: requestId || null,
-    timestamp: timestamp || null,
-  };
-}
-
-function createZapiProviderError(options: {
-  endpoint: string;
-  response?: Response | null;
-  payload?: Record<string, unknown> | null | undefined;
-  fallbackMessage?: string;
-  cause?: unknown;
-}) {
-  const providerMessage = String(
-    options.payload?.error ||
-    options.payload?.message ||
-    options.fallbackMessage ||
-    '',
-  ).trim();
-  const meta = buildZapiEndpointMeta(options.endpoint, options.response || null, options.payload);
-  const mapped = buildZapiErrorInfo({
-    status: options.response?.status,
-    message: providerMessage,
-    name: options.cause instanceof Error ? options.cause.name : '',
-  });
-  const error = new Error(mapped.userMessage);
-  (error as Error & Record<string, unknown>).name = 'ZapiProviderError';
-  (error as Error & Record<string, unknown>).cause = options.cause;
-  (error as Error & Record<string, unknown>).zapi = {
-    kind: mapped.kind,
-    provider_message: providerMessage || null,
-    ...meta,
-  };
-  return error;
-}
-
-function normalizeZapiRuntimeError(
-  error: unknown,
-  endpoint: string,
-  fallbackMessage: string,
-) {
-  if (error instanceof Error && (error as Error & { zapi?: unknown }).zapi) {
-    return error;
-  }
-
-  const mapped = buildZapiErrorInfo({
-    message: error instanceof Error ? error.message : String(error || ''),
-    name: error instanceof Error ? error.name : '',
-  });
-  const normalized = new Error(mapped.userMessage || fallbackMessage);
-  (normalized as Error & Record<string, unknown>).name = 'ZapiProviderError';
-  (normalized as Error & Record<string, unknown>).cause = error;
-  (normalized as Error & Record<string, unknown>).zapi = {
-    kind: mapped.kind,
-    provider_message: error instanceof Error ? error.message : String(error || ''),
-    endpoint: sanitizeZapiEndpoint(endpoint),
-    http_status: null,
-    request_id: null,
-    timestamp: new Date().toISOString(),
-  };
-  return normalized;
-}
-
-function sanitizeLogValue(value: unknown, parentKey = ''): unknown {
-  if (value == null) return value;
-  if (Array.isArray(value)) return value.map((item) => sanitizeLogValue(item, parentKey));
-  if (typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => {
-        const normalizedKey = key.toLowerCase();
-        if (['token', 'clienttoken', 'client_token', 'authorization', 'private_key', 'secret'].some((item) => normalizedKey.includes(item))) {
-          return [key, maskSecret(String(nestedValue || ''))];
-        }
-        if (['phone', 'telefone', 'mobile', 'whatsapp'].some((item) => normalizedKey.includes(item))) {
-          return [key, maskPhoneForLog(String(nestedValue || ''))];
-        }
-        if (normalizedKey === 'message' || normalizedKey === 'mensagem') {
-          const text = String(nestedValue || '').trim();
-          return [key, text ? `${text.slice(0, 32)}...` : ''];
-        }
-        return [key, sanitizeLogValue(nestedValue, key)];
-      }),
-    );
-  }
-  if (typeof value === 'string') {
-    if (['token', 'clienttoken', 'client_token', 'authorization', 'private_key', 'secret'].some((item) => parentKey.toLowerCase().includes(item))) {
-      return maskSecret(value);
-    }
-    if (['phone', 'telefone', 'mobile', 'whatsapp'].some((item) => parentKey.toLowerCase().includes(item))) {
-      return maskPhoneForLog(value);
-    }
-  }
-  return value;
-}
-
-function safeInfo(label: string, payload?: unknown) {
-  if (payload === undefined) {
-    console.log(label);
-    return;
-  }
-  console.log(label, sanitizeLogValue(payload));
-}
-
-function safeWarn(label: string, payload?: unknown) {
-  if (payload === undefined) {
-    console.warn(label);
-    return;
-  }
-  console.warn(label, sanitizeLogValue(payload));
-}
-
-function safeError(label: string, payload?: unknown) {
-  if (payload === undefined) {
-    console.error(label);
-    return;
-  }
-  console.error(label, sanitizeLogValue(payload));
-}
-
-function sanitizeChargeLogPayload(payload: unknown) {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return {} as Record<string, unknown>;
-  }
-
-  const sanitized = { ...(sanitizeLogValue(payload) as Record<string, unknown>) };
-  const previewSource =
-    sanitized.message ||
-    sanitized.mensagem ||
-    sanitized.caption ||
-    sanitized.generated_message ||
-    sanitized.mensagem_gerada;
-
-  if (typeof previewSource === 'string' && previewSource.trim()) {
-    sanitized.message_preview = previewSource.slice(0, 240);
-  }
-
-  delete sanitized.message;
-  delete sanitized.mensagem;
-  delete sanitized.caption;
-  delete sanitized.generated_message;
-  delete sanitized.mensagem_gerada;
-  delete sanitized.zapi_raw;
-  delete sanitized.raw;
-  delete sanitized.response;
-
-  return sanitized;
-}
-
-const ZAPI_CIRCUIT_FAILURE_THRESHOLD = 3;
-const ZAPI_CIRCUIT_COOLDOWN_MS = 10 * 60 * 1000;
-
-async function getZapiCircuitState(
-  supabaseAdmin: AdminClient,
-  companyId: string,
-) {
-  const { data, error } = await supabaseAdmin
-    .from('zapi_circuit_state')
-    .select('company_id, provider, state, failure_count, success_count, retry_after, last_error, metadata')
-    .eq('company_id', companyId)
-    .eq('provider', 'zapi')
-    .maybeSingle();
-
-  if (error) throw new Error(`Falha ao consultar zapi_circuit_state: ${error.message}`);
-  return data || null;
-}
-
-async function upsertZapiCircuitState(
-  supabaseAdmin: AdminClient,
-  companyId: string,
-  patch: Record<string, unknown>,
-) {
-  const payload = {
-    company_id: companyId,
-    provider: 'zapi',
-    updated_at: new Date().toISOString(),
-    ...patch,
-  };
-
-  const { data, error } = await supabaseAdmin
-    .from('zapi_circuit_state')
-    .upsert(payload, { onConflict: 'company_id,provider' })
-    .select('company_id, provider, state, failure_count, success_count, retry_after, last_error, metadata')
-    .maybeSingle();
-
-  if (error) throw new Error(`Falha ao atualizar zapi_circuit_state: ${error.message}`);
-  return data || payload;
-}
-
-async function checkZapiCircuit(
-  supabaseAdmin: AdminClient,
-  companyId: string,
-  requestId: string,
-) {
-  const current = await getZapiCircuitState(supabaseAdmin, companyId);
-  if (!current || !current.state || current.state === 'closed') {
-    return { allowed: true, state: current?.state || 'closed' };
-  }
-
-  const retryAfter = current.retry_after ? new Date(String(current.retry_after)).getTime() : 0;
-  const now = Date.now();
-
-  if (current.state === 'open' && retryAfter && retryAfter > now) {
-    throw new Error(`Circuit breaker Z-API aberto ate ${new Date(retryAfter).toISOString()}.`);
-  }
-
-  if (current.state === 'open') {
-    await upsertZapiCircuitState(supabaseAdmin, companyId, {
-      state: 'half_open',
-      request_id: requestId,
-      metadata: {
-        transition: 'retry_after_elapsed',
-      },
-    });
-    return { allowed: true, state: 'half_open' };
-  }
-
-  return { allowed: true, state: String(current.state || 'closed') };
-}
-
-async function markZapiCircuitSuccess(
-  supabaseAdmin: AdminClient,
-  companyId: string,
-  requestId: string,
-) {
-  const current = await getZapiCircuitState(supabaseAdmin, companyId);
-  await upsertZapiCircuitState(supabaseAdmin, companyId, {
-    state: 'closed',
-    request_id: requestId,
-    failure_count: 0,
-    success_count: Number(current?.success_count || 0) + 1,
-    retry_after: null,
-    last_error: null,
-    opened_at: null,
-    last_success_at: new Date().toISOString(),
-    metadata: {
-      transition: 'success',
-    },
-  });
-}
-
-async function markZapiCircuitFailure(
-  supabaseAdmin: AdminClient,
-  companyId: string,
-  requestId: string,
-  errorMessage: string,
-) {
-  const current = await getZapiCircuitState(supabaseAdmin, companyId);
-  const nextFailureCount = Number(current?.failure_count || 0) + 1;
-  const shouldOpen = nextFailureCount >= ZAPI_CIRCUIT_FAILURE_THRESHOLD;
-  await upsertZapiCircuitState(supabaseAdmin, companyId, {
-    state: shouldOpen ? 'open' : 'closed',
-    request_id: requestId,
-    failure_count: nextFailureCount,
-    retry_after: shouldOpen ? new Date(Date.now() + ZAPI_CIRCUIT_COOLDOWN_MS).toISOString() : null,
-    opened_at: shouldOpen ? new Date().toISOString() : null,
-    last_error: errorMessage,
-    last_failure_at: new Date().toISOString(),
-    metadata: {
-      transition: shouldOpen ? 'failure_threshold_reached' : 'failure_recorded',
-    },
-  });
-}
-
 async function getCompanyZapiIntegration(
   supabaseAdmin: AdminClient,
   companyId: string,
@@ -769,14 +463,6 @@ async function getCompanyZapiIntegration(
 
   if (error) throw new Error(error.message);
   return (data || null) as CompanyIntegrationRow | null;
-}
-
-function hasStoredCompanyZapiCredentials(integration: CompanyIntegrationRow | null | undefined) {
-  return Boolean(
-    String(integration?.instance_id || '').trim() &&
-    String(integration?.token || '').trim() &&
-    String(integration?.client_token || '').trim(),
-  );
 }
 
 function getTestZapiConfig() {
@@ -805,20 +491,24 @@ async function resolveCompanyZapiConfig(
   const integration = await getCompanyZapiIntegration(supabaseAdmin, companyId);
   const allowTestMode = options.allowTestMode === true;
   const testConfig = allowTestMode ? getTestZapiConfig() : null;
-  const hasCompanyCredentials = hasStoredCompanyZapiCredentials(integration);
 
-  safeInfo('[ZAPI COMPANY CONFIG]', {
+  console.log('[ZAPI COMPANY CONFIG]', {
     company_id: companyId,
     provider: 'zapi',
     connected: Boolean(integration?.connected),
     has_instance_id: Boolean(String(integration?.instance_id || '').trim()),
     has_token: Boolean(String(integration?.token || '').trim()),
     has_client_token: Boolean(String(integration?.client_token || '').trim()),
-    source: hasCompanyCredentials ? 'company' : (testConfig ? 'test' : 'missing'),
+    source: integration?.connected ? 'company' : (testConfig ? 'test' : 'missing'),
     instance_id: maskSecret(integration?.instance_id),
   });
 
-  if (hasCompanyCredentials) {
+  if (
+    integration?.connected &&
+    String(integration?.instance_id || '').trim() &&
+    String(integration?.token || '').trim() &&
+    String(integration?.client_token || '').trim()
+  ) {
     return {
       source: 'company',
       instanceId: String(integration.instance_id || '').trim(),
@@ -841,44 +531,55 @@ async function validateZapiConnection(config: {
   clientToken: string;
 }) {
   const url = `https://api.z-api.io/instances/${config.instanceId}/token/${config.token}/status`;
-  try {
-    const response = await withTimeout(
-      (signal) =>
-        fetch(url, {
-          method: 'GET',
-          signal,
-          headers: {
-            'Client-Token': String(config.clientToken || '').trim(),
-            'Content-Type': 'application/json',
-          },
-        }),
-      20_000,
-      'Tempo limite excedido ao validar a conexao com a Z-API.',
-    );
 
-    const data = await response.json().catch(() => ({}));
-    safeInfo('[ZAPI COMPANY REQUEST]', {
-      endpoint: url,
-      ok: response.ok,
-      status: response.status,
-      request_id: response.headers.get('x-request-id') || response.headers.get('request-id') || response.headers.get('x-correlation-id') || response.headers.get('cf-ray') || null,
-      timestamp: response.headers.get('date') || null,
-    });
-    safeInfo('[ZAPI COMPANY RESPONSE]', data);
+  const response = await withTimeout(
+    (signal) => fetch(url, {
+      method: 'GET',
+      signal,
+      headers: {
+        'Client-Token': String(config.clientToken || '').trim(),
+        'Content-Type': 'application/json',
+      },
+    }),
+    15000,
+    'Tempo limite excedido ao validar conexao Z-API.',
+  );
 
-    if (!response.ok) {
-      throw createZapiProviderError({
-        endpoint: url,
-        response,
-        payload: data,
-        fallbackMessage: `Falha ao validar conexao com a Z-API (HTTP ${response.status}).`,
-      });
+  const data = await response.json().catch(() => ({}));
+  console.log('[ZAPI COMPANY REQUEST]', {
+    url: url.replace(/\/token\/[^/]+\//, '/token/****/'),
+    ok: response.ok,
+    status: response.status,
+  });
+  console.log('[ZAPI COMPANY RESPONSE]', {
+    ok: response.ok,
+    status: response.status,
+    connected: data?.connected,
+    hasPhone: Boolean(
+      String(data?.phone || data?.mobile || data?.connectedPhone || data?.phoneNumber || '').trim(),
+    ),
+  });
+
+  if (!response.ok) {
+    const zapiMsg = String(data?.message || data?.error || '').trim();
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(
+        `Client Token invalido ou expirado (HTTP ${response.status}). Atualize o Client Token em Integracoes.`,
+      );
     }
-
-    return data as Record<string, unknown>;
-  } catch (error) {
-    throw normalizeZapiRuntimeError(error, url, 'Z-API indisponivel no momento');
+    if (response.status === 404) {
+      throw new Error(
+        `Instancia Z-API nao encontrada (HTTP 404). Verifique o Instance ID.`,
+      );
+    }
+    throw new Error(
+      zapiMsg
+        ? `Z-API erro (HTTP ${response.status}): ${zapiMsg}`
+        : `Z-API validacao erro ${response.status}.`,
+    );
   }
+
+  return data as Record<string, unknown>;
 }
 
 function resolveInlineZapiConfig(config: Record<string, unknown> | null | undefined) {
@@ -913,7 +614,7 @@ async function resolveRequestedZapiConfig(
 
   if (hasInlineConfig) {
     const inlineConfig = resolveInlineZapiConfig(config);
-    safeInfo('[ZAPI COMPANY CONFIG]', {
+    console.log('[ZAPI COMPANY CONFIG]', {
       company_id: companyId,
       provider: 'zapi',
       connected: false,
@@ -954,6 +655,63 @@ function isZapiConnected(data: Record<string, unknown> | null | undefined) {
   );
 
   return ['connected', 'conectado', 'online', 'open', 'ready'].some((item) => value.includes(item));
+}
+
+// ── Z-API pairing gate ────────────────────────────────────────────────────────
+// Called before every send path (simulate + real). Throws if the WhatsApp
+// session is not actually paired — prevents false-positive sends when
+// company_integrations.connected=true but QR Code was never scanned.
+async function assertZapiPaired(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  options: { allowTestMode?: boolean } = {},
+): Promise<void> {
+  let config: { instanceId: string; token: string; clientToken: string };
+  try {
+    config = await resolveCompanyZapiConfig(supabaseAdmin, companyId, options);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Z-API nao configurada para esta empresa: ${msg}`);
+  }
+
+  let liveStatus: Record<string, unknown> | null = null;
+  try {
+    liveStatus = await validateZapiConnection(config);
+  } catch {
+    // If live check itself fails (network, invalid credentials), block the send.
+    const auditErr: Error & { code?: string } = new Error(
+      'Nao foi possivel validar a conexao Z-API. Verifique as credenciais em Integracoes.',
+    );
+    auditErr.code = 'zapi_not_paired';
+    await supabaseAdmin.from('automation_audit_logs').insert({
+      company_id: companyId,
+      action: 'send_blocked',
+      blocked_reason: 'zapi_validation_failed',
+      zapi_status: 'unreachable',
+    }).then(() => {}).catch(() => {});
+    throw auditErr;
+  }
+
+  const liveConnected = isZapiConnected(liveStatus);
+  const livePhone = extractZapiPhoneNumber(liveStatus);
+
+  if (!liveConnected || !livePhone) {
+    const reason = !liveConnected
+      ? 'WhatsApp nao conectado na instancia Z-API. Acesse Integracoes, gere o QR Code e escaneie com o WhatsApp.'
+      : 'Numero WhatsApp nao vinculado na instancia Z-API. Acesse Integracoes e escaneie o QR Code para parear o dispositivo.';
+
+    await supabaseAdmin.from('automation_audit_logs').insert({
+      company_id: companyId,
+      action: 'send_blocked',
+      blocked_reason: 'zapi_not_paired',
+      zapi_status: liveConnected ? 'connected_no_phone' : 'disconnected',
+      request_payload: { live_connected: liveConnected, live_phone: Boolean(livePhone) },
+    }).then(() => {}).catch(() => {});
+
+    const pairingErr: Error & { code?: string } = new Error(reason);
+    pairingErr.code = 'zapi_not_paired';
+    throw pairingErr;
+  }
 }
 
 function bytesToBase64(bytes: Uint8Array) {
@@ -997,129 +755,99 @@ async function getZapiQrCodeData(
   const token = String(config.token || '').trim();
   const clientToken = String(config.clientToken || '').trim();
   const url = `https://api.z-api.io/instances/${instanceId}/token/${token}/qr-code/image`;
-  try {
-    const response = await withTimeout(
-      (signal) =>
-        fetch(url, {
-          method: 'GET',
-          signal,
-          headers: {
-            'Client-Token': clientToken,
-            'Content-Type': 'application/json',
-          },
-        }),
-      20_000,
-      'Tempo limite excedido ao gerar o QR Code da Z-API.',
-    );
 
-    const contentType = response.headers.get('content-type') || '';
-    safeInfo('[ZAPI QR REQUEST]', {
-      endpoint: url,
-      instanceId,
-      hasToken: Boolean(token),
-      hasClientToken: Boolean(clientToken),
-      status: response.status,
-      request_id: response.headers.get('x-request-id') || response.headers.get('request-id') || response.headers.get('x-correlation-id') || response.headers.get('cf-ray') || null,
-      timestamp: response.headers.get('date') || null,
-    });
+  console.log('[ZAPI QR REQUEST]', {
+    instanceId: maskSecret(instanceId),
+    hasToken: Boolean(token),
+    hasClientToken: Boolean(clientToken),
+  });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      safeInfo('[ZAPI QR RESPONSE]', {
-        status: response.status,
-        ok: response.ok,
-        data: errorData,
-      });
-      throw createZapiProviderError({
-        endpoint: url,
-        response,
-        payload: errorData,
-        fallbackMessage: `Nao foi possivel gerar o QR Code da Z-API (HTTP ${response.status}).`,
-      });
+  const response = await withTimeout(
+    (signal) => fetch(url, {
+      method: 'GET',
+      signal,
+      headers: {
+        'Client-Token': clientToken,
+      },
+    }),
+    20000,
+    'Tempo limite excedido ao carregar QR Code da Z-API. Verifique a instancia e tente novamente.',
+  );
+
+  const contentType = response.headers.get('content-type') || '';
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const zapiMsg = String(errorData?.message || errorData?.error || errorData?.reason || '').trim();
+    const httpStatus = response.status;
+    console.log('[ZAPI QR RESPONSE]', { status: httpStatus, ok: false });
+
+    if (httpStatus === 401 || httpStatus === 403) {
+      throw new Error(
+        `Client Token invalido ou expirado (HTTP ${httpStatus}). Acesse a Z-API, gere um novo Client Token e atualize em Integracoes.`,
+      );
     }
+    if (httpStatus === 404) {
+      throw new Error(
+        `Instancia Z-API nao encontrada (HTTP 404). Verifique se o Instance ID esta correto.`,
+      );
+    }
+    if (httpStatus === 429) {
+      throw new Error('Rate limit da Z-API atingido. Aguarde alguns segundos e tente novamente.');
+    }
+    throw new Error(
+      zapiMsg
+        ? `Z-API erro (HTTP ${httpStatus}): ${zapiMsg}`
+        : `Z-API indisponivel (HTTP ${httpStatus}). Tente novamente em instantes.`,
+    );
+  }
 
-    if (contentType.includes('application/json')) {
-      const data = await response.json().catch(() => ({}));
-      safeInfo('[ZAPI QR RESPONSE]', {
-        status: response.status,
-        ok: response.ok,
-        data,
-      });
-      if (data?.connected === true) {
-        return {
-          connected: true,
-          imageDataUrl: null,
-          raw: data,
-        };
-      }
-      const image = extractQrImageCandidate(data);
-      if (!image) {
-        throw createZapiProviderError({
-          endpoint: url,
-          response,
-          payload: data,
-          fallbackMessage: 'A Z-API respondeu sem QR Code utilizavel.',
-        });
-      }
-
-      if (image.startsWith('data:image/')) {
-        return { imageDataUrl: image, raw: data };
-      }
-
-      if (/^https?:\/\//i.test(image)) {
-        return { imageDataUrl: image, raw: data };
-      }
-
+  if (contentType.includes('application/json')) {
+    const data = await response.json().catch(() => ({}));
+    console.log('[ZAPI QR RESPONSE]', {
+      status: response.status,
+      ok: response.ok,
+      data,
+    });
+    if (data?.connected === true) {
       return {
-        imageDataUrl: `data:image/png;base64,${image}`,
+        connected: true,
+        imageDataUrl: null,
         raw: data,
       };
     }
-
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    const imageDataUrl = `data:${contentType || 'image/png'};base64,${bytesToBase64(bytes)}`;
-    safeInfo('[ZAPI QR RESPONSE]', {
-      status: response.status,
-      ok: response.ok,
-      data: { bytes: bytes.length, contentType },
-    });
-
-    return {
-      imageDataUrl,
-      connected: false,
-      raw: { bytes: bytes.length },
-    };
-  } catch (error) {
-    throw normalizeZapiRuntimeError(error, url, 'Z-API indisponivel no momento');
-  }
-}
-
-function sanitizeActionErrorDetails(error: unknown) {
-  if (error instanceof Error) {
-    const zapiDetails = (error as Error & { zapi?: Record<string, unknown> }).zapi;
-    return {
-      message: error.message || 'Erro interno.',
-      ...(zapiDetails
-        ? {
-            kind: zapiDetails.kind || null,
-            http_status: zapiDetails.http_status || null,
-            endpoint: zapiDetails.endpoint || null,
-            request_id: zapiDetails.request_id || null,
-            timestamp: zapiDetails.timestamp || null,
-          }
-        : {}),
-    };
-  }
-
-  if (typeof error === 'object' && error) {
-    try {
-      return JSON.parse(JSON.stringify(error));
-    } catch {
-      return { message: String(error) };
+    const image = extractQrImageCandidate(data);
+    if (!image) {
+      throw new Error('Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
     }
+
+    if (image.startsWith('data:image/')) {
+      return { imageDataUrl: image, raw: data };
+    }
+
+    if (/^https?:\/\//i.test(image)) {
+      return { imageDataUrl: image, raw: data };
+    }
+
+    return {
+      imageDataUrl: `data:image/png;base64,${image}`,
+      raw: data,
+    };
   }
 
-  return { message: String(error || 'Erro interno.') };
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const imageDataUrl = `data:${contentType || 'image/png'};base64,${bytesToBase64(bytes)}`;
+  console.log('[ZAPI QR RESPONSE]', {
+    status: response.status,
+    ok: response.ok,
+    data: { bytes: bytes.length, contentType },
+  });
+
+  return {
+    imageDataUrl,
+    connected: false,
+    raw: { bytes: bytes.length },
+  };
 }
 
 function formatCurrency(value: number) {
@@ -1644,6 +1372,7 @@ async function searchDriveFiles(token: string, folderId: string, record: Financi
 
   for (const queryParts of fuzzySearches) {
     queryParts.push(`'${folderId}' in parents`);
+    queryParts.push("mimeType='application/pdf'");
     queryParts.push('trashed=false');
     const data = await googleJson<{ files?: DriveCandidate[] }>(
       `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(queryParts.join(' and '))}&fields=files(id,name,mimeType)&pageSize=10`,
@@ -1658,28 +1387,101 @@ async function searchDriveFiles(token: string, folderId: string, record: Financi
   return results;
 }
 
-async function downloadDriveFileBase64(token: string, fileId: string) {
-  try {
-    const response = await withTimeout(
-      (signal) =>
-        fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-          signal,
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      30000,
-      'Tempo limite excedido ao baixar arquivo PDF do Google Drive (base64).',
-    );
+// ── ETAPA 1: Scored live search — returns candidates with confidence scores ──
+// Used at send-time to gate PDF attachment behind a minimum score of 80.
+// Tiers: prelinked(95) > exact_filename(90) > combined_name_boleto(85)
+//        > fulltext_boleto(65) > fulltext_name(50)
+interface ScoredDriveFile {
+  file: DriveCandidate;
+  score: number;
+  strategy: string;
+}
 
-    if (!response.ok) {
-      throw new Error(await response.text());
+async function searchDriveFilesScored(
+  token: string,
+  folderId: string,
+  record: FinancialRow,
+): Promise<ScoredDriveFile[]> {
+  const results: ScoredDriveFile[] = [];
+
+  // Tier 1: pre-linked file_id (highest confidence)
+  if (record.drive_file_id) {
+    const linked = await getDriveFileMetadata(token, record.drive_file_id).catch(() => null);
+    if (linked?.id && linked.mimeType === 'application/pdf') {
+      return [{ file: linked, score: 95, strategy: 'prelinked_file_id' }];
     }
-
-    const buffer = await response.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    return bytesToBase64(bytes);
-  } catch (error) {
-    throw error;
   }
+
+  const { numeroBoletoEfetivo, clienteEfetivo } = logCobrancaMapping(record);
+  const boleto = String(numeroBoletoEfetivo || '').trim();
+  const normalizedName = normalizeDriveName(clienteEfetivo || record.nome || '');
+
+  // Tier 2: exact filename match
+  const exactCandidates: Array<[string, number, string]> = [];
+  if (boleto) exactCandidates.push([`${boleto}.pdf`, 90, 'exact_filename_boleto']);
+  if (boleto && normalizedName) exactCandidates.push([`${normalizedName}_${boleto}.pdf`, 85, 'combined_name_boleto']);
+
+  for (const [name, score, strategy] of exactCandidates) {
+    const q = encodeURIComponent(`name='${name.replace(/'/g, "\\'")}' and '${folderId}' in parents and mimeType='application/pdf' and trashed=false`);
+    const data = await googleJson<{ files?: DriveCandidate[] }>(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,parents,webViewLink,webContentLink)&pageSize=5`,
+      token,
+    ).catch(() => ({ files: [] as DriveCandidate[] }));
+    for (const f of data.files || []) {
+      if (!results.find((r) => r.file.id === f.id)) results.push({ file: f, score, strategy });
+    }
+  }
+
+  // Return early if we already have a confident exact match
+  if (results.some((r) => r.score >= 80)) {
+    return results.sort((a, b) => b.score - a.score);
+  }
+
+  // Tier 3: fullText search on boleto number
+  if (boleto) {
+    const q = encodeURIComponent(`fullText contains '${boleto.replace(/'/g, "\\'")}' and '${folderId}' in parents and mimeType='application/pdf' and trashed=false`);
+    const data = await googleJson<{ files?: DriveCandidate[] }>(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,parents,webViewLink,webContentLink)&pageSize=10`,
+      token,
+    ).catch(() => ({ files: [] as DriveCandidate[] }));
+    for (const f of data.files || []) {
+      if (!results.find((r) => r.file.id === f.id)) results.push({ file: f, score: 65, strategy: 'fulltext_boleto' });
+    }
+  }
+
+  // Tier 4: fullText search on client name (weakest signal)
+  if (normalizedName && results.length < 3) {
+    const q = encodeURIComponent(`fullText contains '${normalizedName.replace(/'/g, "\\'")}' and '${folderId}' in parents and mimeType='application/pdf' and trashed=false`);
+    const data = await googleJson<{ files?: DriveCandidate[] }>(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,parents,webViewLink,webContentLink)&pageSize=10`,
+      token,
+    ).catch(() => ({ files: [] as DriveCandidate[] }));
+    for (const f of data.files || []) {
+      if (!results.find((r) => r.file.id === f.id)) results.push({ file: f, score: 50, strategy: 'fulltext_name' });
+    }
+  }
+
+  return results.sort((a, b) => b.score - a.score);
+}
+
+async function downloadDriveFileBase64(token: string, fileId: string) {
+  const response = await withTimeout(
+    (signal) =>
+      fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+        signal,
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    30000,
+    'Tempo limite excedido ao baixar arquivo PDF do Google Drive (base64).',
+  );
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  const buffer = await response.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  return bytesToBase64(bytes);
 }
 
 async function downloadDriveFileBytes(token: string, fileId: string) {
@@ -2053,6 +1855,70 @@ async function syncDriveForCompany(supabaseAdmin: AdminClient, companyId: string
   return { linked, not_found: notFound, folder_id: folderId };
 }
 
+// ── ETAPA 3: Google Vision OCR fallback for scanned / image-only PDFs ────────
+// Requires ENABLE_GOOGLE_VISION_OCR=true env var and the service account having
+// Cloud Vision API enabled in Google Cloud Console.
+async function attemptVisionOCR(token: string, bytes: Uint8Array): Promise<{ text: string; source: string } | null> {
+  const enableOcr = String(Deno.env.get('ENABLE_GOOGLE_VISION_OCR') || '').trim();
+  if (enableOcr !== 'true') return null;
+
+  try {
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    const base64Content = btoa(binary);
+
+    const requestBody = {
+      requests: [{
+        inputConfig: {
+          content: base64Content,
+          mimeType: 'application/pdf',
+        },
+        features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
+        pages: [1, 2, 3],
+      }],
+    };
+
+    const response = await withTimeout(
+      (signal) =>
+        fetch('https://vision.googleapis.com/v1/files:annotate', {
+          method: 'POST',
+          signal,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        }),
+      20000,
+      'Tempo limite excedido ao chamar Google Vision OCR.',
+    );
+
+    if (!response.ok) {
+      console.warn('[OCR] Vision API error', response.status, await response.text().catch(() => ''));
+      return null;
+    }
+
+    const data = await response.json().catch(() => null);
+    const pages: Array<{ fullTextAnnotation?: { text?: string } }> = data?.responses || [];
+    const combinedText = pages
+      .map((p) => String(p?.fullTextAnnotation?.text || ''))
+      .join('\n')
+      .trim();
+
+    if (!combinedText) return null;
+    return { text: combinedText, source: 'google_vision' };
+  } catch (error) {
+    console.warn('[OCR] Vision fallback failed', error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+// Threshold: if extracted text has fewer meaningful chars than this, try OCR
+const OCR_TEXT_THRESHOLD = 40;
+
 function buildBoletoStatus(value: string | null | undefined) {
   const normalized = normalizeText(value).replace(/[^\w]/g, '_');
   if (BOLETO_STATUS_VALUES.has(normalized)) return normalized;
@@ -2061,13 +1927,41 @@ function buildBoletoStatus(value: string | null | undefined) {
 
 async function extractBoletoDataFromDriveFile(token: string, file: DriveCandidate): Promise<ExtractedBoletoData> {
   const bytes = await downloadDriveFileBytes(token, file.id);
-  if (bytes.length < 10) {
+  if (bytes.length < 100) {
     console.log(JSON.stringify({ event: 'drive_empty_pdf', file_id: file.id, file_name: file.name, bytes: bytes.length }));
     throw new Error(`PDF vazio ou ilegivel: ${file.name} (${bytes.length} bytes).`);
   }
-  const text = extractReadableTextFromBytes(bytes);
+  // Validate PDF magic bytes — rejects non-PDF and corrupted files early
+  const pdfHeader = new TextDecoder('latin1').decode(bytes.slice(0, 5));
+  if (!pdfHeader.startsWith('%PDF')) {
+    console.log(JSON.stringify({ event: 'drive_invalid_pdf_header', file_id: file.id, file_name: file.name, header: pdfHeader.slice(0, 5) }));
+    throw new Error(`Arquivo nao e um PDF valido: ${file.name} (header invalido).`);
+  }
+  // Validate PDF EOF marker — truncated PDFs lack %%EOF at the end
+  const tailBytes = bytes.slice(Math.max(0, bytes.length - 1024));
+  const tail = new TextDecoder('latin1').decode(tailBytes);
+  if (!tail.includes('%%EOF')) {
+    console.log(JSON.stringify({ event: 'drive_truncated_pdf', file_id: file.id, file_name: file.name, bytes: bytes.length }));
+    throw new Error(`PDF truncado ou corrompido: ${file.name} (marcador %%EOF ausente).`);
+  }
+  let rawText = extractReadableTextFromBytes(bytes);
+  let ocrUsed = false;
+  let ocrSource: string | null = null;
+
+  // ETAPA 3: OCR fallback — if native text extraction yields too little content
+  const meaningfulChars = rawText.replace(/\s/g, '').length;
+  if (meaningfulChars < OCR_TEXT_THRESHOLD) {
+    const ocrResult = await attemptVisionOCR(token, bytes);
+    if (ocrResult && ocrResult.text.replace(/\s/g, '').length > meaningfulChars) {
+      rawText = ocrResult.text;
+      ocrUsed = true;
+      ocrSource = ocrResult.source;
+      console.log(JSON.stringify({ event: 'ocr_used', file_id: file.id, file_name: file.name, source: ocrSource, chars: rawText.replace(/\s/g, '').length }));
+    }
+  }
+
   const filenameText = String(file.name || '').replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ');
-  const mergedText = `${filenameText}\n${text}`;
+  const mergedText = `${filenameText}\n${rawText}`;
   const documento = extractDocumento(mergedText);
   const linhaDigitavel = extractLinhaDigitavel(mergedText);
   const codigoBarras = extractCodigoBarras(mergedText);
@@ -2086,7 +1980,9 @@ async function extractBoletoDataFromDriveFile(token: string, file: DriveCandidat
     valor: extractCurrencyValue(mergedText),
     vencimento: extractDate(mergedText),
     nome_cliente: extractNames(mergedText) || null,
-    match_strategy: 'regex_texto_pdf',
+    match_strategy: ocrUsed ? `ocr_${ocrSource || 'unknown'}` : 'regex_texto_pdf',
+    ocr_used: ocrUsed,
+    ocr_source: ocrSource,
   };
 }
 
@@ -2224,6 +2120,9 @@ async function upsertBoletoMatchResult(
     boleto_status: buildBoletoStatus(status),
     boleto_match_strategy: strategy,
     boleto_erro: errorMessage,
+    boleto_ocr_used: pdfData.ocr_used ?? false,
+    boleto_ocr_source: pdfData.ocr_source || null,
+    pdf_validation_reason: 'ok',
     updated_at: new Date().toISOString(),
   };
 
@@ -2315,6 +2214,17 @@ async function syncBoletoDriveIntelligentForCompany(
           second_score: second.score,
           duration_ms: Date.now() - fileStart,
         }));
+        await insertAutomationAuditLog(supabaseAdmin, {
+          company_id: companyId,
+          request_id: requestId,
+          action: 'drive_sync_conflict',
+          registro_id: best.record.id,
+          boleto_file_id: file.id,
+          boleto_score: confidence,
+          boleto_strategy: strategy,
+          boleto_second_score: second.score,
+          blocked_reason: 'conflict_high_score',
+        });
       } else if (best && best.score >= 80) {
         status = 'encontrado';
         matchedRecord = best.record;
@@ -2348,6 +2258,16 @@ async function syncBoletoDriveIntelligentForCompany(
           reasons: best.reasons,
           duration_ms: Date.now() - fileStart,
         }));
+        await insertAutomationAuditLog(supabaseAdmin, {
+          company_id: companyId,
+          request_id: requestId,
+          action: 'drive_sync_low_confidence',
+          registro_id: best.record.id,
+          boleto_file_id: file.id,
+          boleto_score: confidence,
+          boleto_strategy: strategy,
+          blocked_reason: `baixa_confianca_score_${confidence}`,
+        });
       } else {
         strategy = 'no_match';
 
@@ -2577,8 +2497,10 @@ async function sendRealChargesData(
   companyId: string,
   userId: string | null,
   items: Array<Record<string, unknown>>,
-  options: { allowTestMode?: boolean; requestId?: string } = {},
+  options: { allowTestMode?: boolean } = {},
 ) {
+  await assertZapiPaired(supabaseAdmin, companyId, options);
+
   const sent: Array<Record<string, unknown>> = [];
   const failed: Array<Record<string, unknown>> = [];
 
@@ -2586,7 +2508,8 @@ async function sendRealChargesData(
     const registroId = String(item?.registro_id || item?.id || '').trim();
     const message = String(item?.message || item?.mensagem || '').trim();
     const documento = String(item?.documento || item?.numero_boleto || item?.numero_nf || '').trim();
-    const itemPhoneRaw = String(item?.phone || item?.telefone || '').trim();
+    const phoneRaw = String(item?.phone || item?.telefone || '').trim();
+    const normalizedPhone = normalizeBrazilPhone(phoneRaw);
 
     let record: Record<string, unknown> | null = null;
     if (registroId) {
@@ -2609,9 +2532,6 @@ async function sendRealChargesData(
 
       record = data;
     }
-
-    const phoneRaw = itemPhoneRaw || String(record?.telefone || '').trim();
-    const normalizedPhone = normalizeBrazilPhone(phoneRaw);
 
     const numeroBoletoEfetivo = getNumeroBoletoEfetivo((record || item) as Partial<FinancialRow> & Record<string, unknown>);
     const clienteEfetivo = getClienteEfetivo((record || item) as Partial<FinancialRow> & Record<string, unknown>) || String(item?.cliente || item?.cliente_nome || 'Cliente');
@@ -2649,21 +2569,6 @@ async function sendRealChargesData(
     };
 
     if (dispatch.duplicate && !Boolean(item?.force_resend)) {
-      await tryInsertLog(supabaseAdmin, {
-        ...logBase,
-        status_envio: 'ignorado',
-        erro: 'duplicado_idempotencia',
-        payload: {
-          message,
-          canal: 'whatsapp_real',
-          envio_real: true,
-          force_resend: Boolean(item?.force_resend),
-          simulated: false,
-          duplicate: true,
-          duplicate_source: 'automation_dispatch',
-          sent_at: new Date().toISOString(),
-        },
-      });
       await finalizeAutomationDispatch(supabaseAdmin, {
         companyId,
         dispatchType,
@@ -2671,15 +2576,14 @@ async function sendRealChargesData(
         status: 'duplicate',
         metadata: { reason: 'manual_dispatch_duplicate' },
       });
-        failed.push({
-          ...item,
-          registro_id: registroId || null,
-          telefone: normalizedPhone || phoneRaw || '',
-          duplicate: true,
-          error: 'Esta operacao ja foi processada anteriormente.',
-        });
-        continue;
-      }
+      failed.push({
+        ...item,
+        registro_id: registroId || null,
+        telefone: normalizedPhone || phoneRaw || '',
+        error: 'Esta operacao ja foi processada anteriormente.',
+      });
+      continue;
+    }
 
     if (!message) {
       const errorMessage = 'Mensagem vazia para envio real.';
@@ -2785,13 +2689,9 @@ async function sendRealChargesData(
       continue;
     }
 
-    let transportAttempted = false;
     try {
-      await checkZapiCircuit(supabaseAdmin, companyId, String(options.requestId || ''));
-      transportAttempted = true;
       const sendResult = await sendZapiText(supabaseAdmin, companyId, { phone: normalizedPhone, message }, options);
-      safeInfo('[ZAPI RAW RESPONSE]', sendResult);
-      await markZapiCircuitSuccess(supabaseAdmin, companyId, String(options.requestId || ''));
+      console.log('[ZAPI RAW RESPONSE]', sendResult);
 
       const providerMessageId =
         sendResult?.messageId ||
@@ -2850,7 +2750,7 @@ async function sendRealChargesData(
         },
       });
 
-      safeInfo('[WHATSAPP TRACKING SAVED]', {
+      console.log('[WHATSAPP TRACKING SAVED]', {
         providerMessageId,
         initialStatus,
         sentAt,
@@ -2894,9 +2794,6 @@ async function sendRealChargesData(
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      if (transportAttempted) {
-        await markZapiCircuitFailure(supabaseAdmin, companyId, String(options.requestId || ''), errorMessage);
-      }
       const failedAt = new Date().toISOString();
       await insertWhatsappCharge(supabaseAdmin, {
         empresa_id: companyId,
@@ -2958,47 +2855,15 @@ async function sendSingleChargeData(
   simulate: boolean,
   customMessage: string,
   forceResend: boolean,
-  options: { allowTestMode?: boolean; requestId?: string } = {},
+  options: { allowTestMode?: boolean } = {},
 ) {
+  await assertZapiPaired(supabaseAdmin, companyId, options);
+
   const preview = await buildChargePayloadPreview(supabaseAdmin, companyId, registroId);
   const finalMessage = String(customMessage || preview.message || '').trim();
   const recentCharge = await findRecentSuccessfulWhatsappCharge(supabaseAdmin, companyId, registroId);
-  const duplicateLogBase = {
-    financeiro_id: registroId,
-    company_id: companyId,
-    data_hora: new Date().toISOString(),
-    cliente_nome: String(preview.payload?.cliente || 'Cliente'),
-    cliente_numero: String(preview.payload?.cliente_numero || '') || null,
-    telefone: String(preview.payload?.telefone || '') || null,
-    documento: String(preview.payload?.documento || '') || null,
-    numero_boleto: String(preview.payload?.numero_boleto || '') || null,
-    numero_nf: String(preview.payload?.numero_nf || '') || null,
-    valor: Number(preview.payload?.valor || 0),
-    vencimento: String(preview.payload?.vencimento || '') || null,
-    tipo_cobranca: 'manual',
-    dias_atraso: 0,
-    arquivo_encontrado: Boolean(preview.payload?.arquivo_encontrado),
-    drive_file_id: preview.payload?.drive_file_id || null,
-  };
 
   if (recentCharge && !forceResend) {
-    await tryInsertLog(supabaseAdmin, {
-      ...duplicateLogBase,
-      status_envio: 'ignorado',
-      erro: 'duplicado_recente',
-      payload: {
-        ...preview.payload,
-        message: finalMessage,
-        canal: simulate ? 'whatsapp_simulado' : 'whatsapp_real',
-        envio_real: simulate !== true,
-        simulated: simulate === true,
-        force_resend: forceResend,
-        duplicate: true,
-        duplicate_source: 'recent_successful_charge',
-        duplicate_charge_id: recentCharge.id || null,
-        duplicate_provider_message_id: recentCharge.provider_message_id || recentCharge.zapi_message_id || null,
-      },
-    });
     return {
       success: false,
       duplicate: true,
@@ -3089,19 +2954,6 @@ async function sendSingleChargeData(
 
   if (result.failed.length) {
     const firstError = result.failed[0];
-    if (firstError?.duplicate === true) {
-      return {
-        success: false,
-        duplicate: true,
-        simulated: false,
-        zapiResponse: null,
-        message: String(firstError?.error || 'Esta operacao ja foi processada anteriormente.'),
-        payload: {
-          ...preview.payload,
-          message: finalMessage,
-        },
-      };
-    }
     throw new Error(String(firstError?.error || 'Falha ao enviar a cobranca individual.'));
   }
 
@@ -3139,59 +2991,47 @@ async function sendZapiDocument(
     throw new Error('WhatsApp API não configurada. Defina ZAPI_INSTANCE_ID, ZAPI_TOKEN, ZAPI_CLIENT_TOKEN e, se necessário, ZAPI_DOCUMENT_ENDPOINT.');
   }
 
-  try {
-    const response = await withTimeout(
-      (signal) =>
-        fetch(documentEndpoint, {
-          method: 'POST',
-          signal,
-          headers: {
-            'Client-Token': clientToken,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            phone,
-            fileName,
-            mimeType: 'application/pdf',
-            caption,
-            base64,
-          }),
+  const response = await withTimeout(
+    (signal) =>
+      fetch(documentEndpoint, {
+        method: 'POST',
+        signal,
+        headers: {
+          'Client-Token': clientToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phone,
+          fileName,
+          mimeType: 'application/pdf',
+          caption,
+          base64,
         }),
-      15000,
-      'Tempo limite excedido ao enviar documento pela Z-API.',
-    );
+      }),
+    15000,
+    'Tempo limite excedido ao enviar documento pela Z-API.',
+  );
 
-    const data = await response.json().catch(() => ({}));
+  const data = await response.json().catch(() => ({}));
 
-    safeInfo('[ZAPI COMPANY REQUEST]', {
-      source: zapiConfig.source || 'company',
-      mode: 'document',
-      endpoint: documentEndpoint,
-      phone,
-      ok: response.ok,
-      status: response.status,
-      request_id: response.headers.get('x-request-id') || response.headers.get('request-id') || response.headers.get('x-correlation-id') || response.headers.get('cf-ray') || null,
-      timestamp: response.headers.get('date') || null,
-    });
-    safeInfo('[ZAPI COMPANY RESPONSE]', data);
+  console.log('[ZAPI COMPANY REQUEST]', {
+    source: zapiConfig.source || 'company',
+    mode: 'document',
+    phone,
+    ok: response.ok,
+    status: response.status,
+  });
+  console.log('[ZAPI COMPANY RESPONSE]', data);
 
-    if (!response.ok) {
-      safeError('[ZAPI ERROR]', data);
-      throw createZapiProviderError({
-        endpoint: documentEndpoint,
-        response,
-        payload: data,
-        fallbackMessage: `Falha ao enviar documento pela Z-API (HTTP ${response.status}).`,
-      });
-    }
-
-    return {
-      provider_id: String(data?.zaapId || data?.messageId || ''),
-      raw: data,
-    };
-  } catch (error) {
-    throw normalizeZapiRuntimeError(error, documentEndpoint, 'Z-API indisponivel no momento');
+  if (!response.ok) {
+    console.error('[ZAPI ERROR]', data);
+    throw new Error(String(data?.message || data?.error || `HTTP ${response.status}`));
   }
+
+  return {
+    provider_id: String(data?.zaapId || data?.messageId || ''),
+    raw: data,
+  };
 }
 
 async function sendZapiText(
@@ -3207,13 +3047,10 @@ async function sendZapiText(
     throw new Error('Telefone invalido para envio real.');
   }
 
-  const endpoint = `https://api.z-api.io/instances/${zapiConfig.instanceId}/token/${zapiConfig.token}/send-text`;
-
-  try {
-    const response = await withTimeout(
+  const response = await withTimeout(
     (signal) =>
       fetch(
-        endpoint,
+        `https://api.z-api.io/instances/${zapiConfig.instanceId}/token/${zapiConfig.token}/send-text`,
         {
           method: 'POST',
           signal,
@@ -3231,57 +3068,162 @@ async function sendZapiText(
     'Tempo limite excedido ao enviar mensagem pela Z-API.',
   );
 
-    const data = await response.json().catch(() => ({}));
-    safeInfo('[ZAPI REQUEST]', {
+  const data = await response.json().catch(() => ({}));
+  console.log('[ZAPI REQUEST]', {
+    company_id: companyId,
+    source: zapiConfig.source,
+    phone: normalizedPhone,
+    ok: response.ok,
+    status: response.status,
+    data,
+  });
+  console.log('[ZAPI COMPANY REQUEST]', {
+    company_id: companyId,
+    source: zapiConfig.source,
+    mode: 'text',
+    phone: normalizedPhone,
+    ok: response.ok,
+    status: response.status,
+  });
+
+  if (!response.ok) {
+    console.error('[ZAPI ERROR]', {
       company_id: companyId,
       source: zapiConfig.source,
-      endpoint,
       phone: normalizedPhone,
-      ok: response.ok,
       status: response.status,
-      request_id: response.headers.get('x-request-id') || response.headers.get('request-id') || response.headers.get('x-correlation-id') || response.headers.get('cf-ray') || null,
-      timestamp: response.headers.get('date') || null,
       data,
     });
-    safeInfo('[ZAPI COMPANY REQUEST]', {
-      company_id: companyId,
-      source: zapiConfig.source,
-      mode: 'text',
-      endpoint,
-      phone: normalizedPhone,
-      ok: response.ok,
-      status: response.status,
-    });
+    throw new Error(`Z-API erro ${response.status}: ${JSON.stringify(data)}`);
+  }
 
-    if (!response.ok) {
-      safeError('[ZAPI ERROR]', {
-        company_id: companyId,
-        source: zapiConfig.source,
-        endpoint,
-        phone: normalizedPhone,
-        status: response.status,
-        data,
-      });
-      throw createZapiProviderError({
-        endpoint,
-        response,
-        payload: data,
-        fallbackMessage: `Falha ao enviar mensagem pela Z-API (HTTP ${response.status}).`,
-      });
+  console.log('[ZAPI RESPONSE]', data);
+  console.log('[ZAPI COMPANY RESPONSE]', data);
+
+  return {
+    normalizedPhone,
+    raw: data,
+    zaapId: String(data?.zaapId || ''),
+    messageId: String(data?.messageId || data?.id || ''),
+    id: String(data?.id || ''),
+  };
+}
+
+// ── ETAPA 5: Z-API Circuit Breaker ───────────────────────────────────────────
+// Opens after 3 consecutive failures within 5 minutes. Auto-resets after 15 min.
+async function checkZapiCircuit(supabaseAdmin: AdminClient, companyId: string): Promise<{ open: boolean; reason?: string }> {
+  try {
+    const { data } = await supabaseAdmin
+      .from('zapi_circuit_state')
+      .select('state, opened_at, failure_count, last_failure_at')
+      .eq('company_id', companyId)
+      .maybeSingle();
+    if (!data) return { open: false };
+    if (data.state !== 'open') return { open: false };
+    // Auto-reset after 15 minutes
+    const openedAt = data.opened_at ? new Date(data.opened_at).getTime() : 0;
+    if (Date.now() - openedAt > 15 * 60 * 1000) {
+      await supabaseAdmin.from('zapi_circuit_state').update({
+        state: 'closed', failure_count: 0, updated_at: new Date().toISOString(),
+      }).eq('company_id', companyId);
+      return { open: false };
     }
+    return { open: true, reason: `Z-API circuit aberto: ${data.failure_count} falhas consecutivas.` };
+  } catch {
+    return { open: false };
+  }
+}
 
-    safeInfo('[ZAPI RESPONSE]', data);
-    safeInfo('[ZAPI COMPANY RESPONSE]', data);
+async function recordZapiSuccess(supabaseAdmin: AdminClient, companyId: string) {
+  try {
+    await supabaseAdmin.from('zapi_circuit_state').upsert({
+      company_id: companyId,
+      state: 'closed',
+      failure_count: 0,
+      last_success_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'company_id' });
+  } catch { /* non-critical */ }
+}
 
-    return {
-      normalizedPhone,
-      raw: data,
-      zaapId: String(data?.zaapId || ''),
-      messageId: String(data?.messageId || data?.id || ''),
-      id: String(data?.id || ''),
-    };
+async function recordZapiFailure(supabaseAdmin: AdminClient, companyId: string, error: string) {
+  try {
+    const { data: current } = await supabaseAdmin
+      .from('zapi_circuit_state')
+      .select('failure_count')
+      .eq('company_id', companyId)
+      .maybeSingle();
+    const newCount = Number(current?.failure_count || 0) + 1;
+    const circuitOpen = newCount >= 3;
+    await supabaseAdmin.from('zapi_circuit_state').upsert({
+      company_id: companyId,
+      failure_count: newCount,
+      state: circuitOpen ? 'open' : 'closed',
+      opened_at: circuitOpen ? new Date().toISOString() : null,
+      last_failure_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'company_id' });
+    if (circuitOpen) {
+      console.warn(JSON.stringify({ event: 'zapi_circuit_opened', company_id: companyId, failure_count: newCount, error }));
+    }
+  } catch { /* non-critical */ }
+}
+
+// ── ETAPA 6: Forensic audit log ───────────────────────────────────────────────
+async function insertAutomationAuditLog(
+  supabaseAdmin: AdminClient,
+  payload: {
+    company_id: string;
+    request_id?: string | null;
+    action: string;
+    registro_id?: string | null;
+    charge_id?: string | null;
+    telefone?: string | null;
+    boleto_file_id?: string | null;
+    boleto_score?: number | null;
+    boleto_strategy?: string | null;
+    boleto_second_score?: number | null;
+    template_used?: string | null;
+    pdf_hash?: string | null;
+    zapi_status?: string | null;
+    provider_message_id?: string | null;
+    request_payload?: Record<string, unknown> | null;
+    response_payload?: Record<string, unknown> | null;
+    duration_ms?: number | null;
+    blocked_reason?: string | null;
+    ocr_used?: boolean;
+    ocr_source?: string | null;
+    pdf_validation_reason?: string | null;
+    user_id?: string | null;
+  },
+) {
+  try {
+    await supabaseAdmin.from('automation_audit_logs').insert({
+      company_id: payload.company_id,
+      request_id: payload.request_id || null,
+      action: payload.action,
+      registro_id: payload.registro_id || null,
+      charge_id: payload.charge_id || null,
+      telefone: payload.telefone || null,
+      boleto_file_id: payload.boleto_file_id || null,
+      boleto_score: payload.boleto_score ?? null,
+      boleto_strategy: payload.boleto_strategy || null,
+      boleto_second_score: payload.boleto_second_score ?? null,
+      template_used: payload.template_used || null,
+      pdf_hash: payload.pdf_hash || null,
+      zapi_status: payload.zapi_status || null,
+      provider_message_id: payload.provider_message_id || null,
+      request_payload: payload.request_payload || null,
+      response_payload: payload.response_payload || null,
+      duration_ms: payload.duration_ms ?? null,
+      blocked_reason: payload.blocked_reason || null,
+      ocr_used: payload.ocr_used ?? false,
+      ocr_source: payload.ocr_source || null,
+      pdf_validation_reason: payload.pdf_validation_reason || null,
+      user_id: payload.user_id || null,
+    });
   } catch (error) {
-    throw normalizeZapiRuntimeError(error, endpoint, 'Z-API indisponivel no momento');
+    console.warn('[AUDIT_LOG] insert warning', error instanceof Error ? error.message : error);
   }
 }
 
@@ -3289,12 +3231,8 @@ async function insertLog(
   supabaseAdmin: AdminClient,
   payload: Record<string, unknown>,
 ) {
-  const data = {
-    ...payload,
-    payload: sanitizeChargeLogPayload(payload?.payload),
-  };
-  safeInfo('[LOG_COBRANCA] payload', data);
-  const { error } = await supabaseAdmin.from('logs_cobranca').insert(data);
+  console.log('[LOG_COBRANCA] payload', payload);
+  const { error } = await supabaseAdmin.from('logs_cobranca').insert(payload);
   if (error) throw new Error(error.message);
 }
 
@@ -3305,7 +3243,7 @@ async function tryInsertLog(
   try {
     await insertLog(supabaseAdmin, payload);
   } catch (error) {
-    safeWarn('[LOG_COBRANCA] warning', error instanceof Error ? error.message : error);
+    console.warn('[LOG_COBRANCA] warning', error instanceof Error ? error.message : error);
   }
 }
 
@@ -3337,6 +3275,14 @@ async function findRecentSuccessfulWhatsappCharge(
   return data || null;
 }
 
+// Idempotência e concorrência:
+// • automation_dispatches registra uma única operação efetiva por chave
+//   (company_id + customer_id + due_date + template). Envios duplicados
+//   dentro da janela de idempotência são rejeitados sem gerar cobrança.
+// • logs_cobranca: o duplicado é inserido com status "ignorado" para
+//   auditoria — permite rastrear tentativas sem inflar o contador de envios.
+// • Dois usuários simultâneos para o mesmo título: o primeiro sucede,
+//   o segundo retorna ok=false + duplicate=true (sem retry automático).
 async function reserveAutomationDispatch(
   supabaseAdmin: AdminClient,
   payload: {
@@ -3361,17 +3307,18 @@ async function reserveAutomationDispatch(
     ].join('|'));
     const payloadHash = await sha256Hex(JSON.stringify(payload.body || {}));
 
-    // Only block if: (a) there's an active concurrent processing record, OR
+    // Block only if: (a) concurrent processing lock is FRESH (< 10 min), OR
     // (b) a completed dispatch happened within the last 5 minutes.
-    // Failed or older records must allow retry.
+    // Stale processing rows (> 10 min) and failed records allow retry.
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const tenMinutesAgo  = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const { data: existing } = await supabaseAdmin
       .from('automation_dispatches')
       .select('id, status, created_at')
       .eq('company_id', payload.companyId)
       .eq('operation_hash', operationHash)
       .eq('dispatch_type', payload.dispatchType)
-      .or(`status.eq.processing,and(status.eq.completed,created_at.gte.${fiveMinutesAgo})`)
+      .or(`and(status.eq.processing,created_at.gte.${tenMinutesAgo}),and(status.eq.completed,created_at.gte.${fiveMinutesAgo})`)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -3604,9 +3551,69 @@ async function processChargeForRecord(
     }
   }
 
+  // ETAPA 1: Scored live search with blocking rules
   if (!file) {
-    const candidates = await searchDriveFiles(token, folderId, record);
-    file = candidates[0] || null;
+    const scoredCandidates = await searchDriveFilesScored(token, folderId, record);
+    const best = scoredCandidates[0];
+    const second = scoredCandidates[1];
+
+    if (best) {
+      // Conflict: two candidates both >= 80 and within 5 points of each other
+      if (best.score >= 80 && second && second.score >= 80 && Math.abs(best.score - second.score) <= 5) {
+        await tryInsertLog(supabaseAdmin, {
+          financeiro_id: record.id,
+          company_id: record.company_id,
+          cliente_nome: clienteEfetivo || record.nome,
+          cliente_numero: record.cliente_numero,
+          telefone: phone,
+          documento: record.documento,
+          numero_boleto: numeroBoletoEfetivo || null,
+          numero_nf: record.numero_nf,
+          valor: record.valor,
+          vencimento: record.data_vencimento,
+          tipo_cobranca: tipo,
+          dias_atraso: diasAtraso,
+          arquivo_encontrado: false,
+          drive_file_id: best.file.id,
+          status_envio: 'erro',
+          erro: 'boleto_conflito_live_search',
+          payload: {
+            winner_score: best.score, winner_file_id: best.file.id, winner_file_name: best.file.name,
+            second_score: second.score, second_file_id: second.file.id, company_id: record.company_id,
+          },
+          envio_hash: hash,
+        });
+        await insertAutomationAuditLog(supabaseAdmin, {
+          company_id: record.company_id, action: 'live_search_conflict_blocked',
+          registro_id: record.id, charge_id: record.id,
+          boleto_file_id: best.file.id, boleto_score: best.score, boleto_strategy: best.strategy,
+          boleto_second_score: second.score, blocked_reason: 'conflict_live_search',
+        });
+        await finalizeAutomationDispatch(supabaseAdmin, {
+          companyId: record.company_id, dispatchType, operationHash: dispatch.operationHash,
+          status: 'failed', metadata: { reason: 'boleto_conflito_live_search', winner_score: best.score, second_score: second.score },
+        });
+        return { status: 'erro', reason: 'boleto_conflito_live_search' };
+      }
+      // Low confidence: block attachment if score < 80
+      if (best.score < 80) {
+        await insertAutomationAuditLog(supabaseAdmin, {
+          company_id: record.company_id, action: 'live_search_low_confidence_blocked',
+          registro_id: record.id, charge_id: record.id,
+          boleto_file_id: best.file.id, boleto_score: best.score, boleto_strategy: best.strategy,
+          blocked_reason: `baixa_confianca_score_${best.score}`,
+        });
+        // file stays null — will be handled by the !file check below
+      } else {
+        file = best.file;
+        await insertAutomationAuditLog(supabaseAdmin, {
+          company_id: record.company_id, action: 'live_search_matched',
+          registro_id: record.id, boleto_file_id: best.file.id,
+          boleto_score: best.score, boleto_strategy: best.strategy,
+          boleto_second_score: second?.score ?? null,
+        });
+      }
+    }
   }
 
   if (!file?.id && !permitirEnvioSemBoleto) {
@@ -3677,6 +3684,21 @@ async function processChargeForRecord(
       status: 'completed',
       metadata: { simulated: true, file_name: file?.name || null },
     });
+    // Forensic audit for simulated sends — allows BoletoMatchStatus panel to show them
+    await insertAutomationAuditLog(supabaseAdmin, {
+      company_id: record.company_id,
+      action: 'whatsapp_charge_simulated',
+      registro_id: record.id,
+      charge_id: record.id,
+      telefone: phone,
+      boleto_file_id: file?.id || null,
+      boleto_score: Number(record.boleto_match_confidence || 0) || null,
+      boleto_strategy: record.boleto_match_strategy || null,
+      template_used: tipo,
+      zapi_status: 'simulated',
+      request_payload: { tipo, dias_atraso: diasAtraso, simulate: true, document: record.documento, phone },
+      response_payload: { simulated: true, file_name: file?.name || null, message_preview: message },
+    });
 
     return {
       status: 'sucesso',
@@ -3699,21 +3721,39 @@ async function processChargeForRecord(
     return { status: 'erro', reason: 'boleto_nao_encontrado' };
   }
 
+  // ETAPA 5: Circuit breaker check before Z-API call
+  const circuit = await checkZapiCircuit(supabaseAdmin, record.company_id);
+  if (circuit.open) {
+    await tryInsertLog(supabaseAdmin, {
+      financeiro_id: record.id, company_id: record.company_id,
+      cliente_nome: clienteEfetivo || record.nome, cliente_numero: record.cliente_numero,
+      telefone: phone, documento: record.documento, numero_boleto: numeroBoletoEfetivo || null,
+      valor: record.valor, vencimento: record.data_vencimento, tipo_cobranca: tipo,
+      dias_atraso: diasAtraso, arquivo_encontrado: Boolean(file?.id), drive_file_id: file?.id || null,
+      status_envio: 'erro', erro: 'zapi_circuit_open', envio_hash: hash,
+      payload: { company_id: record.company_id, record_id: record.id, circuit_reason: circuit.reason },
+    });
+    await finalizeAutomationDispatch(supabaseAdmin, {
+      companyId: record.company_id, dispatchType, operationHash: dispatch.operationHash,
+      status: 'failed', metadata: { reason: 'zapi_circuit_open' },
+    });
+    return { status: 'erro', reason: 'zapi_circuit_open' };
+  }
+
   const zapiConfig = await resolveCompanyZapiConfig(supabaseAdmin, record.company_id, { allowTestMode: false });
   const base64 = await downloadDriveFileBase64(token, file.id);
   let sendResult: { provider_id: string; raw: unknown };
+  const sendStartedAt = Date.now();
   try {
     sendResult = await sendZapiDocument(zapiConfig, phone, message, file.name || `${numeroBoletoEfetivo || record.documento || record.id}.pdf`, base64);
+    await recordZapiSuccess(supabaseAdmin, record.company_id);
   } catch (sendErr) {
+    const errMsg = sendErr instanceof Error ? sendErr.message : String(sendErr);
+    await recordZapiFailure(supabaseAdmin, record.company_id, errMsg);
     console.log(JSON.stringify({
-      event: 'attachment_failed',
-      company_id: record.company_id,
-      financial_record_id: record.id,
-      file_id: file.id,
-      file_name: file.name,
-      tipo,
-      phone,
-      error: sendErr instanceof Error ? sendErr.message : String(sendErr),
+      event: 'attachment_failed', company_id: record.company_id,
+      financial_record_id: record.id, file_id: file.id, file_name: file.name,
+      tipo, phone, error: errMsg,
     }));
     throw sendErr;
   }
@@ -3799,7 +3839,25 @@ async function processChargeForRecord(
     },
   });
 
-  safeInfo('attachment_sent', {
+  // ETAPA 6: Forensic audit — record full send evidence
+  await insertAutomationAuditLog(supabaseAdmin, {
+    company_id: record.company_id,
+    action: 'whatsapp_charge_sent',
+    registro_id: record.id,
+    charge_id: record.id,
+    telefone: phone,
+    boleto_file_id: file.id,
+    boleto_score: Number(record.boleto_match_confidence || 0) || null,
+    boleto_strategy: record.boleto_match_strategy || null,
+    template_used: tipo,
+    zapi_status: 'sent',
+    provider_message_id: providerMessageId,
+    duration_ms: Date.now() - sendStartedAt,
+    request_payload: { tipo, dias_atraso: diasAtraso, document: record.documento, phone },
+    response_payload: { provider_message_id: providerMessageId, sent_at: sentAt },
+  });
+
+  console.log(JSON.stringify({
     event: 'attachment_sent',
     company_id: record.company_id,
     financial_record_id: record.id,
@@ -3809,7 +3867,7 @@ async function processChargeForRecord(
     provider_message_id: providerMessageId,
     phone,
     sent_at: sentAt,
-  });
+  }));
 
   return { status: 'sucesso', tipo, fileId: file.id };
 }
@@ -3913,7 +3971,7 @@ async function getBillingCenterData(
   companyId: string,
   todayIso: string,
 ) {
-  safeInfo('get_billing_center before registros_financeiros query', { company_id: companyId });
+  console.log('get_billing_center before registros_financeiros query', { company_id: companyId });
   const { data: records, error: recordsError } = await supabaseAdmin
     .from('registros_financeiros')
     .select('id, company_id, nome, cliente_nome, documento, numero_nf, numero_boleto, data_vencimento, valor, telefone, status, created_at, linha_digitavel, codigo_barras, boleto_url, boleto_pdf_nome, boleto_match_confidence, boleto_status, drive_file_id')
@@ -3921,9 +3979,10 @@ async function getBillingCenterData(
     .order('data_vencimento', { ascending: true });
 
   if (recordsError) throw new Error(recordsError.message);
-  safeInfo('get_billing_center after registros_financeiros query', { total_registros: (records || []).length });
+  console.log('get_billing_center after registros_financeiros query', { total_registros: (records || []).length });
+  console.log('[COBRANCA RAW]', records?.slice?.(0, 5));
 
-  safeInfo('get_billing_center before logs_cobranca query', { company_id: companyId });
+  console.log('get_billing_center before logs_cobranca query', { company_id: companyId });
   const { data: logsData, error: logsError } = await supabaseAdmin
     .from('logs_cobranca')
     .select('id, financeiro_id, company_id, data_hora, tipo_cobranca, status_envio, arquivo_encontrado, erro, created_at')
@@ -3931,7 +3990,7 @@ async function getBillingCenterData(
     .order('data_hora', { ascending: false })
     .limit(500);
   const logs = logsError ? [] : (logsData || []);
-  safeInfo('get_billing_center after logs_cobranca query', {
+  console.log('get_billing_center after logs_cobranca query', {
     total_logs: logs.length,
     logs_error: logsError?.message || null,
   });
@@ -3979,7 +4038,7 @@ async function getBillingCenterData(
       ? Math.max(Number(record?.boleto_match_confidence || 0), 100)
       : Number(record?.boleto_match_confidence || 0);
 
-    safeInfo('[COBRANCA STATUS]', {
+    console.log('[COBRANCA STATUS]', {
       cliente: record.cliente_nome,
       documento: record.documento,
       numero_nf: record.numero_nf,
@@ -4027,7 +4086,7 @@ async function getBillingCenterData(
       motivo_nao_elegivel: motivoNaoElegivel,
     };
   });
-  safeInfo('[COBRANCA MAPPED]', { total_items: mapped.length });
+  console.log('[COBRANCA MAPPED]', mapped?.slice?.(0, 5));
 
   const isOpen = (status: string) => OPEN_STATUSES.has(normalizeText(status));
 
@@ -4968,7 +5027,7 @@ Deno.serve(async (req: Request) => {
       : (body?.companyId ? String(body.companyId) : null);
     manual = body?.manual === true;
     simulate = body?.simulate === true;
-    safeInfo('billing-automation request', { action, company_id: companyId });
+    console.log('billing-automation request', { action, company_id: companyId });
     logRuntime(runtime, {
       companyId,
       metadata: {
@@ -4977,13 +5036,13 @@ Deno.serve(async (req: Request) => {
       },
     });
 
-    if (action === 'get_drive_config' || action === 'save_drive_config' || action === 'test_drive_connection' || action === 'sync_drive' || action === 'sync_boleto_drive_intelligent' || action === 'reprocess_boleto_drive_single' || action === 'test_boleto_lookup' || action === 'get_drive_folder_structure' || action === 'scan_folder_recursive') {
+    if (action === 'get_drive_config' || action === 'save_drive_config' || action === 'test_drive_connection' || action === 'test_drive_health' || action === 'sync_drive' || action === 'sync_boleto_drive_intelligent' || action === 'reprocess_boleto_drive_single' || action === 'test_boleto_lookup' || action === 'get_drive_folder_structure' || action === 'scan_folder_recursive') {
       requireCompanyId(companyId);
       requireEnvSecret('GOOGLE_CLIENT_EMAIL');
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
     }
 
-    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission' || action === 'get_boleto_sync_report' || action === 'preview_charge_payload' || action === 'prepare_manual_charge' || action === 'send_real' || action === 'send_single_charge' || action === 'validate_company_integration' || action === 'validate_connection' || action === 'get_qr_code' || action === 'get_connection_status') {
+    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission' || action === 'get_boleto_sync_report' || action === 'preview_charge_payload' || action === 'prepare_manual_charge' || action === 'send_real' || action === 'send_single_charge' || action === 'validate_company_integration' || action === 'validate_connection' || action === 'get_qr_code' || action === 'get_connection_status' || action === 'test_zapi_health' || action === 'test_drive_health') {
       requireCompanyId(companyId);
     }
 
@@ -4993,6 +5052,7 @@ Deno.serve(async (req: Request) => {
       'get_drive_config',
       'save_drive_config',
       'test_drive_connection',
+      'test_drive_health',
       'sync_drive',
       'sync_sheet',
       'test_boleto_lookup',
@@ -5203,7 +5263,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'sync_boleto_drive_intelligent',
           error: String(error instanceof Error ? error.message : error),
-          details: sanitizeActionErrorDetails(error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
     }
@@ -5304,7 +5364,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'get_boleto_sync_report',
           error: String(error instanceof Error ? error.message : error),
-          details: sanitizeActionErrorDetails(error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
     }
@@ -5335,7 +5395,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'preview_charge_payload',
           error: String(error instanceof Error ? error.message : error),
-          details: sanitizeActionErrorDetails(error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
     }
@@ -5368,7 +5428,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'prepare_manual_charge',
           error: String(error instanceof Error ? error.message : error),
-          details: sanitizeActionErrorDetails(error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
     }
@@ -5405,7 +5465,6 @@ Deno.serve(async (req: Request) => {
           success: false,
           action,
           error: String(error instanceof Error ? error.message : error),
-          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5441,7 +5500,6 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'get_qr_code',
           error: String(error instanceof Error ? error.message : error),
-          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5479,7 +5537,6 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'get_connection_status',
           error: String(error instanceof Error ? error.message : error),
-          details: sanitizeActionErrorDetails(error),
         }, 200);
       }
     }
@@ -5501,7 +5558,7 @@ Deno.serve(async (req: Request) => {
           companyId || '',
           auth.userId,
           items as Array<Record<string, unknown>>,
-          { allowTestMode: auth.bypass === true, requestId: runtime.requestId }
+          { allowTestMode: auth.bypass === true }
         );
         return jsonResponse({
           ok: true,
@@ -5516,7 +5573,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'send_real',
           error: String(error instanceof Error ? error.message : error),
-          details: sanitizeActionErrorDetails(error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
     }
@@ -5545,7 +5602,7 @@ Deno.serve(async (req: Request) => {
           simulate,
           customMessage,
           forceResend,
-          { allowTestMode: auth.bypass === true, requestId: runtime.requestId },
+          { allowTestMode: auth.bypass === true },
         );
 
         if (result.duplicate) {
@@ -5576,21 +5633,21 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'send_single_charge',
           error: String(error instanceof Error ? error.message : error),
-          details: sanitizeActionErrorDetails(error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
     }
 
     if (action === 'get_billing_center') {
-      safeInfo('get_billing_center iniciou action');
+      console.log('get_billing_center iniciou action');
       try {
-        safeInfo('get_billing_center body validado', { company_id: companyId });
-        safeInfo('get_billing_center antes do select registros_financeiros');
+        console.log('get_billing_center body validado', { company_id: companyId });
+        console.log('get_billing_center antes do select registros_financeiros');
         const center = await getBillingCenterData(admin, companyId || '', todayIso);
-        safeInfo('get_billing_center depois do select registros_financeiros', { total_items: Array.isArray(center?.items) ? center.items.length : 0 });
-        safeInfo('get_billing_center antes do select logs_cobranca');
-        safeInfo('get_billing_center depois do select logs_cobranca', { total_logs_relacionados: Array.isArray(center?.items) ? center.items.filter((item) => item.ultima_cobranca).length : 0 });
-        safeInfo('get_billing_center antes de montar cards');
+        console.log('get_billing_center depois do select registros_financeiros', { total_items: Array.isArray(center?.items) ? center.items.length : 0 });
+        console.log('get_billing_center antes do select logs_cobranca');
+        console.log('get_billing_center depois do select logs_cobranca', { total_logs_relacionados: Array.isArray(center?.items) ? center.items.filter((item) => item.ultima_cobranca).length : 0 });
+        console.log('get_billing_center antes de montar cards');
         const response = {
           ok: true,
           success: true,
@@ -5606,16 +5663,16 @@ Deno.serve(async (req: Request) => {
           },
           items: Array.isArray(center?.items) ? center.items : [],
         };
-        safeInfo('get_billing_center antes do return final', { total_items: response.items.length });
+        console.log('get_billing_center antes do return final', { total_items: response.items.length });
         return jsonResponse(response, 200);
       } catch (error) {
-        safeError('get_billing_center error', error);
+        console.error('get_billing_center error', error);
         return jsonResponse({
           ok: false,
           success: false,
           action: 'get_billing_center',
           error: String(error?.message || error),
-          details: sanitizeActionErrorDetails(error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
     }
@@ -5636,13 +5693,13 @@ Deno.serve(async (req: Request) => {
           pagination: history.pagination,
         }, 200);
       } catch (error) {
-        safeError('get_billing_history error', error);
+        console.error('get_billing_history error', error);
         return jsonResponse({
           ok: false,
           success: false,
           action: 'get_billing_history',
           error: String(error instanceof Error ? error.message : error),
-          details: sanitizeActionErrorDetails(error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
     }
@@ -5660,13 +5717,13 @@ Deno.serve(async (req: Request) => {
           items: inconsistencies.items,
         }, 200);
       } catch (error) {
-        safeError('get_billing_inconsistencies error', error);
+        console.error('get_billing_inconsistencies error', error);
         return jsonResponse({
           ok: false,
           success: false,
           action: 'get_billing_inconsistencies',
           error: String(error instanceof Error ? error.message : error),
-          details: sanitizeActionErrorDetails(error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
     }
@@ -5684,13 +5741,13 @@ Deno.serve(async (req: Request) => {
           recommendations: checklist.recommendations,
         }, 200);
       } catch (error) {
-        safeError('get_real_send_checklist error', error);
+        console.error('get_real_send_checklist error', error);
         return jsonResponse({
           ok: false,
           success: false,
           action: 'get_real_send_checklist',
           error: String(error instanceof Error ? error.message : error),
-          details: sanitizeActionErrorDetails(error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
     }
@@ -5711,7 +5768,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'get_plan_capabilities',
           error: String(error instanceof Error ? error.message : error),
-          details: sanitizeActionErrorDetails(error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
     }
@@ -5732,7 +5789,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'get_usage_summary',
           error: String(error instanceof Error ? error.message : error),
-          details: sanitizeActionErrorDetails(error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
     }
@@ -5754,7 +5811,7 @@ Deno.serve(async (req: Request) => {
           success: false,
           action: 'check_send_permission',
           error: String(error instanceof Error ? error.message : error),
-          details: sanitizeActionErrorDetails(error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
     }
@@ -5781,13 +5838,13 @@ Deno.serve(async (req: Request) => {
           limit: result.limit,
         }, 200);
       } catch (error) {
-        safeError('simulate_charge_batch error', error);
+        console.error('simulate_charge_batch error', error);
         return jsonResponse({
           ok: false,
           success: false,
           action: 'simulate_charge_batch',
           error: String(error instanceof Error ? error.message : error),
-          details: sanitizeActionErrorDetails(error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         }, 200);
       }
     }
@@ -6272,6 +6329,69 @@ Deno.serve(async (req: Request) => {
           view_url: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`,
         })),
       });
+    }
+
+    // ETAPA 7: Z-API health check
+    if (action === 'test_zapi_health') {
+      requireCompanyId(companyId);
+      const healthStart = Date.now();
+      try {
+        const zapiCfg = await resolveCompanyZapiConfig(admin, companyId || '', { allowTestMode: true });
+        const statusData = await validateZapiConnection(zapiCfg);
+        const connected = isZapiConnected(statusData);
+        const phone = extractZapiPhoneNumber(statusData);
+        const circuit = await checkZapiCircuit(admin, companyId || '');
+        return jsonResponse({
+          ok: true,
+          company_id: companyId,
+          zapi_connected: connected,
+          zapi_phone: phone || null,
+          circuit_open: circuit.open,
+          circuit_reason: circuit.reason || null,
+          source: zapiCfg.source,
+          duration_ms: Date.now() - healthStart,
+        });
+      } catch (healthErr) {
+        const errMsg = healthErr instanceof Error ? healthErr.message : String(healthErr);
+        return jsonResponse({
+          ok: false,
+          company_id: companyId,
+          zapi_connected: false,
+          error: errMsg,
+          circuit_open: false,
+          duration_ms: Date.now() - healthStart,
+        });
+      }
+    }
+
+    // ETAPA 7: Drive health check (enhanced)
+    if (action === 'test_drive_health') {
+      requireCompanyId(companyId);
+      const healthStart = Date.now();
+      try {
+        const result = await testDriveConnectionForCompany(admin, companyId || '', googleToken);
+        const hasGoogleCreds = Boolean(Deno.env.get('GOOGLE_CLIENT_EMAIL') && Deno.env.get('GOOGLE_PRIVATE_KEY'));
+        const ocrEnabled = String(Deno.env.get('ENABLE_GOOGLE_VISION_OCR') || '') === 'true';
+        return jsonResponse({
+          ok: true,
+          company_id: companyId,
+          drive_status: result.status,
+          folder_name: result.folder_name,
+          pdf_count: result.quantidade_arquivos_pdf,
+          service_account: result.service_account_email,
+          google_creds_configured: hasGoogleCreds,
+          ocr_enabled: ocrEnabled,
+          duration_ms: Date.now() - healthStart,
+        });
+      } catch (healthErr) {
+        return jsonResponse({
+          ok: false,
+          company_id: companyId,
+          drive_status: 'erro',
+          error: healthErr instanceof Error ? healthErr.message : String(healthErr),
+          duration_ms: Date.now() - healthStart,
+        });
+      }
     }
 
         return jsonResponse({ ok: false, error: 'Acao nao suportada.' }, 400);

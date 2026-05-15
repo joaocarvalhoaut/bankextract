@@ -4,6 +4,7 @@ import EmpresaModal from './components/EmpresaModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import MessagePreviewModal from './components/MessagePreviewModal';
 import Sidebar from './components/Sidebar';
+import ContextBar from './components/ContextBar';
 import { buildDashboardFinancialData } from './services/analyticsService';
 import { getCollectionToneMeta } from './services/collectionMessageService';
 import { useEmpresa } from './hooks/useEmpresa';
@@ -292,17 +293,17 @@ const resolvePublicScreenFromPath = (pathname) => {
 function ScreenFallback() {
   return (
     <div className="space-y-4">
-      <div className="hero-mesh overflow-hidden rounded-[32px] border border-slate-200/80 bg-white/90 px-6 py-8 shadow-soft">
+      <div className="hero-mesh overflow-hidden rounded-2xl border border-slate-700/80 px-6 py-8 shadow-soft">
         <div className="skeleton h-5 w-40 rounded-full" />
         <div className="mt-4 skeleton h-10 w-72 rounded-2xl" />
         <div className="mt-3 skeleton h-4 w-full max-w-2xl rounded-full" />
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className="skeleton h-52 rounded-[28px]" />
-        <div className="skeleton h-52 rounded-[28px]" />
-        <div className="skeleton h-52 rounded-[28px]" />
+        <div className="skeleton h-52 rounded-2xl" />
+        <div className="skeleton h-52 rounded-2xl" />
+        <div className="skeleton h-52 rounded-2xl" />
       </div>
-      <div className="skeleton h-[360px] rounded-[32px]" />
+      <div className="skeleton h-[360px] rounded-2xl" />
     </div>
   );
 }
@@ -316,6 +317,7 @@ export default function App() {
 
   const initialPath = getCurrentPathname();
   const [activeTab, setActiveTab] = useState(() => resolveTabFromPath(initialPath));
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [publicScreen, setPublicScreen] = useState(() => resolvePublicScreenFromPath(initialPath));
   const [, setAppLoading] = useState(false);
   const [toast, setToast] = useState(null);
@@ -549,168 +551,6 @@ export default function App() {
         ]);
 
       const dashboardFinancial = buildDashboardFinancialData(records || []);
-      const toDayKey = (value) => {
-        if (!value) return '';
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) return '';
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-      };
-      const todayKey = toDayKey(new Date().toISOString());
-      const isPaidLike = (statusValue) => ['liquidado', 'pago'].includes(String(statusValue || '').toLowerCase());
-      const normalizeChargeStatus = (statusValue, hasPhone = true) => {
-        const normalized = String(statusValue || '').trim().toLowerCase();
-        if (['read', 'lida'].includes(normalized)) return 'read';
-        if (['delivered', 'entregue'].includes(normalized)) return 'delivered';
-        if (['sent', 'enviado'].includes(normalized)) return 'sent';
-        if (['queued', 'fila'].includes(normalized)) return 'queued';
-        if (['failed', 'erro', 'falhou'].includes(normalized)) return 'failed';
-        if (['simulated', 'mock_enviado'].includes(normalized)) return 'simulated';
-        return hasPhone ? 'pending' : 'missing_phone';
-      };
-      const chargeStatusCounts = (charges || []).reduce((acc, row) => {
-        const bucket = normalizeChargeStatus(row?.status || row?.status_envio, Boolean(row?.telefone));
-        acc[bucket] = (acc[bucket] || 0) + 1;
-        return acc;
-      }, {
-        read: 0,
-        delivered: 0,
-        sent: 0,
-        queued: 0,
-        failed: 0,
-        simulated: 0,
-        pending: 0,
-        missing_phone: 0,
-      });
-      const importStatusCounts = (history || []).reduce((acc, row) => {
-        const bucket = String(row?.status || 'desconhecido').trim().toLowerCase();
-        acc[bucket] = (acc[bucket] || 0) + 1;
-        return acc;
-      }, {});
-      const recentImports = [...(history || [])]
-        .sort((a, b) => new Date(b?.data || 0).getTime() - new Date(a?.data || 0).getTime())
-        .slice(0, 5);
-      const failedMessages = (charges || [])
-        .filter((row) => normalizeChargeStatus(row?.status || row?.status_envio, Boolean(row?.telefone)) === 'failed' || row?.failure_reason)
-        .sort((a, b) => new Date(b?.failed_at || b?.created_at || 0).getTime() - new Date(a?.failed_at || a?.created_at || 0).getTime())
-        .slice(0, 6);
-      const billingQueue = [...(records || [])]
-        .filter((row) => !isPaidLike(row?.status))
-        .map((row) => {
-          const dueDate = row?.data_vencimento || row?.vencimento || null;
-          const dueMs = dueDate ? new Date(`${dueDate}T00:00:00`).getTime() : Number.POSITIVE_INFINITY;
-          const overdueDays = Number.isFinite(dueMs) ? Math.max(0, Math.floor((Date.now() - dueMs) / 86400000)) : 0;
-          return {
-            id: row?.id,
-            cliente: row?.nome || row?.cliente_nome || 'Cliente',
-            documento: row?.documento || row?.numero_boleto || row?.numero_nf || 'Sem documento',
-            valor: row?.valor || 0,
-            vencimento: dueDate,
-            status: row?.status || 'pendente',
-            telefone: row?.telefone || '',
-            overdueDays,
-            hasPhone: Boolean(row?.telefone),
-          };
-        })
-        .sort((a, b) => {
-          if (a.hasPhone !== b.hasPhone) return a.hasPhone ? 1 : -1;
-          if (a.overdueDays !== b.overdueDays) return b.overdueDays - a.overdueDays;
-          return new Date(a.vencimento || '2999-12-31').getTime() - new Date(b.vencimento || '2999-12-31').getTime();
-        })
-        .slice(0, 8);
-      const criticalIssues = billingQueue
-        .filter((row) => !row.hasPhone || row.overdueDays > 0)
-        .slice(0, 6)
-        .map((row) => ({
-          id: row.id,
-          cliente: row.cliente,
-          documento: row.documento,
-          status: !row.hasPhone ? 'missing_phone' : row.overdueDays > 30 ? 'overdue_high' : 'overdue',
-          detail: !row.hasPhone
-            ? 'Titulo sem telefone para envio.'
-            : `${row.overdueDays} dia(s) de atraso.`,
-          valor: row.valor,
-          vencimento: row.vencimento,
-        }));
-      const recentEvents = [
-        ...recentImports.map((row) => ({
-          id: `import-${row.id}`,
-          type: 'import',
-          title: row?.arquivo || 'Importacao',
-          detail: `${row?.registros || 0} registro(s) • ${row?.status || 'processado'}`,
-          timestamp: row?.data || null,
-          tone: row?.status === 'erro' ? 'danger' : row?.status === 'processando' ? 'processing' : 'success',
-        })),
-        ...(charges || []).slice(0, 6).map((row) => ({
-          id: `charge-${row.id}`,
-          type: 'charge',
-          title: row?.cliente || row?.documento || 'Envio WhatsApp',
-          detail: `${row?.status || 'pendente'}${row?.failure_reason ? ` • ${row.failure_reason}` : ''}`,
-          timestamp: row?.failed_at || row?.read_at || row?.delivered_at || row?.sent_at || row?.created_at || null,
-          tone: normalizeChargeStatus(row?.status || row?.status_envio, Boolean(row?.telefone)) === 'failed'
-            ? 'danger'
-            : normalizeChargeStatus(row?.status || row?.status_envio, Boolean(row?.telefone)) === 'queued'
-              ? 'processing'
-              : 'success',
-        })),
-      ]
-        .filter((item) => item.timestamp)
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, 8);
-      const activityToday = {
-        imports: recentImports.filter((row) => toDayKey(row?.data) === todayKey).length,
-        sends: (charges || []).filter((row) => toDayKey(row?.sent_at || row?.created_at) === todayKey).length,
-        failures: (charges || []).filter((row) => toDayKey(row?.failed_at || row?.created_at) === todayKey && normalizeChargeStatus(row?.status || row?.status_envio, Boolean(row?.telefone)) === 'failed').length,
-        audits: (metrics?.recentAuditLogs || []).filter((row) => toDayKey(row?.created_at) === todayKey).length,
-      };
-      const integrationHealth = [
-        {
-          id: 'sheets',
-          label: 'Google Sheets',
-          status: status?.googleSheetsConnected ? 'success' : 'warning',
-          detail: status?.googleSheetsConnected
-            ? `Planilha ${status?.googleSheetsSheetName || 'conectada'}`
-            : 'Planilha nao conectada',
-        },
-        {
-          id: 'automation',
-          label: 'Automacao de cobranca',
-          status: metrics?.autoChargeActive ? 'success' : 'warning',
-          detail: metrics?.autoChargeActive
-            ? `Janela ${metrics?.autoChargeHour || '08:00'}`
-            : 'Automacao inativa',
-        },
-        {
-          id: 'whatsapp',
-          label: 'Modo de envio',
-          status: metrics?.whatsappMockMode ? 'warning' : 'success',
-          detail: metrics?.whatsappMockMode ? 'WhatsApp em modo teste' : 'Envio real habilitavel',
-        },
-        {
-          id: 'audit',
-          label: 'Auditoria',
-          status: (metrics?.recentAuditLogs || []).length ? 'success' : 'empty',
-          detail: (metrics?.recentAuditLogs || []).length
-            ? `Ultima acao: ${metrics.recentAuditLogs[0].action}`
-            : 'Sem eventos recentes',
-        },
-      ];
-      const operationalAlerts = [];
-      if (metrics?.whatsappMockMode) {
-        operationalAlerts.push({ id: 'mock-mode', title: 'WhatsApp em modo teste', tone: 'warning', detail: 'Os envios estao protegidos por mock no backend.' });
-      }
-      if (!status?.googleSheetsConnected) {
-        operationalAlerts.push({ id: 'sheets-off', title: 'Google Sheets desconectado', tone: 'danger', detail: 'Exportacoes e sincronizacoes dependem desta integracao.' });
-      }
-      if (chargeStatusCounts.failed > 0) {
-        operationalAlerts.push({ id: 'failed-sends', title: 'Falhas de envio recentes', tone: 'danger', detail: `${chargeStatusCounts.failed} mensagem(ns) com falha no escopo atual.` });
-      }
-      if ((dashboardFinancial.summary?.coverageWithPhone || 0) < 85) {
-        operationalAlerts.push({ id: 'phone-coverage', title: 'Cobertura de telefone abaixo do ideal', tone: 'warning', detail: `${dashboardFinancial.summary?.coverageWithPhone || 0}% da carteira tem telefone valido.` });
-      }
-      if (criticalIssues.length > 0) {
-        operationalAlerts.push({ id: 'critical-queue', title: 'Pendencias criticas na fila', tone: 'warning', detail: `${criticalIssues.length} item(ns) exigem tratativa antes do disparo.` });
-      }
-
       setDashboardMetrics({
         ...(metrics || {}),
         kpis: [...(dashboardFinancial.kpis || []), ...(metrics?.whatsappTrackingKpis || [])],
@@ -729,22 +569,6 @@ export default function App() {
           lastAutoExecution: metrics?.lastAutoExecution || 'Nunca executada',
           nextRunHint: metrics?.autoChargeHour ? `Janela ${metrics.autoChargeHour}` : 'Automacao inativa',
           recentAuditAction: metrics?.recentAuditLogs?.[0]?.action || 'Sem atividade',
-          recentAuditLogs: metrics?.recentAuditLogs || [],
-          checklist: metrics?.checklist || [],
-          usersCount: settings?.usuarios?.length || 0,
-          googleSheetsConnected: status?.googleSheetsConnected || false,
-          googleSheetsSheetName: status?.googleSheetsSheetName || '',
-          googleSheetsLastSync: status?.googleSheetsLastSync || null,
-          importStatusCounts,
-          recentImports,
-          chargeStatusCounts,
-          failedMessages,
-          billingQueue,
-          criticalIssues,
-          recentEvents,
-          activityToday,
-          integrationHealth,
-          alerts: operationalAlerts,
         },
       });
       setFinancialRecords(records);
@@ -868,24 +692,13 @@ export default function App() {
       if (viewFilters.dateStart && row.data_vencimento < viewFilters.dateStart) return false;
       if (viewFilters.dateEnd && row.data_vencimento > viewFilters.dateEnd) return false;
       if (viewFilters.search) {
-        const haystack = normalizeText(`${row.nome} ${row.numero_boleto}`);
+        const haystack = normalizeText(`${row.nome} ${row.numero_boleto} ${row.documento || ''}`);
         if (!haystack.includes(normalizeText(viewFilters.search))) return false;
       }
       return true;
     });
   }, [financialRecords, viewFilters]);
 
-  const sidebarStats = useMemo(() => {
-    const today = new Date();
-    const aVencer = financialRecords
-      .filter((row) => new Date(`${row.data_vencimento}T00:00:00`) >= today && row.status !== 'liquidado')
-      .reduce((sum, row) => sum + row.valor, 0);
-    const vencidos = financialRecords
-      .filter((row) => new Date(`${row.data_vencimento}T00:00:00`) < today && row.status !== 'liquidado')
-      .reduce((sum, row) => sum + row.valor, 0);
-    const semTelefone = financialRecords.filter((row) => !String(row.telefone || '').trim()).length;
-    return { aVencer, vencidos, semTelefone };
-  }, [financialRecords]);
 
   const handleProcessImport = useCallback(async () => {
     if (!canUserPerformAction(currentUserRole, 'import_files')) {
@@ -909,6 +722,7 @@ export default function App() {
     try {
       setProcessing(true);
       setPreview(null);
+      if (import.meta.env.DEV) console.log('[IMPORTACAO] arquivo selecionado', selectedFile);
       for (const stage of ['Enviando arquivo', 'Executando OCR', 'Estruturando dados', 'Validando registros']) {
         setProcessingStage(stage);
         await sleep(180);
@@ -959,6 +773,7 @@ export default function App() {
         showToast('sucesso', 'Previa gerada com sucesso.');
       }
     } catch (error) {
+      console.error('[IMPORTACAO] erro OCR', error);
       setPreview(null);
       showToast('erro', error.message || 'Nao foi possivel processar o arquivo.');
     } finally {
@@ -1008,6 +823,7 @@ export default function App() {
       setActiveTab(importType === 'liquidacao' ? 'historico' : 'visao-geral');
       showToast('sucesso', 'Lote processado com batch_id e salvo com sucesso.');
     } catch (error) {
+      console.error('[IMPORT] erro', error);
       showToast('erro', error.message || 'Nao foi possivel importar os registros selecionados.');
     }
   }, [currentCompanyId, currentCompanyName, currentUserId, currentUserRole, importType, preview, refreshAllData, showToast]);
@@ -1409,6 +1225,7 @@ export default function App() {
       mensagem: chargePreviewModal.message,
     };
     const simulate = billingExecutionMode !== 'real';
+
     setChargePreviewSending(true);
     setChargeRows((prev) =>
       prev.map((item) => (item.id === nextRow.id ? { ...item, mensagem: nextRow.mensagem } : item))
@@ -1563,6 +1380,12 @@ export default function App() {
   const handleChoosePlan = useCallback(
     async (plan) => {
       const targetPlanCode = plan?.code || plan?.id;
+      if (import.meta.env.DEV) console.log('[App] handleChoosePlan called', {
+        planCode: targetPlanCode,
+        planName: plan?.name,
+        currentPlanId: billingOverview?.currentPlan?.id,
+        currentCompanyId,
+      });
 
       if (!targetPlanCode) {
         return;
@@ -1583,12 +1406,18 @@ export default function App() {
       const successUrl = `${baseUrl}/billing?checkout=success&plan=${encodeURIComponent(targetPlanCode)}`;
       const cancelUrl = `${baseUrl}/planos?checkout=canceled`;
 
-      const result = await createStripeCheckoutSession({
-        companyId: currentCompanyId,
-        planCode: targetPlanCode,
-        successUrl,
-        cancelUrl,
-      });
+      let result;
+      try {
+        result = await createStripeCheckoutSession({
+          companyId: currentCompanyId,
+          planCode: targetPlanCode,
+          successUrl,
+          cancelUrl,
+        });
+      } catch (err) {
+        console.error('[App] stripe checkout error:', err);
+        throw err; // propaga para BillingScreen/PlanosScreen mostrarem o toast
+      }
 
       createAuditEvent(currentCompanyId, {
         action: 'billing_checkout_started',
@@ -1605,6 +1434,7 @@ export default function App() {
         return;
       }
 
+      console.warn('[App] stripe checkout sem URL. data recebido:', result);
       showToast('erro', 'Nao foi possivel abrir o checkout Stripe. Verifique o console para detalhes.');
     },
     [billingOverview?.currentPlan?.id, currentCompanyId, currentUserId, showToast]
@@ -1650,7 +1480,7 @@ export default function App() {
 
   if (shouldBlockCompanyViews) {
     currentContent = (
-      <div className="surface-card rounded-[32px] p-10 text-center">
+      <div className="surface-card rounded-2xl p-10 text-center">
         <h2 className="text-2xl font-semibold text-slate-50">Configure sua primeira empresa</h2>
         <p className="mt-3 text-sm text-slate-300">
           Sua conta ainda nao possui uma empresa ativa. Crie uma empresa ou entre por codigo de convite para continuar usando o NC Finance sem quebrar a operacao.
@@ -2007,7 +1837,7 @@ export default function App() {
       return (
         <div className="min-h-screen bg-[#071120] px-4 py-6 lg:px-6">
           <div className="mx-auto max-w-6xl space-y-6">
-            <div className="surface-card flex flex-wrap items-center justify-between gap-3 rounded-[28px] px-5 py-4">
+            <div className="surface-card flex flex-wrap items-center justify-between gap-3 rounded-2xl px-5 py-4">
               <div>
                 <h1 className="text-2xl font-semibold text-slate-50">Planos do NC Finance</h1>
                 <p className="text-sm text-slate-300">Compare os pacotes comerciais antes do login.</p>
@@ -2059,92 +1889,101 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#071120]">
-      <div className="flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-[#060d19]">
+      <div className="flex min-h-screen flex-col lg:flex-row">
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          activeCompanyId={currentCompanyId}
-          setActiveCompanyId={empresa.setActiveCompanyId}
-          companies={empresa.companies}
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed((v) => !v)}
           activeCompany={empresa.activeCompany}
-          stats={sidebarStats}
-          billingExecutionMode={billingExecutionMode}
           isSystemAdmin={empresa.isSystemAdmin}
           canAccessBilling={empresa.isSystemAdmin || ['owner', 'admin'].includes(empresa.userRole)}
-          onOpenCompanyModal={handleOpenEmpresaModal}
-          onOpenPlans={() => setActiveTab('planos')}
         />
 
-        <div className="flex-1 px-4 py-6 lg:px-6">
-          <div className="mx-auto max-w-7xl space-y-6">
-            <Header
-              title={sectionHeader.title}
-              subtitle={sectionHeader.subtitle}
-              userEmail={auth.user?.email || ''}
-              onSignOut={handleSignOut}
-              companyName={currentCompanyName}
-              companyId={currentCompanyId}
-              onNavigate={handleHeaderNavigation}
-              onOpenNotifications={handleOpenNotifications}
-            />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Header
+            title={sectionHeader.title}
+            subtitle={sectionHeader.subtitle}
+            userEmail={auth.user?.email || ''}
+            onSignOut={handleSignOut}
+            companyId={currentCompanyId}
+            onNavigate={handleHeaderNavigation}
+            onOpenNotifications={handleOpenNotifications}
+          />
 
-            {billingOverview?.status === 'trialing' ? (
-              <div className="surface-card border-brand flex flex-col gap-3 rounded-[28px] px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Trial ativo</p>
-                  <p className="mt-1 text-sm text-slate-100">
-                    {billingOverview?.trialDaysRemaining > 0
-                      ? `Restam ${billingOverview.trialDaysRemaining} dia(s) no trial da empresa ativa.`
-                      : 'O trial termina hoje. Ative um plano para continuar operando sem interrupcao.'}
+          <main className="flex-1 px-4 py-5 lg:px-6 lg:py-5">
+            <div className="mx-auto max-w-7xl space-y-4">
+
+              <ContextBar
+                companies={empresa.companies}
+                activeCompanyId={currentCompanyId}
+                onChangeCompany={empresa.setActiveCompanyId}
+                activeCompany={empresa.activeCompany}
+                billingExecutionMode={billingExecutionMode}
+                isSystemAdmin={empresa.isSystemAdmin}
+                onOpenCompanyModal={handleOpenEmpresaModal}
+                onOpenPlans={() => setActiveTab('planos')}
+              />
+
+              {billingOverview?.status === 'trialing' ? (
+                <div className="flex flex-col gap-3 rounded-2xl border border-blue-500/20 bg-blue-500/10 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Trial ativo</p>
+                    <p className="mt-1 text-sm text-slate-200">
+                      {billingOverview?.trialDaysRemaining > 0
+                        ? `Restam ${billingOverview.trialDaysRemaining} dia(s) no trial da empresa ativa.`
+                        : 'O trial termina hoje. Ative um plano para continuar operando sem interrupcao.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('billing')}
+                    className="btn-brand rounded-xl px-4 py-2.5 text-sm font-semibold"
+                  >
+                    Ativar plano
+                  </button>
+                </div>
+              ) : null}
+
+              {billingOverview?.status === 'past_due' ? (
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-100">
+                  <p className="font-semibold text-amber-50">Pagamento pendente</p>
+                  <p className="mt-1">
+                    Identificamos uma pendencia de cobranca. Atualize a assinatura no Billing para evitar bloqueios operacionais.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('billing')}
-                  className="btn-brand rounded-2xl px-4 py-3 text-sm font-semibold"
+              ) : null}
+
+              {billingOverview?.blocked_by_limit ? (
+                <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-100">
+                  <p className="font-semibold text-red-50">Limite do plano atingido</p>
+                  <p className="mt-1">
+                    O volume mensal da empresa ativa foi consumido. Faca upgrade ou ajuste a assinatura para liberar novos envios.
+                  </p>
+                </div>
+              ) : null}
+
+              {toast && (
+                <div
+                  className={`rounded-2xl px-5 py-3.5 text-sm font-medium ${
+                    toast.type === 'erro'
+                      ? 'border border-red-500/30 bg-red-500/10 text-red-200'
+                      : 'border border-blue-500/30 bg-blue-500/10 text-blue-100'
+                  }`}
                 >
-                  Ativar plano
-                </button>
-              </div>
-            ) : null}
+                  {toast.text}
+                </div>
+              )}
 
-            {billingOverview?.status === 'past_due' ? (
-              <div className="rounded-[28px] border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-100 shadow-soft">
-                <p className="font-semibold text-amber-50">Pagamento pendente</p>
-                <p className="mt-1">
-                  Identificamos uma pendencia de cobranca. Atualize a assinatura no Billing para evitar bloqueios operacionais.
-                </p>
-              </div>
-            ) : null}
+              <ErrorBoundary>
+                <Suspense fallback={<ScreenFallback />}>
+                  {currentContent}
+                </Suspense>
+              </ErrorBoundary>
 
-            {billingOverview?.blocked_by_limit ? (
-              <div className="rounded-[28px] border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-100 shadow-soft">
-                <p className="font-semibold text-red-50">Limite do plano atingido</p>
-                <p className="mt-1">
-                  O volume mensal da empresa ativa foi consumido. Faca upgrade ou ajuste a assinatura para liberar novos envios.
-                </p>
-              </div>
-            ) : null}
-
-            {toast && (
-              <div
-                className={`rounded-2xl px-5 py-4 text-sm font-medium shadow-soft ${
-                  toast.type === 'erro'
-                    ? 'border border-red-500/30 bg-red-500/10 text-red-200'
-                    : 'border border-blue-500/30 bg-blue-500/10 text-blue-100'
-                }`}
-              >
-                {toast.text}
-              </div>
-            )}
-
-            <ErrorBoundary>
-              <Suspense fallback={<ScreenFallback />}>
-                {currentContent}
-              </Suspense>
-            </ErrorBoundary>
-          </div>
+            </div>
+          </main>
         </div>
       </div>
 

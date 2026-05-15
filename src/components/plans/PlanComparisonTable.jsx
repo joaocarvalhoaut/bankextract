@@ -5,7 +5,7 @@ export default function PlanComparisonTable({ plans = [], title = 'Comparativo d
   const rows = getComparisonRows();
 
   return (
-    <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+    <section className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
       <div className="mb-5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Comparativo</p>
         <h3 className="mt-1 text-xl font-semibold text-slate-50">{title}</h3>

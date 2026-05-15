@@ -10,7 +10,7 @@ export default function UpgradeBanner({
   if (!currentPlan || !targetPlan) return null;
 
   return (
-    <section className="surface-card rounded-[24px] border border-cyan-500/20 p-5 shadow-soft">
+    <section className="surface-card rounded-2xl border border-cyan-500/20 p-5 shadow-soft">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-300">

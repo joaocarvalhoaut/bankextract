@@ -1,10 +1,10 @@
 import { getCollectionToneOptions } from '../services/collectionMessageService';
 
 const toneClasses = {
-  amigavel: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  neutro: 'border-slate-700 bg-slate-800/40 text-slate-200',
-  firme: 'border-amber-200 bg-amber-50 text-amber-700',
-  juridico: 'border-red-200 bg-red-50 text-red-700',
+  amigavel: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300',
+  neutro:   'border-slate-700      bg-slate-800/40    text-slate-200',
+  firme:    'border-amber-500/25   bg-amber-500/10    text-amber-300',
+  juridico: 'border-red-500/25     bg-red-500/10      text-red-300',
 };
 
 export default function CollectionToneSelector({ value, onChange }) {

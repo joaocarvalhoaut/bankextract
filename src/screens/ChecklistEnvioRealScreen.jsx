@@ -22,14 +22,14 @@ import { incrementUsage } from '../services/usageService';
 function ChecklistCard({ label, value, tone = 'slate' }) {
   const palette = {
     slate: 'from-slate-400 to-slate-500 text-slate-50',
-    emerald: 'from-emerald-400 to-emerald-600 text-emerald-700',
-    blue: 'from-blue-400 to-blue-600 text-blue-700',
-    amber: 'from-amber-400 to-orange-400 text-amber-700',
-    red: 'from-red-400 to-red-600 text-red-700',
+    emerald: 'from-emerald-400 to-emerald-600 text-emerald-300',
+    blue: 'from-blue-400 to-blue-600 text-blue-300',
+    amber: 'from-amber-400 to-orange-400 text-amber-300',
+    red: 'from-red-400 to-red-600 text-red-300',
   };
 
   return (
-    <article className="relative overflow-hidden rounded-[24px] border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
+    <article className="relative overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/60 p-5 shadow-soft">
       <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${palette[tone]?.split(' text-')[0] || 'from-slate-400 to-slate-500'} opacity-80`} />
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
       <p className={`mt-2 text-3xl font-semibold ${palette[tone]?.split(' ').pop() || 'text-slate-50'}`}>{value}</p>
@@ -39,7 +39,7 @@ function ChecklistCard({ label, value, tone = 'slate' }) {
 
 function sectionTone(status, blocked) {
   if (blocked) return 'border-slate-700 bg-slate-800/40 text-slate-300';
-  return status ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-800';
+  return status ? 'border-emerald-500/25 bg-emerald-500/100/10 text-emerald-200' : 'border-red-500/25 bg-red-500/100/10 text-red-200';
 }
 
 function statusLabel(value) {
@@ -230,12 +230,12 @@ export default function ChecklistEnvioRealScreen({
 
   if (globalMode || !resolvedCompanyId) {
     return (
-      <section className="rounded-[28px] border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800 shadow-soft">
+      <section className="rounded-2xl border border-amber-500/25 bg-amber-500/100/10 p-6 text-sm text-amber-200 shadow-soft">
         <div className="flex items-start gap-3">
           <ShieldAlert className="mt-0.5" size={18} />
           <div>
             <p className="font-semibold">Selecione uma empresa especifica</p>
-            <p className="mt-1 text-xs text-amber-700">
+            <p className="mt-1 text-xs text-amber-300">
               O checklist pre-envio funciona por empresa para manter isolamento por company_id.
             </p>
           </div>
@@ -246,10 +246,10 @@ export default function ChecklistEnvioRealScreen({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+      <section className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/100/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
               <Activity size={13} />
               Pronto para envio
             </div>
@@ -272,7 +272,7 @@ export default function ChecklistEnvioRealScreen({
               type="button"
               onClick={handleSimulateBatch}
               disabled={simulating}
-              className="inline-flex items-center gap-2 rounded-2xl border border-blue-700/40 bg-blue-900/20 px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-soft transition hover:bg-blue-100 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-2xl border border-blue-700/40 bg-blue-500/10 px-4 py-2.5 text-sm font-semibold text-blue-300 shadow-soft transition hover:bg-blue-100 disabled:opacity-50"
             >
               {simulating ? <Loader2 size={15} className="animate-spin" /> : <PlayCircle size={15} />}
               Rodar nova simulacao geral
@@ -289,7 +289,7 @@ export default function ChecklistEnvioRealScreen({
             <button
               type="button"
               onClick={() => onToast?.('aviso', 'Envio real bloqueado. Configure e valide a Z-API antes de ativar.')}
-              className="inline-flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 shadow-soft transition hover:bg-red-100"
+              className="inline-flex items-center gap-2 rounded-2xl border border-red-500/25 bg-red-500/100/10 px-4 py-2.5 text-sm font-semibold text-red-300 shadow-soft transition hover:bg-red-100"
             >
               <AlertCircle size={15} />
               Ativar envio real
@@ -312,7 +312,7 @@ export default function ChecklistEnvioRealScreen({
       <section className="grid gap-6 xl:grid-cols-[1.45fr_0.95fr]">
         <div className="space-y-6">
           {Object.entries(groupedChecklist).map(([section, items]) => (
-            <article key={section} className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+            <article key={section} className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{section}</p>
@@ -351,7 +351,7 @@ export default function ChecklistEnvioRealScreen({
         </div>
 
         <div className="space-y-6">
-          <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+          <section className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Status geral</p>
             <h4 className="mt-2 text-2xl font-semibold text-slate-50">{statusLabel(data?.status_geral)}</h4>
             <p className="mt-3 text-sm leading-relaxed text-slate-300">
@@ -359,7 +359,7 @@ export default function ChecklistEnvioRealScreen({
             </p>
           </section>
 
-          <section className="rounded-[28px] border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
+          <section className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-soft">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Recomendacoes</p>
             <div className="mt-4 space-y-3">
               {(data?.recommendations || []).length ? (
@@ -369,7 +369,7 @@ export default function ChecklistEnvioRealScreen({
                   </div>
                 ))
               ) : (
-                <div className="rounded-[20px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                <div className="rounded-[20px] border border-emerald-500/25 bg-emerald-500/100/10 px-4 py-3 text-sm text-emerald-200">
                   Nenhuma recomendacao critica no momento. Continue usando simulacao ate a etapa real de integracao.
                 </div>
               )}

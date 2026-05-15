@@ -4,10 +4,10 @@ export default function HelpArticleCard({ article, onOpenTab, compact = false })
   if (!article) return null;
 
   return (
-    <article id={`help-article-${article.id}`} className={`rounded-[24px] border border-slate-700 bg-slate-900/60 shadow-soft ${compact ? 'p-4' : 'p-5'}`}>
+    <article id={`help-article-${article.id}`} className={`rounded-2xl border border-slate-700 bg-slate-900/60 shadow-soft ${compact ? 'p-4' : 'p-5'}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700">
+          <span className="inline-flex rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">
             {article.category}
           </span>
           <h3 className="mt-3 text-base font-semibold text-slate-50">{article.title}</h3>

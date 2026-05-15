@@ -1,278 +1,190 @@
-import { useEffect, useState } from 'react';
 import {
   Activity,
   BarChart3,
   BadgeCheck,
   BriefcaseBusiness,
   Building2,
+  ChevronLeft,
+  ChevronRight,
   Cog,
   CreditCard,
   History,
   Link2,
   ListChecks,
   Settings2,
-  Shield,
-  Sparkles,
   SlidersHorizontal,
   Target,
   Upload,
   WalletCards,
   Zap,
 } from 'lucide-react';
-import { getPlanMeta, getUpgradeRecommendation, normalizePlanId } from '../constants/plans';
-import SubscriptionBadge from './SubscriptionBadge';
-import { getUsageLimits } from '../services/subscriptionService';
 import BrandLockup from './branding/BrandLockup';
+import BrandLogo from './branding/BrandLogo';
 
-const items = [
-  { id: 'dashboard', label: 'Dashboard', icon: BarChart3, group: 'operacao' },
-  { id: 'onboarding', label: 'Onboarding', icon: ListChecks, group: 'operacao' },
-  { id: 'importacao', label: 'Importacao', icon: Upload, group: 'operacao' },
-  { id: 'visao-geral', label: 'Visao Geral', icon: WalletCards, group: 'operacao' },
-  { id: 'historico', label: 'Historico', icon: History, group: 'operacao' },
-  { id: 'cobrancas', label: 'Cobranca Automatica', icon: Activity, group: 'cobranca' },
-  { id: 'central-cobranca', label: 'Central Operacional', icon: Target, group: 'cobranca' },
-  { id: 'historico-cobranca', label: 'Central de Envios', icon: History, group: 'cobranca' },
-  { id: 'pronto-envio', label: 'Checklist Pre-Envio', icon: BadgeCheck, group: 'cobranca' },
-  { id: 'automacoes', label: 'Automacoes', icon: SlidersHorizontal, group: 'configuracoes' },
-  { id: 'integracoes', label: 'Integracoes', icon: Link2, group: 'configuracoes' },
-  { id: 'configuracoes', label: 'Configuracoes', icon: Cog, group: 'configuracoes' },
-  // billingAccess: visivel para owner, admin da empresa e system admin.
-  // adminOnly: reservado exclusivamente ao system admin da plataforma.
-  { id: 'planos', label: 'Planos', icon: BriefcaseBusiness, group: 'admin', billingAccess: true },
-  { id: 'billing', label: 'Billing', icon: CreditCard, group: 'admin', billingAccess: true },
-  { id: 'admin-saas', label: 'Admin SaaS', icon: Settings2, group: 'admin', adminOnly: true },
-  { id: 'admin-ops', label: 'Central Ops', icon: Zap, group: 'admin', adminOnly: true },
+const navItems = [
+  { id: 'dashboard',          label: 'Dashboard',         icon: BarChart3,         group: 'operacao' },
+  { id: 'onboarding',         label: 'Onboarding',         icon: ListChecks,        group: 'operacao' },
+  { id: 'importacao',         label: 'Importacao',         icon: Upload,            group: 'operacao' },
+  { id: 'visao-geral',        label: 'Visao Geral',        icon: WalletCards,       group: 'operacao' },
+  { id: 'historico',          label: 'Historico',          icon: History,           group: 'operacao' },
+  { id: 'cobrancas',          label: 'Cobranca Auto',      icon: Activity,          group: 'cobranca' },
+  { id: 'central-cobranca',   label: 'Central Ops',        icon: Target,            group: 'cobranca' },
+  { id: 'historico-cobranca', label: 'Central de Envios',  icon: History,           group: 'cobranca' },
+  { id: 'pronto-envio',       label: 'Checklist Envio',    icon: BadgeCheck,        group: 'cobranca' },
+  { id: 'automacoes',         label: 'Automacoes',         icon: SlidersHorizontal, group: 'config' },
+  { id: 'integracoes',        label: 'Integracoes',        icon: Link2,             group: 'config' },
+  { id: 'configuracoes',      label: 'Configuracoes',      icon: Cog,               group: 'config' },
+  { id: 'planos',             label: 'Planos',             icon: BriefcaseBusiness, group: 'admin', billingAccess: true },
+  { id: 'billing',            label: 'Billing',            icon: CreditCard,        group: 'admin', billingAccess: true },
+  { id: 'admin-saas',         label: 'Admin SaaS',         icon: Settings2,         group: 'admin', adminOnly: true },
+  { id: 'admin-ops',          label: 'Central Ops Admin',  icon: Zap,               group: 'admin', adminOnly: true },
 ];
 
 const groupLabels = {
   operacao: 'Operacao',
   cobranca: 'Cobranca',
-  configuracoes: 'Configuracoes',
-  admin: 'Admin',
+  config:   'Config.',
+  admin:    'Admin',
 };
 
-function NavGroup({ label, badge, children }) {
+const groups = ['operacao', 'cobranca', 'config', 'admin'];
+
+function NavItem({ item, isActive, collapsed, onClick }) {
+  const Icon = item.icon;
   return (
-    <div className="mb-1">
-      <div className="mb-1 ml-3 flex items-center gap-2">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
-        {badge ? (
-          <span className="badge-brand rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em]">
-            {badge}
-          </span>
-        ) : null}
-      </div>
-      {children}
-    </div>
+    <button
+      type="button"
+      title={item.label}
+      onClick={onClick}
+      className={`group relative flex h-[34px] w-full items-center gap-2.5 rounded-xl px-2.5 text-[13px] font-medium transition-colors
+        ${isActive
+          ? 'nav-active-brand'
+          : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-100'
+        }
+        ${collapsed ? 'justify-center' : ''}
+      `}
+    >
+      <Icon
+        size={15}
+        className={`flex-shrink-0 transition-colors ${isActive ? 'text-blue-400' : 'text-slate-500 group-hover:text-slate-300'}`}
+      />
+      {!collapsed && <span className="truncate">{item.label}</span>}
+    </button>
   );
 }
 
 export default function Sidebar({
   activeTab,
   setActiveTab,
-  activeCompanyId,
-  setActiveCompanyId,
-  companies,
+  collapsed = false,
+  onToggle,
   activeCompany,
-  billingExecutionMode = 'simulate',
   isSystemAdmin = false,
   canAccessBilling = false,
-  onOpenCompanyModal,
-  onOpenPlans,
 }) {
-  const groups = ['operacao', 'cobranca', 'configuracoes', 'admin'];
-  const [usageSummary, setUsageSummary] = useState(null);
-
-  useEffect(() => {
-    let alive = true;
-
-    const loadUsage = async () => {
-      if (!activeCompanyId || activeCompany?.isGlobal) {
-        if (alive) setUsageSummary(null);
-        return;
-      }
-
-      try {
-        const data = await getUsageLimits(activeCompanyId);
-        if (alive) setUsageSummary(data);
-      } catch {
-        if (alive) setUsageSummary(null);
-      }
-    };
-
-    loadUsage();
-    return () => {
-      alive = false;
-    };
-  }, [activeCompanyId, activeCompany?.isGlobal]);
-
-  const usagePercent = Number(usageSummary?.usage_percent || 0);
-  const planId = normalizePlanId(usageSummary?.plan);
-  const planMeta = getPlanMeta(planId);
-  const usedRealSends = Number(usageSummary?.used_real_sends || usageSummary?.usage?.realSends || 0);
-  const monthlyLimit = Number(usageSummary?.monthly_send_limit || usageSummary?.currentPlan?.monthly_send_limit || 0);
-  const limitReached = Boolean(usageSummary?.blocked_by_limit || usageSummary?.remainingRealSends <= 0);
-  const highUsage = !limitReached && usagePercent >= 80;
-  const upgrade = getUpgradeRecommendation(planId, {
-    monthly_send_limit: monthlyLimit,
-    extra_send_credits: Number(usageSummary?.extra_send_credits || 0),
-    used_real_sends: usedRealSends,
-  });
-
   return (
-    <aside className="text-crisp w-full border-r border-slate-700 bg-slate-900/60 lg:min-h-screen lg:w-[286px] lg:px-3 lg:py-5">
-      <div className="space-y-4 lg:sticky lg:top-0 lg:max-h-screen lg:overflow-y-auto lg:pr-1">
-        {/* ── Brand header ── */}
-        <div
-          className="overflow-hidden rounded-[26px] shadow-lifted"
-          style={{ background: 'linear-gradient(160deg, #071120 0%, #0D1B2E 60%, #071120 100%)', border: '1px solid rgba(0,93,255,0.25)' }}
-        >
-          <div className="p-4">
-            <BrandLockup variant="sidebar" />
+    <aside
+      className={`sidebar-enterprise flex-shrink-0 border-r border-slate-800/70 bg-[#060d19]
+        ${collapsed ? 'w-full lg:w-[60px]' : 'w-full lg:w-[240px]'}
+      `}
+    >
+      <div className="flex flex-col lg:sticky lg:top-0 lg:h-screen">
 
-            <div className={`mt-3 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] ${
-              billingExecutionMode === 'real'
-                ? 'border-blue-500/30 bg-blue-500/10 text-blue-300'
-                : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
-            }`}>
-              <Shield size={11} className={billingExecutionMode === 'real' ? 'text-blue-300' : 'text-amber-400'} />
-              {billingExecutionMode === 'real' ? 'Envio real ativo' : 'Simulacao ativa'}
-            </div>
+        {/* ── Zone 1: Brand Header ── */}
+        <div className={`flex h-[52px] flex-shrink-0 items-center border-b border-slate-800/70
+          ${collapsed ? 'justify-center px-0' : 'justify-between px-4'}
+        `}>
+          {collapsed ? (
+            <BrandLogo size="sm" className="flex-shrink-0" />
+          ) : (
+            <BrandLockup variant="compact" />
+          )}
 
-            <div className="mt-4 rounded-2xl p-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                <Building2 size={10} />
-                Empresa ativa
-              </label>
-              <select
-                value={activeCompanyId}
-                onChange={(e) => setActiveCompanyId(e.target.value)}
-                className="w-full rounded-xl px-3 py-2.5 text-xs font-semibold text-white outline-none"
-                style={{ background: 'rgba(0,93,255,0.15)', border: '1px solid rgba(0,93,255,0.3)', colorScheme: 'dark' }}
-              >
-                {!activeCompanyId ? <option value="">Selecione uma empresa</option> : null}
-                {companies.map((company) => (
-                  <option key={company.id} value={company.id} style={{ background: '#0D1B2E', color: '#fff' }}>
-                    {company.nome}
-                  </option>
-                ))}
-              </select>
+          <button
+            type="button"
+            onClick={onToggle}
+            title={collapsed ? 'Expandir menu' : 'Recolher menu'}
+            className={`hidden lg:flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg
+              text-slate-600 transition-colors hover:bg-slate-800/80 hover:text-slate-300
+              ${collapsed ? '' : 'ml-2'}
+            `}
+          >
+            {collapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
+          </button>
+        </div>
 
-              <div className="mt-2 text-[11px] text-slate-400">
-                {activeCompany?.isGlobal ? (
-                  <span className="rounded-lg px-2 py-1 font-semibold text-blue-300" style={{ background: 'rgba(0,93,255,0.2)' }}>Modo global ativo</span>
-                ) : (
-                  <span className="font-mono text-slate-400">{activeCompany?.cnpj || activeCompany?.inviteCode || 'Sem dados'}</span>
+        {/* ── Zone 2: Navigation ── */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-3 space-y-3">
+          {groups.map((group) => {
+            const items = navItems.filter(
+              (item) =>
+                item.group === group &&
+                (!item.adminOnly || isSystemAdmin) &&
+                (!item.billingAccess || canAccessBilling),
+            );
+            if (!items.length) return null;
+
+            return (
+              <div key={group}>
+                {!collapsed && (
+                  <p className="mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    {groupLabels[group]}
+                  </p>
                 )}
-              </div>
-
-              {isSystemAdmin ? (
-                <button
-                  type="button"
-                  onClick={() => onOpenCompanyModal?.('criar')}
-                  className="mt-2.5 w-full rounded-xl px-3 py-2 text-xs font-bold text-white shadow-sm"
-                  style={{ background: 'linear-gradient(135deg, #005DFF 0%, #14D8FF 100%)' }}
-                >
-                  + Nova empresa
-                </button>
-              ) : null}
-            </div>
-
-            {usageSummary ? (
-              <div className="mt-3 rounded-2xl p-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Uso mensal</p>
-                  {planMeta ? (
-                    <SubscriptionBadge planId={planId} size="xs" />
-                  ) : null}
+                <div className="space-y-0.5">
+                  {items.map((item) => (
+                    <NavItem
+                      key={item.id}
+                      item={item}
+                      isActive={activeTab === item.id}
+                      collapsed={collapsed}
+                      onClick={() => setActiveTab(item.id)}
+                    />
+                  ))}
                 </div>
-                <div className="mb-1.5 flex items-center justify-between text-[11px]">
-                  <span className="text-slate-400">{usedRealSends} de {monthlyLimit > 0 ? monthlyLimit : '∞'} envios</span>
-                  <span className={limitReached ? 'font-bold text-red-400' : highUsage ? 'font-bold text-amber-400' : 'text-slate-400'}>
-                    {limitReached ? 'Limite atingido' : `${Math.round(usagePercent)}%`}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ── Zone 3: Footer ── */}
+        <div className={`flex-shrink-0 border-t border-slate-800/70 py-3
+          ${collapsed ? 'flex items-center justify-center px-2' : 'px-3'}
+        `}>
+          {collapsed ? (
+            <div className="h-1.5 w-1.5 rounded-full bg-slate-800" />
+          ) : (
+            <>
+              {activeCompany && (
+                <div className="mb-2 flex min-w-0 items-center gap-1.5">
+                  <Building2 size={10} className="flex-shrink-0 text-slate-500" />
+                  <span className="truncate text-[11px] text-slate-600">
+                    {activeCompany.isGlobal ? 'Todas as empresas' : (activeCompany.nome || 'Sem empresa')}
                   </span>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,0.1)' }}>
-                  <div
-                    className="h-full rounded-full transition-all duration-700"
-                    style={{
-                      width: `${Math.min(usagePercent, 100)}%`,
-                      background: limitReached ? '#EF4444' : highUsage ? '#F59E0B' : 'linear-gradient(90deg, #005DFF, #14D8FF)',
-                    }}
-                  />
-                </div>
-                {upgrade?.message ? (
-                  <button
-                    type="button"
-                    onClick={onOpenPlans}
-                    className="mt-2 w-full rounded-lg px-2 py-1.5 text-[10px] font-bold text-white"
-                    style={{ background: 'linear-gradient(135deg, #005DFF 0%, #14D8FF 100%)' }}
-                  >
-                    <Sparkles size={9} className="mr-1 inline" />
-                    {upgrade.message}
-                  </button>
-                ) : null}
+              )}
+              <div className="flex items-center gap-x-3 text-[10px] text-slate-500">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('privacy')}
+                  className="transition-colors hover:text-slate-400"
+                >
+                  Privacidade
+                </button>
+                <span aria-hidden>·</span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('terms')}
+                  className="transition-colors hover:text-slate-400"
+                >
+                  Termos
+                </button>
               </div>
-            ) : null}
-          </div>
+            </>
+          )}
         </div>
 
-        {groups.map((group) => {
-          const groupItems = items.filter(
-            (item) =>
-              item.group === group &&
-              (!item.adminOnly || isSystemAdmin) &&
-              (!item.billingAccess || canAccessBilling)
-          );
-          if (!groupItems.length) return null;
-
-          return (
-            <NavGroup key={group} label={groupLabels[group]}>
-              {groupItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setActiveTab(item.id)}
-                    className={`flex min-h-11 w-full items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'nav-active-brand'
-                        : 'text-slate-300 hover:bg-slate-800/60 hover:text-slate-50'
-                    }`}
-                  >
-                    <Icon size={16} className={isActive ? 'text-blue-600' : 'text-slate-400'} />
-                    {item.label}
-                  </button>
-                );
-              })}
-            </NavGroup>
-          );
-        })}
       </div>
-
-        {/* ── Rodapé LGPD ─────────────────────────────────────── */}
-        <div className="mt-4 border-t border-slate-700/40 px-4 pb-4 pt-3">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <button
-              type="button"
-              onClick={() => setActiveTab('privacy')}
-              className="text-[10px] text-slate-500 transition hover:text-slate-300"
-            >
-              Privacidade
-            </button>
-            <span className="text-slate-700 text-[10px]">·</span>
-            <button
-              type="button"
-              onClick={() => setActiveTab('terms')}
-              className="text-[10px] text-slate-500 transition hover:text-slate-300"
-            >
-              Termos
-            </button>
-          </div>
-        </div>
     </aside>
   );
 }

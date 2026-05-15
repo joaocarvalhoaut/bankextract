@@ -16,10 +16,26 @@ import {
   getBillingHistory,
   simulateChargeItem,
 } from '../services/billingAutomationService';
-import { PageShell, ScreenHeader } from '../components/ui/layout';
-import { OperationalMetric, OperationalPanel } from '../components/ui/operational';
 import { canUserPerformAction } from '../security/permissions';
 import { formatCurrencyBRL, formatDateBR, formatDateTimeBR } from '../utils/format';
+
+function HistoryCard({ label, value, tone = 'slate' }) {
+  const palette = {
+    slate: 'from-slate-400 to-slate-500 text-slate-50',
+    emerald: 'from-emerald-400 to-emerald-600 text-emerald-300',
+    blue: 'from-blue-400 to-blue-600 text-blue-300',
+    amber: 'from-amber-400 to-orange-400 text-amber-300',
+    red: 'from-red-400 to-red-600 text-red-300',
+  };
+
+  return (
+    <article className="relative overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900/60 p-5 shadow-card">
+      <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${palette[tone]?.split(' text-')[0] || 'from-slate-400 to-slate-500'} opacity-80`} />
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
+      <p className={`mt-2 text-3xl font-semibold ${palette[tone]?.split(' ').pop() || 'text-slate-50'}`}>{value}</p>
+    </article>
+  );
+}
 
 function FilterField({ label, children }) {
   return (
@@ -32,15 +48,15 @@ function FilterField({ label, children }) {
 
 function statusTone(status) {
   const normalized = String(status || 'pendente').toLowerCase();
-  if (['sucesso', 'sucesso_simulado', 'simulado'].includes(normalized)) return 'bg-emerald-950/30 text-emerald-300 ring-emerald-500/20';
-  if (normalized === 'erro') return 'bg-red-950/30 text-red-300 ring-red-500/20';
-  if (normalized === 'ignorado') return 'bg-amber-950/30 text-amber-300 ring-amber-500/20';
-  return 'bg-slate-800/60 text-slate-200 ring-slate-700';
+  if (['sucesso', 'sucesso_simulado', 'simulado'].includes(normalized)) return 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/25';
+  if (normalized === 'erro') return 'bg-red-500/10 text-red-300 ring-red-500/25';
+  if (normalized === 'ignorado') return 'bg-amber-500/10 text-amber-300 ring-amber-500/25';
+  return 'bg-slate-800/40 text-slate-300 ring-slate-700/60';
 }
 
 function getPayloadMessage(payload) {
   if (!payload || typeof payload !== 'object') return '';
-  return payload.message_preview || payload.message || payload.mensagem || payload.caption || payload.generated_message || payload.mensagem_gerada || '';
+  return payload.message || payload.mensagem || payload.caption || payload.generated_message || payload.mensagem_gerada || '';
 }
 
 function toCsvValue(value) {
@@ -281,7 +297,7 @@ export default function HistoricoCobrancaScreen({
     {
       key: 'valor',
       label: 'Valor',
-      render: (row) => <span className="font-semibold text-slate-50">{formatCurrencyBRL(row.valor || 0)}</span>,
+      render: (row) => <span className="font-mono tabular-nums font-semibold text-slate-50">{formatCurrencyBRL(row.valor || 0)}</span>,
     },
     {
       key: 'tipo_cobranca',
@@ -360,12 +376,12 @@ export default function HistoricoCobrancaScreen({
 
   if (globalMode || !resolvedCompanyId) {
     return (
-      <section className="rounded-3xl border border-amber-500/20 bg-amber-500/10 p-6 text-sm text-amber-200">
+      <section className="rounded-2xl border border-amber-500/25 bg-amber-500/10 p-6 text-sm text-amber-300">
         <div className="flex items-start gap-3">
           <ShieldAlert className="mt-0.5" size={18} />
           <div>
             <p className="font-semibold">Selecione uma empresa especifica</p>
-            <p className="mt-1 text-xs text-amber-300">
+            <p className="mt-1 text-xs text-amber-400">
               O historico de cobrancas trabalha por empresa para manter isolamento por company_id.
             </p>
           </div>
@@ -375,24 +391,25 @@ export default function HistoricoCobrancaScreen({
   }
 
   return (
-    <PageShell>
-      <ScreenHeader
-        breadcrumb={['Auditoria', 'Historico de cobrancas']}
-        title="Auditoria operacional da regua"
-        description={`Visao completa das simulacoes e eventos registrados para a empresa ${companyName}.`}
-        status={
-          <span className="inline-flex items-center gap-2 rounded-full border border-blue-700/30 bg-blue-950/30 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-blue-300">
-            <FileSpreadsheet size={12} />
-            Historico de cobrancas
-          </span>
-        }
-        actions={
-          <>
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-6 shadow-card">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/25 bg-blue-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.10em] text-blue-300">
+              <FileSpreadsheet size={13} />
+              Historico de cobrancas
+            </div>
+            <h3 className="mt-4 text-2xl font-semibold text-slate-50">Auditoria operacional da regua</h3>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-300">
+              Visao completa das simulacoes e eventos registrados para a empresa <span className="font-semibold text-slate-50">{companyName}</span>.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => loadHistory(pagination.page, appliedFilters)}
               disabled={loading}
-              className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-800/40 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-soft transition hover:bg-slate-800/40 disabled:opacity-50"
             >
               {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCcw size={15} />}
               Atualizar historico
@@ -401,29 +418,27 @@ export default function HistoricoCobrancaScreen({
               type="button"
               onClick={handleExportCsv}
               disabled={exporting}
-              className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-slate-800 disabled:opacity-50"
             >
               {exporting ? <Loader2 size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}
               Exportar historico CSV
             </button>
-          </>
-        }
-      />
-
-      <div className="space-y-6">
-
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <OperationalMetric label="Simulacoes hoje" value={cards.simulacoes_hoje || 0} hint="Execucoes do dia" tone="processing" />
-        <OperationalMetric label="Simulacoes 7 dias" value={cards.simulacoes_ultimos_7_dias || 0} hint="Janela curta" tone="success" />
-        <OperationalMetric label="Sucesso" value={cards.sucesso || 0} hint="Envios concluidos" tone="success" />
-        <OperationalMetric label="Erros" value={cards.erros || 0} hint="Falhas registradas" tone="danger" />
-        <OperationalMetric label="Com boleto" value={cards.com_boleto || 0} hint="Arquivo identificado" tone="processing" />
-        <OperationalMetric label="Sem boleto" value={cards.sem_boleto || 0} hint="Pendencia de anexo" tone="warning" />
-        <OperationalMetric label="Pendentes" value={cards.pendentes || 0} hint="Aguardando tratativa" tone="warning" />
-        <OperationalMetric label="Resolvidos" value={cards.resolvidos || 0} hint="Ciclo encerrado" tone="info" />
+          </div>
+        </div>
       </section>
 
-      <OperationalPanel title="Filtros do historico" subtitle="Refine cliente, janela, status e disponibilidade de boleto.">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <HistoryCard label="Simulacoes hoje" value={cards.simulacoes_hoje || 0} tone="blue" />
+        <HistoryCard label="Simulacoes 7 dias" value={cards.simulacoes_ultimos_7_dias || 0} tone="emerald" />
+        <HistoryCard label="Sucesso" value={cards.sucesso || 0} tone="emerald" />
+        <HistoryCard label="Erros" value={cards.erros || 0} tone="red" />
+        <HistoryCard label="Com boleto" value={cards.com_boleto || 0} tone="blue" />
+        <HistoryCard label="Sem boleto" value={cards.sem_boleto || 0} tone="amber" />
+        <HistoryCard label="Pendentes" value={cards.pendentes || 0} tone="amber" />
+        <HistoryCard label="Resolvidos" value={cards.resolvidos || 0} tone="slate" />
+      </section>
+
+      <section className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-6 shadow-card">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <FilterField label="Data inicial">
             <input type="date" value={filters.date_from} onChange={(e) => setFilters((prev) => ({ ...prev, date_from: e.target.value }))} className="input-premium w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-50 outline-none focus:ring-2 focus:ring-emerald-500" />
@@ -472,9 +487,9 @@ export default function HistoricoCobrancaScreen({
             </button>
           </div>
         </div>
-      </OperationalPanel>
+      </section>
 
-      <OperationalPanel title="Registros auditados" subtitle="Historico de simulacoes, erros, ignorados e detalhes do payload.">
+      <section className="rounded-2xl border border-slate-700/80 bg-slate-900/60 p-6 shadow-card">
         <DataTable
           columns={columns}
           rows={items}
@@ -507,11 +522,11 @@ export default function HistoricoCobrancaScreen({
             </button>
           </div>
         </div>
-      </OperationalPanel>
+      </section>
 
       {detailsRow ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-3xl border border-slate-700/60 bg-slate-950 shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-700/80 bg-[#0d1b2e] shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-slate-700/60 px-6 py-5">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Detalhes do log</p>
@@ -523,7 +538,7 @@ export default function HistoricoCobrancaScreen({
               </button>
             </div>
             <div className="grid gap-6 px-6 py-6 lg:grid-cols-[1.1fr_1.2fr]">
-              <div className="space-y-3 rounded-2xl border border-slate-700/60 bg-slate-900/70 p-5">
+              <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-800/40 p-5">
                 {[
                   ['Cliente', detailsRow.cliente_nome || '-'],
                   ['Telefone', detailsRow.telefone || '-'],
@@ -539,29 +554,29 @@ export default function HistoricoCobrancaScreen({
                   ['Erro', detailsRow.erro || '-'],
                 ].map(([label, value]) => (
                   <div key={label} className="flex items-start justify-between gap-3 border-b border-slate-700/40 pb-2 text-sm last:border-b-0 last:pb-0">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</span>
-                    <span className="text-right font-mono font-semibold tabular-nums text-slate-50">{value}</span>
+                    <span className="font-medium text-slate-500">{label}</span>
+                    <span className="text-right font-semibold text-slate-50">{value}</span>
                   </div>
                 ))}
               </div>
               <div className="space-y-4">
                 {payloadMessage ? (
-                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-950/20 p-5">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Mensagem gerada</p>
-                    <pre className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-100">{payloadMessage}</pre>
+                  <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.10em] text-emerald-400">Mensagem gerada</p>
+                    <pre className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-emerald-200">{payloadMessage}</pre>
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-amber-500/20 bg-amber-950/20 p-5 text-sm text-amber-200">
+                  <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-5 text-sm text-amber-300">
                     <div className="flex items-start gap-2">
                       <AlertCircle size={16} className="mt-0.5" />
                       <div>
                         <p className="font-semibold">Payload sem mensagem destacada</p>
-                        <p className="mt-1 text-xs text-amber-300">Este log nao possui mensagem gerada no payload. Veja o JSON completo abaixo.</p>
+                        <p className="mt-1 text-xs text-amber-400">Este log nao possui mensagem gerada no payload. Veja o JSON completo abaixo.</p>
                       </div>
                     </div>
                   </div>
                 )}
-                <div className="rounded-2xl border border-slate-700/60 bg-slate-900/70 p-5">
+                <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-5">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Payload formatado</p>
                   <pre className="mt-3 max-h-[360px] overflow-auto rounded-2xl border border-slate-700 bg-slate-950 p-4 text-xs leading-relaxed text-slate-100">
                     {detailsRow.payload ? JSON.stringify(detailsRow.payload, null, 2) : 'Nenhum payload registrado para este log.'}
@@ -600,7 +615,6 @@ export default function HistoricoCobrancaScreen({
           </div>
         </div>
       ) : null}
-      </div>
-    </PageShell>
+    </div>
   );
 }

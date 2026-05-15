@@ -120,7 +120,7 @@ export default function WhatsAppChargeModal({ modal, onClose, onUpdateMessage, o
 
   return (
     <div className="modal-overlay fixed inset-0 z-[140] flex items-start justify-center overflow-y-auto px-4 pb-10 pt-6 sm:pt-8">
-      <div className="modal-shell w-full max-w-4xl overflow-hidden rounded-[32px]">
+      <div className="modal-shell w-full max-w-4xl overflow-hidden rounded-2xl">
         <div className="hero-mesh border-b border-slate-700/50 px-5 py-5 sm:px-6">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3">
@@ -156,7 +156,7 @@ export default function WhatsAppChargeModal({ modal, onClose, onUpdateMessage, o
 
         <div className="max-h-[min(78vh,720px)] space-y-3 overflow-y-auto px-5 py-5 sm:px-6">
           {records.length === 0 ? (
-            <div className="empty-state rounded-[28px] px-6 py-12 text-center shadow-inner">
+            <div className="empty-state rounded-2xl px-6 py-12 text-center shadow-inner">
               <p className="text-base font-semibold text-slate-50">Nenhum registro elegivel encontrado</p>
               <p className="mt-2 text-sm text-slate-500">Revise os filtros da carteira, telefone e status antes de gerar novas cobrancas.</p>
             </div>
@@ -173,7 +173,7 @@ export default function WhatsAppChargeModal({ modal, onClose, onUpdateMessage, o
                 : 'surface-panel';
 
               return (
-                <div key={row.id} className={`rounded-[28px] px-4 py-4 shadow-sm transition hover:-translate-y-0.5 ${tone}`}>
+                <div key={row.id} className={`rounded-2xl px-4 py-4 shadow-sm transition hover:-translate-y-0.5 ${tone}`}>
                   <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-slate-50">{row.nome}</p>

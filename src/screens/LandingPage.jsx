@@ -122,7 +122,7 @@ function InfoCard({ icon: Icon, title, description, tone = 'blue' }) {
     tone === 'red' ? 'bg-red-50 text-red-600' : 'bg-blue-900/30 text-blue-300';
 
   return (
-    <article className="fade-up rounded-[24px] border border-cyan-500/10 bg-slate-900/60 p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card">
+    <article className="fade-up rounded-2xl border border-cyan-500/10 bg-slate-900/60 p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card">
       <div className={`mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl ${toneClass}`}>
         <Icon size={20} />
       </div>
@@ -226,7 +226,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
               <div className="absolute -left-10 top-10 h-40 w-40 rounded-full bg-blue-200/45 blur-3xl" />
               <div className="absolute -right-6 bottom-6 h-40 w-40 rounded-full bg-cyan-200/45 blur-3xl" />
               <div className="relative rounded-[34px] border border-cyan-500/20 bg-slate-800/50 p-4 shadow-[0_34px_90px_rgba(0,0,0,0.5)] md:p-5">
-                <div className="surface-card rounded-[28px] p-5">
+                <div className="surface-card rounded-2xl p-5">
                   <div className="mb-5 flex items-center justify-between">
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Painel operacional</p>
@@ -285,7 +285,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
           </div>
         </section>
 
-        <section className="rounded-[32px] border border-cyan-500/10 bg-slate-900/60 px-8 py-8 shadow-soft md:px-10 xl:px-14">
+        <section className="rounded-2xl border border-cyan-500/10 bg-slate-900/60 px-8 py-8 shadow-soft md:px-10 xl:px-14">
           <div className="grid gap-6 xl:grid-cols-[1fr_auto] xl:items-end">
             <div className="fade-up">
               <h2 className="text-2xl font-bold tracking-tight text-slate-50 md:text-3xl">
@@ -313,7 +313,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
           </div>
         </section>
 
-        <section className="rounded-[32px] border border-cyan-500/10 bg-slate-900/60 p-8 shadow-soft lg:p-10">
+        <section className="rounded-2xl border border-cyan-500/10 bg-slate-900/60 p-8 shadow-soft lg:p-10">
           <div className="max-w-3xl fade-up">
             <SectionBadge>Problema</SectionBadge>
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-50">
@@ -327,7 +327,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
           </div>
         </section>
 
-        <section id="recursos" className="rounded-[32px] border border-cyan-500/10 bg-slate-800/40 px-8 py-10 shadow-soft lg:px-10">
+        <section id="recursos" className="rounded-2xl border border-cyan-500/10 bg-slate-800/40 px-8 py-10 shadow-soft lg:px-10">
           <div className="max-w-3xl fade-up">
             <SectionBadge>Solucao em modulos</SectionBadge>
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-50">
@@ -344,7 +344,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
           </div>
         </section>
 
-        <section id="como-funciona" className="rounded-[32px] border border-cyan-500/10 bg-slate-900/60 px-8 py-10 shadow-soft lg:px-10">
+        <section id="como-funciona" className="rounded-2xl border border-cyan-500/10 bg-slate-900/60 px-8 py-10 shadow-soft lg:px-10">
           <div className="max-w-3xl fade-up">
             <SectionBadge>Como funciona na pratica</SectionBadge>
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-50">Como funciona na pratica</h2>
@@ -357,7 +357,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
             {practicalFlow.map((item) => (
               <article
                 key={item.step}
-                className="fade-up relative rounded-[26px] border border-cyan-500/10 bg-slate-800/40 p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card"
+                className="fade-up relative rounded-2xl border border-cyan-500/10 bg-slate-800/40 p-6 shadow-soft transition duration-200 hover:-translate-y-1 hover:shadow-card"
               >
                 <div className="mb-5 flex items-center gap-4">
                   <div className="brand-gradient flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white shadow-lg shadow-blue-900/20">
@@ -374,10 +374,10 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
           </div>
         </section>
 
-        <section id="clientes" className="rounded-[32px] border border-cyan-500/10 bg-slate-900/60 p-8 shadow-soft lg:p-10">
+        <section id="clientes" className="rounded-2xl border border-cyan-500/10 bg-slate-900/60 p-8 shadow-soft lg:p-10">
           <div className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr] xl:items-center">
-            <div className="fade-up rounded-[28px] border border-cyan-500/10 bg-slate-800/40 p-5 shadow-soft">
-              <div className="rounded-[24px] border border-cyan-500/10 bg-slate-900/60 p-5 shadow-soft">
+            <div className="fade-up rounded-2xl border border-cyan-500/10 bg-slate-800/40 p-5 shadow-soft">
+              <div className="rounded-2xl border border-cyan-500/10 bg-slate-900/60 p-5 shadow-soft">
                 <div className="grid gap-5 lg:grid-cols-[240px_1fr]">
                   <div className="rounded-[22px] border border-cyan-500/10 bg-slate-800/40 p-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Sidebar resumida</p>
@@ -416,7 +416,7 @@ export default function LandingPage({ onStartNow, onOpenPlans, isAuthenticated =
           </div>
         </section>
 
-        <footer className="rounded-[28px] border border-cyan-500/10 bg-slate-900/50 px-6 py-5 text-sm text-slate-400">
+        <footer className="rounded-2xl border border-cyan-500/10 bg-slate-900/50 px-6 py-5 text-sm text-slate-400">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <p>NC Finance by NC HUB &middot; Operacao, cobranca e automacao empresarial.</p>
             <div className="flex flex-wrap items-center gap-4">

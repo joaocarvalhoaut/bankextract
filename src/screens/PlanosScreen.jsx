@@ -68,7 +68,7 @@ export default function PlanosScreen({ plans = [], currentPlanId, onChoosePlan, 
         />
       ) : null}
 
-      <section className="surface-card rounded-[32px] px-8 py-8 text-center">
+      <section className="surface-card rounded-2xl px-8 py-8 text-center">
         <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">
           <Sparkles size={13} />
           Planos e faturamento
@@ -80,7 +80,7 @@ export default function PlanosScreen({ plans = [], currentPlanId, onChoosePlan, 
       </section>
 
       {companyId && usageSummary ? (
-        <section className="surface-card rounded-[32px] p-6">
+        <section className="surface-card rounded-2xl p-6">
           <div className="mb-5">
             <h3 className="text-lg font-semibold text-slate-50">Consumo comercial da empresa ativa</h3>
             <p className="text-sm text-slate-400">Acompanhe uso atual, limite do plano e o que ainda resta no ciclo.</p>

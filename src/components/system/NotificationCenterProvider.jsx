@@ -55,7 +55,7 @@ function NotificationCenterViewport({ notifications }) {
         return (
           <div
             key={item.id}
-            className={`pointer-events-auto overflow-hidden rounded-[24px] border px-4 py-4 shadow-2xl backdrop-blur ${tone.wrapper}`}
+            className={`pointer-events-auto overflow-hidden rounded-2xl border px-4 py-4 shadow-2xl backdrop-blur ${tone.wrapper}`}
           >
             <div className="flex items-start gap-3">
               <div className={`mt-0.5 ${tone.accent}`}>

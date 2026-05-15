@@ -65,7 +65,7 @@ export default function ClearOverviewModal({
         </div>
 
         <div className="space-y-5 px-6 py-6">
-          <div className="notice-danger rounded-[26px] p-5 shadow-sm">
+          <div className="notice-danger rounded-2xl p-5 shadow-sm">
             <div className="flex items-start gap-3">
               <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-600" />
               <div className="space-y-2 text-sm">

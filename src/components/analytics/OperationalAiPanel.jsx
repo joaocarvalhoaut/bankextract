@@ -8,7 +8,7 @@ const riskTone = {
 
 export default function OperationalAiPanel({ loading = false, insights = [], riskScore = '', tones = [] }) {
   return (
-    <article className="surface-card rounded-[28px] p-6 shadow-soft">
+    <article className="surface-card rounded-2xl p-6 shadow-soft">
       <div className="mb-5 flex items-center justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold text-slate-50">Central IA operacional</h3>

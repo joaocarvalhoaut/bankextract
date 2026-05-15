@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  AlertTriangle,
   ChevronDown,
   CircleCheck,
   CircleDashed,
@@ -289,14 +290,21 @@ function ZapiIntegrationCard({
     try {
       const result = await getCompanyIntegrationStatus(companyId, form);
       const connected = Boolean(result?.connected);
+      const phoneNumber = String(result?.phone_number || '').trim();
       setForm((current) => ({
         ...current,
         connected,
-        phone_number: result?.phone_number || current.phone_number,
+        phone_number: phoneNumber || current.phone_number,
       }));
       setStatus(connected ? 'conectado' : 'aguardando_qr');
       setIntegrationMessage(String(result?.message || ''));
       setLastValidatedAt(new Date().toISOString());
+      // Auto-persist phone_number when live check returns it
+      if (connected && phoneNumber) {
+        await saveCompanyIntegration(companyId, { ...form, connected, phone_number: phoneNumber }, 'zapi').catch(() => {});
+      } else if (!connected) {
+        await saveCompanyIntegration(companyId, { ...form, connected: false }, 'zapi').catch(() => {});
+      }
       onToast?.('sucesso', result?.message || 'Status da integracao atualizado.');
     } catch (error) {
       setStatus('erro');
@@ -341,16 +349,16 @@ function ZapiIntegrationCard({
 
   if (globalMode || !companyId) {
     return (
-      <section className="rounded-[28px] border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800 shadow-soft">
+      <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800 shadow-soft">
         Selecione uma empresa especifica para configurar a integracao WhatsApp Business (Z-API).
       </section>
     );
   }
 
   return (
-    <section className="text-crisp group rounded-[32px] border border-slate-700/90 bg-slate-900/60 p-7 shadow-[0_22px_70px_rgba(15,23,42,0.08)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_28px_90px_rgba(15,23,42,0.1)] lg:p-8">
+    <section className="text-crisp group rounded-2xl border border-slate-700/90 bg-slate-900/60 p-7 shadow-[0_22px_70px_rgba(15,23,42,0.08)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_28px_90px_rgba(15,23,42,0.1)] lg:p-8">
       <div className="flex items-start gap-4">
-        <div className="flex h-14 w-14 items-center justify-center rounded-[24px] bg-blue-900/20 text-blue-700 shadow-sm ring-1 ring-blue-100">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-900/20 text-blue-700 shadow-sm ring-1 ring-blue-100">
           <Smartphone size={22} />
         </div>
         <div className="flex-1">
@@ -366,7 +374,7 @@ function ZapiIntegrationCard({
         </div>
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-[28px] border border-slate-700 bg-slate-800/50 shadow-inner">
+      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-700 bg-slate-800/50 shadow-inner">
         <button
           type="button"
           onClick={() => setHelperOpen((current) => !current)}
@@ -496,7 +504,7 @@ function ZapiIntegrationCard({
         </div>
 
         {editingCredentials ? (
-          <div className="grid grid-cols-1 gap-4 rounded-[28px] border border-slate-700 bg-slate-800/50 p-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-700 bg-slate-800/50 p-5 md:grid-cols-2">
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-slate-200">Instance ID</span>
               <input
@@ -555,10 +563,35 @@ function ZapiIntegrationCard({
         </span>
       </div>
 
+      {form.connected && !form.phone_number && (
+        <div className="mt-4 rounded-2xl border border-amber-700/50 bg-amber-950/30 px-4 py-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-amber-300">Credenciais válidas, mas WhatsApp ainda não pareado</p>
+              <p className="text-xs text-amber-400/80 mt-1">
+                A instância Z-API está acessível, mas nenhum número foi vinculado. Gere o QR Code abaixo e escaneie com o WhatsApp para ativar os envios.
+              </p>
+              <button
+                type="button"
+                onClick={handleRefreshStatus}
+                disabled={statusLoading}
+                className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-amber-300 hover:text-amber-200 disabled:opacity-50"
+              >
+                <RefreshCw size={11} className={statusLoading ? 'animate-spin' : ''} />
+                Atualizar status agora
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-4 text-sm text-slate-300 shadow-sm">
+        <div className={`rounded-2xl border px-4 py-4 text-sm shadow-sm ${form.connected && !form.phone_number ? 'border-amber-700/40 bg-amber-950/10' : 'border-slate-700 bg-slate-800/40'} text-slate-300`}>
           <span className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Numero conectado</span>
-          <span className="mt-2 block font-semibold text-slate-50">{form.phone_number || 'Aguardando conexao'}</span>
+          <span className={`mt-2 block font-semibold ${form.phone_number ? 'text-slate-50' : 'text-amber-300'}`}>
+            {form.phone_number || 'Aguardando pareamento QR Code'}
+          </span>
         </div>
         <div className="rounded-2xl border border-slate-700 bg-slate-800/40 px-4 py-4 text-sm text-slate-300 shadow-sm">
           <span className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ultima validacao</span>
@@ -705,7 +738,7 @@ export default function IntegracoesScreen({
 
   return (
     <div className="space-y-6">
-      <section className="hero-mesh overflow-hidden rounded-[32px] border border-slate-700 bg-slate-900/60 p-6 shadow-lifted lg:p-8">
+      <section className="hero-mesh overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/60 p-6 shadow-lifted lg:p-8">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-700/40 bg-blue-900/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
@@ -773,7 +806,7 @@ export default function IntegracoesScreen({
       </section>
 
       {!globalMode && companyId ? (
-        <section className="rounded-[32px] border border-slate-700/90 bg-slate-900/60 p-7 shadow-card">
+        <section className="rounded-2xl border border-slate-700/90 bg-slate-900/60 p-7 shadow-card">
           <div className="mb-5 flex items-start gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-[20px] bg-amber-500/10 text-amber-400 shadow-soft">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

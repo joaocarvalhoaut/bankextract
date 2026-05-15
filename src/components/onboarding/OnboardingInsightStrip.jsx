@@ -12,7 +12,7 @@ export default function OnboardingInsightStrip({ items = [] }) {
       {items.map((item) => (
         <article
           key={item.id}
-          className={`rounded-[24px] border px-4 py-4 shadow-soft ${toneMap[item.tone] || toneMap.info}`}
+          className={`rounded-2xl border px-4 py-4 shadow-soft ${toneMap[item.tone] || toneMap.info}`}
         >
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-80">{item.label}</p>
           <p className="mt-2 text-xl font-semibold">{item.value}</p>

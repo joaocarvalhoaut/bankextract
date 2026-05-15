@@ -282,10 +282,16 @@ const buildMessage = ({
 };
 
 // Resolve modo mock vs. real com base no secret ENABLE_MOCK_WHATSAPP.
-// Retorna objeto compatível com o resto do código (mocked, url, clientToken).
-const resolveZApiConfig = (): { mocked: boolean; url: string | null; clientToken: string | null } => {
+// Retorna objeto compatível com o resto do código (mocked, url, clientToken, instanceId, zapiToken).
+const resolveZApiConfig = (): {
+  mocked: boolean;
+  url: string | null;
+  clientToken: string | null;
+  instanceId: string | null;
+  zapiToken: string | null;
+} => {
   if (Deno.env.get('ENABLE_MOCK_WHATSAPP') === 'true') {
-    return { mocked: true, url: null, clientToken: null };
+    return { mocked: true, url: null, clientToken: null, instanceId: null, zapiToken: null };
   }
 
   const instanceId  = Deno.env.get('ZAPI_INSTANCE_ID');
@@ -303,11 +309,151 @@ const resolveZApiConfig = (): { mocked: boolean; url: string | null; clientToken
     mocked: false,
     url: `https://api.z-api.io/instances/${instanceId}/token/${zapiToken}/send-text`,
     clientToken,
+    instanceId,
+    zapiToken,
   };
 };
 
 // Alias para compatibilidade com o resto do arquivo
 const buildZApiUrl = resolveZApiConfig;
+
+// ── Z-API pairing gate ──────────────────────────────────────────────────────
+async function checkZapiPairing(
+  zapi: { mocked: boolean; instanceId: string | null; zapiToken: string | null; clientToken: string | null },
+): Promise<{ connected: boolean; reason: string }> {
+  if (zapi.mocked || !zapi.instanceId || !zapi.zapiToken || !zapi.clientToken) {
+    return { connected: true, reason: 'mocked_or_no_config' };
+  }
+
+  try {
+    const statusUrl = `https://api.z-api.io/instances/${zapi.instanceId}/token/${zapi.zapiToken}/status`;
+    const response = await withTimeout(
+      (signal) =>
+        fetch(statusUrl, {
+          method: 'GET',
+          signal,
+          headers: { 'Client-Token': zapi.clientToken! },
+        }),
+      15000,
+      'Timeout ao verificar status Z-API.',
+    );
+
+    if (!response.ok) {
+      const s = response.status;
+      if (s === 401 || s === 403) return { connected: false, reason: `Credenciais Z-API inválidas (HTTP ${s}).` };
+      return { connected: false, reason: `Z-API retornou HTTP ${s}.` };
+    }
+
+    const data = await response.json().catch(() => ({}));
+    const connected = data?.connected === true || String(data?.status || '').toLowerCase() === 'connected';
+    return {
+      connected,
+      reason: connected ? 'ok' : `WhatsApp desconectado (status: ${data?.status ?? 'unknown'}).`,
+    };
+  } catch (err) {
+    return {
+      connected: false,
+      reason: err instanceof Error ? err.message : 'Falha ao verificar status Z-API.',
+    };
+  }
+}
+
+// ── Circuit breaker (per-company Z-API state) ───────────────────────────────
+async function checkCircuitBreaker(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  companyId: string,
+): Promise<{ open: boolean; reason: string }> {
+  const { data, error } = await supabaseAdmin
+    .from('zapi_circuit_state')
+    .select('state, opened_at, failure_count')
+    .eq('company_id', companyId)
+    .eq('provider', 'zapi')
+    .maybeSingle();
+
+  if (error || !data) return { open: false, reason: 'no_state' };
+  if (data.state !== 'open') return { open: false, reason: 'closed' };
+
+  // Auto-reset after 15 minutes
+  const openedAt = data.opened_at ? new Date(data.opened_at).getTime() : 0;
+  if (Date.now() - openedAt > 15 * 60 * 1000) {
+    await supabaseAdmin.from('zapi_circuit_state').upsert({
+      company_id: companyId,
+      provider: 'zapi',
+      state: 'closed',
+      failure_count: 0,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'company_id,provider' }).catch(() => {});
+    return { open: false, reason: 'auto_reset' };
+  }
+
+  return { open: true, reason: `Circuit aberto após ${data.failure_count} falhas consecutivas.` };
+}
+
+async function recordCircuitSuccess(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  companyId: string,
+) {
+  await supabaseAdmin.from('zapi_circuit_state').upsert({
+    company_id: companyId,
+    provider: 'zapi',
+    state: 'closed',
+    failure_count: 0,
+    last_success_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'company_id,provider' }).catch(() => {});
+}
+
+async function recordCircuitFailure(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  companyId: string,
+) {
+  const { data } = await supabaseAdmin
+    .from('zapi_circuit_state')
+    .select('failure_count')
+    .eq('company_id', companyId)
+    .eq('provider', 'zapi')
+    .maybeSingle();
+
+  const current = Number(data?.failure_count ?? 0);
+  const next = current + 1;
+  const shouldOpen = next >= 3;
+
+  await supabaseAdmin.from('zapi_circuit_state').upsert({
+    company_id: companyId,
+    provider: 'zapi',
+    failure_count: next,
+    state: shouldOpen ? 'open' : 'closed',
+    opened_at: shouldOpen ? new Date().toISOString() : null,
+    last_failure_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'company_id,provider' }).catch(() => {});
+}
+
+// ── Forensic audit log ──────────────────────────────────────────────────────
+async function appendAuditLog(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  entry: {
+    company_id: string;
+    module: string;
+    action: string;
+    status?: string;
+    entity?: string | null;
+    entity_id?: string | null;
+    message?: string | null;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  await supabaseAdmin.from('automation_audit_logs').insert({
+    company_id: entry.company_id,
+    module: entry.module,
+    action: entry.action,
+    status: entry.status ?? 'ok',
+    entity: entry.entity ?? null,
+    entity_id: entry.entity_id ?? null,
+    message: entry.message ?? null,
+    metadata: entry.metadata ?? {},
+  }).catch(() => {});
+}
 
 async function assertCompanyAccess(
   supabaseAdmin: ReturnType<typeof createClient>,
@@ -345,6 +491,14 @@ async function assertCompanyAccess(
 
   return true;
 }
+
+const normalizeZApiError = (status: number, data: Record<string, unknown>): string => {
+  if (status === 401) return 'Credencial Z-API inválida (401 Unauthorized).';
+  if (status === 403) return 'Acesso negado à Z-API (403 Forbidden).';
+  if (status === 429) return 'Rate limit Z-API excedido (429 Too Many Requests).';
+  if (status >= 500) return `Erro interno Z-API (HTTP ${status}).`;
+  return String(data?.message || data?.error || `HTTP ${status}`);
+};
 
 async function sendChargeMessage(
   phone: string,
@@ -394,7 +548,7 @@ async function sendChargeMessage(
         ok: false,
         status: 'erro',
         zapiMessageId: null,
-        error: String(data?.message || data?.error || `HTTP ${response.status}`),
+        error: normalizeZApiError(response.status, data as Record<string, unknown>),
       };
     }
 
@@ -488,6 +642,15 @@ async function processCompany(
   if (!dryRun && !forceSend && !isWithinSendWindow(config.hora_envio)) {
     result.reasons.push('Fora da janela de envio.');
     return result;
+  }
+
+  // Circuit breaker: skip company if Z-API circuit is open (auto-resets after 15 min)
+  if (!forceSend) {
+    const circuit = await checkCircuitBreaker(supabaseAdmin, config.empresa_id);
+    if (circuit.open) {
+      result.reasons.push(`Circuit aberto (Z-API): ${circuit.reason}`);
+      return result;
+    }
   }
 
   const { data: financialConfig, error: financialConfigError } = await supabaseAdmin
@@ -672,7 +835,35 @@ async function processCompany(
     });
 
     const phone = normalizePhone(registro.telefone || '');
+    const sendStartedAt = Date.now();
     const sendResult = await sendChargeMessage(phone, mensagem, zapi);
+    const sendDurationMs = Date.now() - sendStartedAt;
+
+    // Circuit breaker recording (only for real sends)
+    if (!sendResult.mocked) {
+      if (sendResult.ok) {
+        await recordCircuitSuccess(supabaseAdmin, config.empresa_id);
+      } else {
+        await recordCircuitFailure(supabaseAdmin, config.empresa_id);
+      }
+    }
+
+    // Forensic audit log
+    await appendAuditLog(supabaseAdmin, {
+      company_id: config.empresa_id,
+      module: 'whatsapp_scheduled',
+      action: sendResult.ok ? 'whatsapp_scheduled_sent' : 'whatsapp_scheduled_error',
+      status: sendResult.ok ? 'ok' : 'error',
+      entity: 'cobrancas_whatsapp',
+      entity_id: registro.id,
+      message: sendResult.error ?? null,
+      metadata: {
+        telefone: phone,
+        zapi_status: sendResult.status,
+        provider_message_id: sendResult.zapiMessageId ?? null,
+        duration_ms: sendDurationMs,
+      },
+    });
 
     const { error: trackingError } = await supabaseAdmin.from('cobrancas_whatsapp').insert({
       empresa_id: config.empresa_id,
@@ -716,7 +907,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     );
 
     // ── Resolução Z-API ────────────────────────────────────────────────────
-    let zapi: { mocked: boolean; url: string | null; clientToken: string | null };
+    let zapi: { mocked: boolean; url: string | null; clientToken: string | null; instanceId: string | null; zapiToken: string | null };
     try {
       zapi = buildZApiUrl();
     } catch (zapiErr) {
@@ -729,7 +920,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // ── Determinação do modo de invocação ─────────────────────────────────
     // Aceita: (1) cron via x-cron-secret, (2) service_role, (3) usuário JWT,
     //         (4) ausência de auth (Dashboard test sem configuração extra).
-    const cronSecret = Deno.env.get('CRON_SECRET');
+    const cronSecret = Deno.env.get('BILLING_CRON_SECRET') || Deno.env.get('CRON_SECRET');
     const cronHeader = req.headers.get('x-cron-secret');
     const isCronMode = !!(cronSecret && cronHeader === cronSecret);
 
@@ -788,6 +979,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
         message: 'Nenhuma configuracao ativa encontrada.',
         results: [],
       });
+    }
+
+    // ── Z-API pairing gate (verifica conexão antes de processar empresas) ──
+    if (!zapi.mocked) {
+      const pairing = await checkZapiPairing(zapi);
+      if (!pairing.connected) {
+        return jsonResponse({
+          ok: false,
+          error: `Z-API desconectada: ${pairing.reason}`,
+          mocked: false,
+        }, 503);
+      }
     }
 
     // ── Processa cada empresa ─────────────────────────────────────────────

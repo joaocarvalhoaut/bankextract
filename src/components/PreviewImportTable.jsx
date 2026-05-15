@@ -4,16 +4,10 @@ import { formatCurrencyBRL, formatDateBR } from '../utils/format';
 
 function getStatusTone(status) {
   const normalized = String(status || '').toLowerCase();
-  if (normalized === 'liquidado') {
-    return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-  }
-  if (normalized === 'vencido') {
-    return 'border-red-200 bg-red-50 text-red-700';
-  }
-  if (normalized === 'aberto') {
-    return 'border-blue-700/40 bg-blue-900/20 text-blue-700';
-  }
-  return 'border-amber-200 bg-amber-50 text-amber-700';
+  if (normalized === 'liquidado') return 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300';
+  if (normalized === 'vencido')   return 'border-red-500/25     bg-red-500/10     text-red-300';
+  if (normalized === 'aberto')    return 'border-blue-500/25    bg-blue-500/10    text-blue-300';
+  return 'border-amber-500/25 bg-amber-500/10 text-amber-300';
 }
 
 export default function PreviewImportTable({
@@ -151,11 +145,11 @@ export default function PreviewImportTable({
   ];
 
   return (
-    <section className="card-hover overflow-hidden rounded-[32px] border border-white/70 bg-slate-900/70 shadow-[0_28px_90px_rgba(15,23,42,0.08)] backdrop-blur">
+    <section className="card-hover overflow-hidden rounded-2xl border border-white/70 bg-slate-900/70 shadow-[0_28px_90px_rgba(15,23,42,0.08)] backdrop-blur">
       <div className="hero-mesh border-b border-slate-700/50 px-5 py-5 sm:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/80 bg-slate-900/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-700 shadow-sm">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-slate-900/60 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-300 shadow-sm">
               <Sparkles size={12} />
               OCR em revisao
             </div>
@@ -172,7 +166,7 @@ export default function PreviewImportTable({
               <Pencil size={14} />
               Linhas editaveis
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50/90 px-3 py-2 text-xs font-semibold text-emerald-700 shadow-sm">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300 shadow-sm">
               <CheckSquare size={14} />
               {selectedRows.length} selecionados
             </div>
@@ -180,21 +174,21 @@ export default function PreviewImportTable({
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
-          <div className="rounded-3xl border border-slate-700/50 bg-slate-900/60/85 px-4 py-4 shadow-sm">
+          <div className="rounded-2xl border border-slate-700/50 bg-slate-900/60 px-4 py-4 shadow-sm">
             <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Registros totais</p>
             <p className="mt-2 text-2xl font-semibold text-slate-50">{rows.length}</p>
           </div>
-          <div className="rounded-3xl border border-blue-700/40/80 bg-blue-900/20/90 px-4 py-4 shadow-sm">
-            <p className="text-[11px] uppercase tracking-[0.2em] text-blue-700">Valor total</p>
-            <p className="mt-2 text-2xl font-semibold text-blue-950">{formatCurrencyBRL(totalValue)}</p>
+          <div className="rounded-2xl border border-blue-500/25 bg-blue-500/10 px-4 py-4 shadow-sm">
+            <p className="text-[11px] uppercase tracking-[0.2em] text-blue-400">Valor total</p>
+            <p className="mt-2 text-2xl font-semibold tabular-nums text-blue-200">{formatCurrencyBRL(totalValue)}</p>
           </div>
-          <div className="rounded-3xl border border-emerald-200/80 bg-emerald-50/90 px-4 py-4 shadow-sm">
-            <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-700">A vencer</p>
-            <p className="mt-2 text-2xl font-semibold text-emerald-950">{formatCurrencyBRL(aVencer)}</p>
+          <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-4 shadow-sm">
+            <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-400">A vencer</p>
+            <p className="mt-2 text-2xl font-semibold tabular-nums text-emerald-200">{formatCurrencyBRL(aVencer)}</p>
           </div>
-          <div className="rounded-3xl border border-red-200/80 bg-red-50/90 px-4 py-4 shadow-sm">
-            <p className="text-[11px] uppercase tracking-[0.2em] text-red-700">Vencidos</p>
-            <p className="mt-2 text-2xl font-semibold text-red-950">{formatCurrencyBRL(vencidos)}</p>
+          <div className="rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-4 shadow-sm">
+            <p className="text-[11px] uppercase tracking-[0.2em] text-red-400">Vencidos</p>
+            <p className="mt-2 text-2xl font-semibold tabular-nums text-red-200">{formatCurrencyBRL(vencidos)}</p>
           </div>
         </div>
       </div>
