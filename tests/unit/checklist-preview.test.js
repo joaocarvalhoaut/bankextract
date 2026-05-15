@@ -20,21 +20,19 @@ test('monta contexto real do checklist sem placeholders fake', () => {
       codigo_barras: '23797999900001250003381286000400000123000123456',
     },
     companyName: 'Empresa Real',
-    recommendations: ['Primeira recomendacao', 'Segunda recomendacao'],
   });
 
   assert.equal(context.documento, 'DOC-123');
   assert.equal(context.numero_boleto, '23793.38128 60004.000001 23000.123456 7 99990000125000');
   assert.equal(context.telefone, '11999990000');
   assert.equal(context.link_boleto, 'https://drive.google.com/file/d/abc/view');
-  assert.match(context.historico, /Primeira recomendacao/);
+  assert.equal(context.historico, '');
 });
 
 test('usa nao informado apenas quando o dado realmente nao existe', () => {
   const context = buildChecklistPreviewContext({
     sampleCharge: null,
     companyName: '',
-    recommendations: [],
   });
   const summary = buildChecklistPreviewSummary(context);
 

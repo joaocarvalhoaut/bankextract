@@ -118,14 +118,46 @@ function normalizeTone(value) {
   return TONE_META[value] ? value : 'neutro';
 }
 
+function isTechnicalHistoryEntry(value) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) return true;
+
+  return [
+    'configuracao',
+    'template',
+    'preventiva',
+    'vencimento',
+    'ausente',
+    'diagnostic',
+    'debug',
+    'operacional',
+    'recommendation',
+    'recomendacao',
+    'checklist',
+    'interno',
+    'status tecnico',
+  ].some((token) => normalized.includes(token));
+}
+
 function getHistoryHint(history) {
   if (!history) return '';
-  if (Array.isArray(history) && history.length) {
-    return `Historico recente: ${history.slice(0, 2).join('; ')}.`;
+
+  const entries = Array.isArray(history)
+    ? history
+    : typeof history === 'string'
+      ? history.split(';')
+      : [];
+
+  const safeEntries = entries
+    .map((entry) => String(entry ?? '').trim())
+    .filter(Boolean)
+    .filter((entry) => !isTechnicalHistoryEntry(entry))
+    .slice(0, 2);
+
+  if (safeEntries.length) {
+    return `Historico recente: ${safeEntries.join('; ')}.`;
   }
-  if (typeof history === 'string' && history.trim()) {
-    return `Historico recente: ${history.trim()}.`;
-  }
+
   return '';
 }
 

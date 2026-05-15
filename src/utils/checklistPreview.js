@@ -39,7 +39,6 @@ const calculateDaysLate = (value) => {
 export function buildChecklistPreviewContext({
   sampleCharge = null,
   companyName = '',
-  recommendations = [],
 } = {}) {
   const source = sampleCharge || {};
   const documento =
@@ -68,7 +67,7 @@ export function buildChecklistPreviewContext({
     linha_digitavel: toSafeText(source.linha_digitavel),
     link_boleto: toSafeText(source.boleto_url || source.link_boleto),
     codigo_barras: toSafeText(source.codigo_barras),
-    historico: Array.isArray(recommendations) ? recommendations.slice(0, 2).join('; ') : '',
+    historico: '',
   };
 }
 
