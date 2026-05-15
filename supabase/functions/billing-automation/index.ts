@@ -3275,6 +3275,14 @@ async function findRecentSuccessfulWhatsappCharge(
   return data || null;
 }
 
+// Idempotência e concorrência:
+// • automation_dispatches registra uma única operação efetiva por chave
+//   (company_id + customer_id + due_date + template). Envios duplicados
+//   dentro da janela de idempotência são rejeitados sem gerar cobrança.
+// • logs_cobranca: o duplicado é inserido com status "ignorado" para
+//   auditoria — permite rastrear tentativas sem inflar o contador de envios.
+// • Dois usuários simultâneos para o mesmo título: o primeiro sucede,
+//   o segundo retorna ok=false + duplicate=true (sem retry automático).
 async function reserveAutomationDispatch(
   supabaseAdmin: AdminClient,
   payload: {
