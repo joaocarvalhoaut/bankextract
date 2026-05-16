@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ChevronDown,
@@ -92,6 +92,9 @@ function ZapiIntegrationCard({
   const [helperOpen, setHelperOpen] = useState(false);
   const [editingCredentials, setEditingCredentials] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
+  const [qrExpired, setQrExpired] = useState(false);
+  const pollingRef = useRef(null);
+  const expiryRef = useRef(null);
   const [integrationMessage, setIntegrationMessage] = useState('');
   const [status, setStatus] = useState('nao_configurado');
   const [lastValidatedAt, setLastValidatedAt] = useState('');
@@ -138,6 +141,60 @@ function ZapiIntegrationCard({
     }
   }, [form.client_token, form.instance_id, form.token]);
 
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    if (expiryRef.current) {
+      clearTimeout(expiryRef.current);
+      expiryRef.current = null;
+    }
+  }, []);
+
+  const startPolling = useCallback(() => {
+    stopPolling();
+    setQrExpired(false);
+
+    pollingRef.current = setInterval(async () => {
+      try {
+        const result = await getCompanyIntegrationStatus(companyId, form);
+        const connected = Boolean(result?.connected);
+        if (connected) {
+          stopPolling();
+          const phoneNumber = String(result?.phone_number || '').trim();
+          setQrCodeDataUrl('');
+          setQrExpired(false);
+          setForm((current) => ({
+            ...current,
+            connected: true,
+            phone_number: phoneNumber || current.phone_number,
+          }));
+          setStatus('conectado');
+          setIntegrationMessage(String(result?.message || 'WhatsApp conectado com sucesso!'));
+          setLastValidatedAt(new Date().toISOString());
+          onToast?.('sucesso', result?.message || 'WhatsApp conectado com sucesso!');
+          await saveCompanyIntegration(
+            companyId,
+            { ...form, connected: true, phone_number: phoneNumber },
+            'zapi',
+          ).catch(() => {});
+        }
+      } catch {
+        // Silent — don't disrupt UX on transient poll error
+      }
+    }, 5000);
+
+    // Z-API QR codes expire in ~30 s — mark expired and stop polling
+    expiryRef.current = setTimeout(() => {
+      setQrExpired(true);
+      stopPolling();
+    }, 40000);
+  }, [companyId, form, onToast, stopPolling]);
+
+  // Clean up intervals/timeouts on unmount
+  useEffect(() => () => stopPolling(), [stopPolling]);
+
   const loadIntegration = useCallback(async () => {
     if (!companyId || globalMode) return;
     setLoading(true);
@@ -150,7 +207,9 @@ function ZapiIntegrationCard({
         phone_number: integration?.phone_number || '',
         connected: Boolean(integration?.connected),
       });
+      stopPolling();
       setQrCodeDataUrl('');
+      setQrExpired(false);
       setIntegrationMessage('');
       setStatus(integration?.connected ? 'salvo' : 'nao_configurado');
       setLastValidatedAt(integration?.updated_at || integration?.created_at || '');
@@ -160,7 +219,7 @@ function ZapiIntegrationCard({
     } finally {
       setLoading(false);
     }
-  }, [companyId, globalMode, onToast]);
+  }, [companyId, globalMode, onToast, stopPolling]);
 
   useEffect(() => {
     loadIntegration();
@@ -179,7 +238,9 @@ function ZapiIntegrationCard({
 
     if (field !== 'phone_number') {
       setStatus('nao_configurado');
+      stopPolling();
       setQrCodeDataUrl('');
+      setQrExpired(false);
       setIntegrationMessage('');
     }
   };
@@ -258,10 +319,12 @@ function ZapiIntegrationCard({
         throw new Error('Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
       }
       setQrCodeDataUrl(qrImage);
+      setQrExpired(false);
       setStatus('aguardando_qr');
       setIntegrationMessage(String(result?.message || 'QR Code carregado com sucesso.'));
       setLastValidatedAt(new Date().toISOString());
       onToast?.('sucesso', result?.message || 'QR Code carregado com sucesso.');
+      startPolling();
     } catch (error) {
       setStatus('erro');
       setIntegrationMessage('');
@@ -613,18 +676,86 @@ function ZapiIntegrationCard({
         </div>
       ) : null}
 
-      {qrCodeDataUrl ? (
+      {(qrLoading && !qrCodeDataUrl) || qrCodeDataUrl || qrExpired ? (
         <div className="mt-5 rounded-3xl border border-slate-700 bg-slate-800/50 p-5 shadow-sm">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-50">
             <QrCode size={16} />
-            QR Code da instancia
+            QR Code — Conectar WhatsApp
           </div>
-          <p className="mt-2 text-sm text-slate-300">
-            Escaneie este QR Code com o WhatsApp da empresa. Depois clique em Atualizar status para confirmar a conexao.
-          </p>
-          <div className="mt-4 inline-flex rounded-3xl border border-slate-700 bg-slate-900/60 p-4 shadow-soft">
-            <img src={qrCodeDataUrl} alt="QR Code da Z-API" className="h-64 w-64 rounded-2xl object-contain" />
-          </div>
+
+          {qrLoading && !qrCodeDataUrl ? (
+            /* ── Loading state ── */
+            <div className="mt-4 flex h-64 w-64 items-center justify-center rounded-3xl border border-slate-700 bg-slate-900/60">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 size={28} className="animate-spin text-blue-400" />
+                <p className="text-xs text-slate-400">Gerando QR Code...</p>
+              </div>
+            </div>
+          ) : qrExpired ? (
+            /* ── Expired state ── */
+            <div className="mt-4 flex flex-col items-center gap-3 rounded-3xl border border-amber-700/40 bg-amber-950/20 p-6 text-center">
+              <AlertTriangle size={24} className="text-amber-400" />
+              <p className="text-sm font-semibold text-amber-300">QR Code expirado</p>
+              <p className="text-xs text-amber-400/80 max-w-xs">
+                O QR Code expira em cerca de 30 segundos. Gere um novo para continuar a conexao.
+              </p>
+              <button
+                type="button"
+                onClick={handleGenerateQrCode}
+                disabled={qrLoading || !canManage}
+                className="mt-1 inline-flex items-center gap-2 rounded-xl border border-amber-700/40 bg-amber-950/30 px-4 py-2 text-sm font-semibold text-amber-300 transition hover:bg-amber-950/50 hover:text-amber-200 disabled:opacity-50"
+              >
+                <RefreshCw size={13} />
+                Gerar novo QR Code
+              </button>
+            </div>
+          ) : qrCodeDataUrl ? (
+            /* ── Active QR state ── */
+            <>
+              <p className="mt-2 text-sm text-slate-300">
+                Abra o WhatsApp →{' '}
+                <span className="font-semibold text-slate-200">Dispositivos conectados</span>{' '}
+                → Conectar dispositivo e escaneie o codigo abaixo.
+              </p>
+              <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
+                <div className="inline-flex shrink-0 rounded-3xl border border-slate-600 bg-white p-3 shadow-soft">
+                  <img src={qrCodeDataUrl} alt="QR Code da Z-API" className="h-56 w-56 rounded-xl object-contain" />
+                </div>
+                <div className="flex min-w-0 flex-col gap-3">
+                  <div className="rounded-2xl border border-blue-700/40 bg-blue-900/20 px-4 py-3">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-blue-200">
+                      <Loader2 size={12} className="animate-spin shrink-0" />
+                      Aguardando conexao...
+                    </div>
+                    <p className="mt-1 text-xs text-blue-300/70">
+                      Verificando automaticamente a cada 5 segundos. Quando o WhatsApp conectar, esta tela atualiza sozinha.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-xs text-slate-300">
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                      Como escanear
+                    </p>
+                    <ol className="list-inside list-decimal space-y-1.5">
+                      <li>Abra o WhatsApp no celular</li>
+                      <li>
+                        Toque em <span className="font-semibold text-slate-200">⋮ Menu</span> ou{' '}
+                        <span className="font-semibold text-slate-200">Configuracoes</span>
+                      </li>
+                      <li>
+                        Selecione{' '}
+                        <span className="font-semibold text-slate-200">Dispositivos conectados</span>
+                      </li>
+                      <li>
+                        Toque em{' '}
+                        <span className="font-semibold text-slate-200">Conectar dispositivo</span>
+                      </li>
+                      <li>Aponte a camera para o QR Code</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : null}
         </div>
       ) : null}
 
