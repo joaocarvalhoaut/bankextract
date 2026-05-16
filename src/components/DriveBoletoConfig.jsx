@@ -21,6 +21,7 @@ import {
   getDriveFolderTree,
   extractDriveFolderIdFromUrl,
 } from '../services/googleDriveService';
+import { normalizeLookupResults } from '../utils/driveLookupResults';
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -218,7 +219,7 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
     setLookupResults(null);
     try {
       const result = await testDriveBoletoLookup(empresaId, lookupQuery.trim());
-      setLookupResults(result?.results || result || []);
+      setLookupResults(normalizeLookupResults(result?.results || result || []));
     } catch (err) {
       onToast?.('erro', err.message || 'Falha ao buscar boleto no Drive.');
     } finally {
@@ -509,14 +510,13 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
             ) : (
               lookupResults.map((item, i) => {
                 const score = item.score ?? 0;
-                const file = item.file || item;
                 return (
                   <div key={i} className={`flex items-start gap-2.5 rounded-xl border p-3 ${scoreBg(score)}`}>
                     <FileText size={14} className="mt-px shrink-0 text-slate-300" />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate text-xs font-semibold text-slate-100">
-                          {file.name || file.fileName || 'Arquivo sem nome'}
+                          {item.file_name || 'Arquivo sem nome'}
                         </p>
                         <span className={`shrink-0 rounded-full border px-2 py-px text-[10px] font-bold ${scoreBg(score)} ${scoreColor(score)}`}>
                           {score} pts
@@ -525,9 +525,9 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
                       {item.reasons && item.reasons.length > 0 && (
                         <p className="mt-0.5 text-[11px] text-slate-400">{item.reasons.join(' · ')}</p>
                       )}
-                      {file.webViewLink && (
+                      {item.view_url && (
                         <a
-                          href={file.webViewLink}
+                          href={item.view_url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="mt-1 inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:underline"
