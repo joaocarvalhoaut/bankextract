@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient';
 import { createScopedLogger } from './loggerService';
 import { withRetryMetadata } from './retryService';
+import { normalizeDriveLookupResults } from '../utils/driveLookupResults.js';
 
 const logger = createScopedLogger('whatsapp-billing');
 
@@ -447,7 +448,7 @@ export async function testDriveConnection(companyId) {
 }
 
 export async function testBoletoLookup(companyId, query) {
-  return invokeBillingAutomation(
+  const data = await invokeBillingAutomation(
     {
       action: 'test_boleto_lookup',
       company_id: companyId,
@@ -455,6 +456,11 @@ export async function testBoletoLookup(companyId, query) {
     },
     'Falha ao testar a busca de boleto no Drive.'
   );
+
+  return {
+    ...data,
+    results: normalizeDriveLookupResults(data?.results || data || []),
+  };
 }
 
 export async function getDriveFolderStructure(companyId) {

@@ -6330,8 +6330,16 @@ Deno.serve(async (req: Request) => {
         results: results.map((r) => ({
           file_id: r.file.id,
           file_name: r.file.name,
+          file: {
+            id: r.file.id,
+            name: r.file.name,
+            mimeType: r.file.mimeType,
+            webViewLink: r.file.webViewLink || `https://drive.google.com/file/d/${r.file.id}/view`,
+            webContentLink: r.file.webContentLink || null,
+          },
           score: r.score,
           reasons: r.reasons,
+          match_origin: r.reasons?.[0] || null,
           view_url: r.file.webViewLink || `https://drive.google.com/file/d/${r.file.id}/view`,
         })),
       });

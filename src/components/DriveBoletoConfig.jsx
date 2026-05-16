@@ -510,24 +510,30 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
               lookupResults.map((item, i) => {
                 const score = item.score ?? 0;
                 const file = item.file || item;
+                const fileName = file.name || file.fileName || item.file_name || item.fileName || 'Arquivo sem nome';
+                const viewUrl = file.webViewLink || file.viewUrl || item.view_url || item.viewUrl || null;
+                const matchOrigin = item.match_origin || item.matchOrigin || null;
                 return (
                   <div key={i} className={`flex items-start gap-2.5 rounded-xl border p-3 ${scoreBg(score)}`}>
                     <FileText size={14} className="mt-px shrink-0 text-slate-300" />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate text-xs font-semibold text-slate-100">
-                          {file.name || file.fileName || 'Arquivo sem nome'}
+                          {fileName}
                         </p>
                         <span className={`shrink-0 rounded-full border px-2 py-px text-[10px] font-bold ${scoreBg(score)} ${scoreColor(score)}`}>
                           {score} pts
                         </span>
                       </div>
+                      {matchOrigin && (
+                        <p className="mt-0.5 text-[11px] font-medium text-emerald-300">{matchOrigin}</p>
+                      )}
                       {item.reasons && item.reasons.length > 0 && (
                         <p className="mt-0.5 text-[11px] text-slate-400">{item.reasons.join(' · ')}</p>
                       )}
-                      {file.webViewLink && (
+                      {viewUrl && (
                         <a
-                          href={file.webViewLink}
+                          href={viewUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="mt-1 inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:underline"
