@@ -2515,7 +2515,7 @@ async function sendRealChargesData(
     if (registroId) {
       const { data, error } = await supabaseAdmin
         .from('registros_financeiros')
-        .select('id, company_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, status, tentativas_cobranca')
+        .select('id, company_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, status, tentativas_cobranca, drive_file_id, boleto_url, boleto_match_confidence')
         .eq('id', registroId)
         .eq('company_id', companyId)
         .maybeSingle();
@@ -2565,7 +2565,7 @@ async function sendRealChargesData(
       tipo_cobranca: 'manual',
       dias_atraso: 0,
       arquivo_encontrado: temBoletoEncontrado((record || item) as Partial<FinancialRow> & Record<string, unknown>),
-      drive_file_id: String(item?.drive_file_id || '') || null,
+      drive_file_id: String(record?.drive_file_id || item?.drive_file_id || '') || null,
     };
 
     if (dispatch.duplicate && !Boolean(item?.force_resend)) {
@@ -2690,7 +2690,57 @@ async function sendRealChargesData(
     }
 
     try {
-      const sendResult = await sendZapiText(supabaseAdmin, companyId, { phone: normalizedPhone, message }, options);
+      // ── PDF-first: attach boleto PDF when drive_file_id is available ─────
+      // Falls back to text-only if Drive is not configured, file is missing,
+      // download times out, or sendZapiDocument throws.
+      const driveFileId = String(record?.drive_file_id || item?.drive_file_id || '').trim();
+      let pdfFileName: string | null = null;
+      // eslint-disable-next-line prefer-const
+      let mergedResult!: {
+        normalizedPhone: string; raw: unknown; zaapId: string; messageId: string; id: string;
+      };
+
+      if (driveFileId) {
+        try {
+          const googleToken = await getGoogleAccessToken();
+          const pdfFile = await getDriveFileMetadata(googleToken, driveFileId).catch(() => null);
+          if (pdfFile?.id) {
+            const pdfBase64 = await downloadDriveFileBase64(googleToken, pdfFile.id);
+            pdfFileName = pdfFile.name || `${numeroBoletoEfetivo || documento || registroId}.pdf`;
+            const zapiCfg = await resolveCompanyZapiConfig(supabaseAdmin, companyId, options);
+            const docResult = await sendZapiDocument(zapiCfg, normalizedPhone, message, pdfFileName, pdfBase64);
+            const rawData = (docResult.raw || {}) as Record<string, unknown>;
+            mergedResult = {
+              normalizedPhone,
+              raw: docResult.raw,
+              zaapId: String(rawData?.zaapId || ''),
+              messageId: String(docResult.provider_id || rawData?.messageId || ''),
+              id: String(rawData?.id || ''),
+            };
+            console.log(JSON.stringify({
+              event: 'manual_pdf_sent', registro_id: registroId,
+              file_id: pdfFile.id, file_name: pdfFileName,
+            }));
+          } else {
+            // drive_file_id was stale / file deleted — fall back to text
+            console.log(JSON.stringify({ event: 'manual_pdf_file_missing', registro_id: registroId, drive_file_id: driveFileId }));
+            mergedResult = await sendZapiText(supabaseAdmin, companyId, { phone: normalizedPhone, message }, options);
+          }
+        } catch (pdfErr) {
+          // Log and fall back — never let a PDF error block the text send
+          console.log(JSON.stringify({
+            event: 'manual_pdf_fallback_to_text', registro_id: registroId,
+            drive_file_id: driveFileId,
+            error: pdfErr instanceof Error ? pdfErr.message : String(pdfErr),
+          }));
+          mergedResult = await sendZapiText(supabaseAdmin, companyId, { phone: normalizedPhone, message }, options);
+        }
+      } else {
+        mergedResult = await sendZapiText(supabaseAdmin, companyId, { phone: normalizedPhone, message }, options);
+      }
+      // ── unified result from either path ──────────────────────────────────
+
+      const sendResult = mergedResult;
       console.log('[ZAPI RAW RESPONSE]', sendResult);
 
       const providerMessageId =
@@ -2747,6 +2797,8 @@ async function sendRealChargesData(
           zapi_zaap_id: sendResult.zaapId || null,
           zapi_id: sendResult.id || null,
           zapi_raw: sendResult.raw,
+          pdf_file_name: pdfFileName || null,
+          pdf_enviado: Boolean(pdfFileName),
         },
       });
 
@@ -2791,6 +2843,8 @@ async function sendRealChargesData(
         zapi_message_id: sendResult.messageId || null,
         zapi_zaap_id: sendResult.zaapId || null,
         zapiResponse: sendResult.raw,
+        pdf_file_name: pdfFileName || null,
+        pdf_enviado: Boolean(pdfFileName),
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -3711,6 +3765,55 @@ async function processChargeForRecord(
   }
 
   if (!file?.id) {
+    // permitirEnvioSemBoleto: send text-only message without PDF attachment.
+    // This path is only reached for real sends (simulate block already returned above).
+    if (permitirEnvioSemBoleto) {
+      const zapiTextConfig = await resolveCompanyZapiConfig(supabaseAdmin, record.company_id, { allowTestMode: false });
+      const normalizedPhone = normalizeBrazilPhone(phone);
+      if (!validatePhone(normalizedPhone)) {
+        await finalizeAutomationDispatch(supabaseAdmin, {
+          companyId: record.company_id, dispatchType, operationHash: dispatch.operationHash,
+          status: 'failed', metadata: { reason: 'invalid_phone_sem_boleto' },
+        });
+        return { status: 'erro', reason: 'invalid_phone_sem_boleto' };
+      }
+      const textResponse = await withTimeout(
+        (signal) =>
+          fetch(`https://api.z-api.io/instances/${zapiTextConfig.instanceId}/token/${zapiTextConfig.token}/send-text`, {
+            method: 'POST', signal,
+            headers: { 'Client-Token': zapiTextConfig.clientToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: normalizedPhone, message }),
+          }),
+        15000,
+        'Timeout ao enviar texto sem boleto.',
+      );
+      const textData = await textResponse.json().catch(() => ({}));
+      if (!textResponse.ok) {
+        await finalizeAutomationDispatch(supabaseAdmin, {
+          companyId: record.company_id, dispatchType, operationHash: dispatch.operationHash,
+          status: 'failed', metadata: { reason: 'zapi_text_sem_boleto_error' },
+        });
+        return { status: 'erro', reason: 'zapi_text_sem_boleto_error' };
+      }
+      const textProviderId = String(textData?.zaapId || textData?.messageId || '');
+      await insertLog(supabaseAdmin, {
+        financeiro_id: record.id, company_id: record.company_id,
+        cliente_nome: clienteEfetivo || record.nome, cliente_numero: record.cliente_numero,
+        telefone: normalizedPhone, documento: record.documento,
+        numero_boleto: numeroBoletoEfetivo || null, numero_nf: record.numero_nf,
+        valor: record.valor, vencimento: record.data_vencimento, tipo_cobranca: tipo,
+        dias_atraso: diasAtraso, arquivo_encontrado: false, drive_file_id: null,
+        status_envio: 'sucesso_sem_boleto', erro: null, envio_hash: hash,
+        payload: { tipo, phone: normalizedPhone, message_preview: message, sem_boleto: true },
+      });
+      await finalizeAutomationDispatch(supabaseAdmin, {
+        companyId: record.company_id, dispatchType, operationHash: dispatch.operationHash,
+        status: 'completed', externalReference: textProviderId,
+        metadata: { sem_boleto: true, provider_message_id: textProviderId },
+      });
+      return { status: 'sucesso', tipo, fileId: null, simulated: false, message, sem_boleto: true };
+    }
+
     await finalizeAutomationDispatch(supabaseAdmin, {
       companyId: record.company_id,
       dispatchType,
