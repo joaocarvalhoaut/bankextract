@@ -93,6 +93,7 @@ function ZapiIntegrationCard({
   const [editingCredentials, setEditingCredentials] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
   const [qrExpired, setQrExpired] = useState(false);
+  const [qrError, setQrError] = useState('');
   const pollingRef = useRef(null);
   const expiryRef = useRef(null);
   const [integrationMessage, setIntegrationMessage] = useState('');
@@ -210,6 +211,7 @@ function ZapiIntegrationCard({
       stopPolling();
       setQrCodeDataUrl('');
       setQrExpired(false);
+      setQrError('');
       setIntegrationMessage('');
       setStatus(integration?.connected ? 'salvo' : 'nao_configurado');
       setLastValidatedAt(integration?.updated_at || integration?.created_at || '');
@@ -241,6 +243,7 @@ function ZapiIntegrationCard({
       stopPolling();
       setQrCodeDataUrl('');
       setQrExpired(false);
+      setQrError('');
       setIntegrationMessage('');
     }
   };
@@ -298,11 +301,28 @@ function ZapiIntegrationCard({
     }
 
     setQrLoading(true);
+    setQrError('');
+    setQrCodeDataUrl('');
+    setQrExpired(false);
+
+    // Client-side safety net: if invoke never resolves, surface a clear error after 35 s
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error('QR Code nao retornou em tempo habil. Verifique a instancia e tente novamente.')),
+        35000,
+      )
+    );
+
     try {
-      const result = await getCompanyIntegrationQrCode(companyId, form);
+      const result = await Promise.race([
+        getCompanyIntegrationQrCode(companyId, form),
+        timeoutPromise,
+      ]);
+
       const connected = Boolean(result?.connected) || String(result?.status || '').toLowerCase() === 'connected';
       if (connected) {
         setQrCodeDataUrl('');
+        setQrError('');
         setForm((current) => ({
           ...current,
           connected: true,
@@ -314,11 +334,25 @@ function ZapiIntegrationCard({
         onToast?.('sucesso', result?.message || 'WhatsApp ja conectado');
         return;
       }
-      const qrImage = String(result?.qrCode || result?.image_data_url || result?.image_url || '');
+
+      // Normalise: try every field name variant Z-API is known to use
+      const qrImage = String(
+        result?.qrCode ||
+        result?.qrcode ||
+        result?.qr_code ||
+        result?.image_data_url ||
+        result?.image_url ||
+        result?.base64 ||
+        result?.value ||
+        ''
+      );
+
       if (!qrImage) {
         throw new Error('Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
       }
+
       setQrCodeDataUrl(qrImage);
+      setQrError('');
       setQrExpired(false);
       setStatus('aguardando_qr');
       setIntegrationMessage(String(result?.message || 'QR Code carregado com sucesso.'));
@@ -326,9 +360,11 @@ function ZapiIntegrationCard({
       onToast?.('sucesso', result?.message || 'QR Code carregado com sucesso.');
       startPolling();
     } catch (error) {
+      const msg = String(error?.message || 'Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
       setStatus('erro');
+      setQrError(msg);          // ← keeps the card visible with inline error
       setIntegrationMessage('');
-      onToast?.('erro', error.message || 'Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
+      onToast?.('erro', msg);   // ← also toast for accessibility
     } finally {
       setQrLoading(false);
     }
@@ -676,7 +712,7 @@ function ZapiIntegrationCard({
         </div>
       ) : null}
 
-      {(qrLoading && !qrCodeDataUrl) || qrCodeDataUrl || qrExpired ? (
+      {(qrLoading && !qrCodeDataUrl) || qrCodeDataUrl || qrExpired || qrError ? (
         <div className="mt-5 rounded-3xl border border-slate-700 bg-slate-800/50 p-5 shadow-sm">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-50">
             <QrCode size={16} />
@@ -707,6 +743,22 @@ function ZapiIntegrationCard({
               >
                 <RefreshCw size={13} />
                 Gerar novo QR Code
+              </button>
+            </div>
+          ) : qrError ? (
+            /* ── Error state — keeps card visible, shows detail + retry ── */
+            <div className="mt-4 flex flex-col items-center gap-3 rounded-3xl border border-red-700/40 bg-red-950/20 p-6 text-center">
+              <CircleX size={24} className="text-red-400" />
+              <p className="text-sm font-semibold text-red-300">Nao foi possivel gerar o QR Code</p>
+              <p className="max-w-sm text-xs text-red-400/80">{qrError}</p>
+              <button
+                type="button"
+                onClick={handleGenerateQrCode}
+                disabled={qrLoading || !canManage}
+                className="mt-1 inline-flex items-center gap-2 rounded-xl border border-red-700/40 bg-red-950/30 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-950/50 hover:text-red-200 disabled:opacity-50"
+              >
+                <RefreshCw size={13} />
+                Tentar novamente
               </button>
             </div>
           ) : qrCodeDataUrl ? (

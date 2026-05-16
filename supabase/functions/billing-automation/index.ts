@@ -728,7 +728,9 @@ function extractQrImageCandidate(data: Record<string, unknown> | null | undefine
   const candidates = [
     data?.base64,
     data?.image,
-    data?.qrCode,
+    data?.qrCode,   // camelCase (some Z-API versions)
+    data?.qrcode,   // lowercase (other Z-API versions / qr-code endpoint JSON response)
+    data?.qr_code,  // snake_case
     data?.value,
     data?.url,
     data?.data,
