@@ -2727,7 +2727,9 @@ async function sendRealChargesData(
             mergedResult = await sendZapiText(supabaseAdmin, companyId, { phone: normalizedPhone, message }, options);
           }
         } catch (pdfErr) {
-          // Log and fall back — never let a PDF error block the text send
+          // Log and fall back — never let a PDF error block the text send.
+          // Reset pdfFileName so pdf_enviado stays false (PDF was NOT delivered).
+          pdfFileName = null;
           console.log(JSON.stringify({
             event: 'manual_pdf_fallback_to_text', registro_id: registroId,
             drive_file_id: driveFileId,
@@ -3846,6 +3848,7 @@ async function processChargeForRecord(
   const zapiConfig = await resolveCompanyZapiConfig(supabaseAdmin, record.company_id, { allowTestMode: false });
   const base64 = await downloadDriveFileBase64(token, file.id);
   let sendResult: { provider_id: string; raw: unknown };
+  let pdfAttached = true;
   const sendStartedAt = Date.now();
   try {
     sendResult = await sendZapiDocument(zapiConfig, phone, message, file.name || `${numeroBoletoEfetivo || record.documento || record.id}.pdf`, base64);
@@ -3858,7 +3861,45 @@ async function processChargeForRecord(
       financial_record_id: record.id, file_id: file.id, file_name: file.name,
       tipo, phone, error: errMsg,
     }));
-    throw sendErr;
+    // Fallback: Z-API rejected the PDF attachment (too large, format, etc.).
+    // Attempt a text-only send so the customer still receives the charge message.
+    pdfAttached = false;
+    try {
+      const textResp = await withTimeout(
+        (signal) => fetch(
+          `https://api.z-api.io/instances/${zapiConfig.instanceId}/token/${zapiConfig.token}/send-text`,
+          {
+            method: 'POST', signal,
+            headers: { 'Client-Token': zapiConfig.clientToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone, message }),
+          },
+        ),
+        15000,
+        'Timeout ao enviar texto fallback apos falha de anexo PDF.',
+      );
+      const textData = await textResp.json().catch(() => ({}));
+      if (!textResp.ok) {
+        throw new Error(`Z-API text fallback HTTP ${textResp.status}: ${JSON.stringify(textData)}`);
+      }
+      sendResult = {
+        provider_id: String(textData?.zaapId || textData?.messageId || ''),
+        raw: textData,
+      };
+      await recordZapiSuccess(supabaseAdmin, record.company_id);
+      console.log(JSON.stringify({
+        event: 'attachment_text_fallback_sent', company_id: record.company_id,
+        financial_record_id: record.id, tipo, phone,
+        original_pdf_error: errMsg,
+      }));
+    } catch (textFallbackErr) {
+      const textErrMsg = textFallbackErr instanceof Error ? textFallbackErr.message : String(textFallbackErr);
+      await recordZapiFailure(supabaseAdmin, record.company_id, textErrMsg);
+      console.log(JSON.stringify({
+        event: 'attachment_text_fallback_failed', company_id: record.company_id,
+        financial_record_id: record.id, tipo, phone, error: textErrMsg,
+      }));
+      throw textFallbackErr;
+    }
   }
   const sentAt = new Date().toISOString();
   const providerMessageId = sendResult.provider_id || null;
@@ -3927,6 +3968,8 @@ async function processChargeForRecord(
       provider_message_id: providerMessageId,
       stage: tipo,
       sent_at: sentAt,
+      pdf_attachment: pdfAttached,
+      pdf_file_name: pdfAttached ? (file.name || null) : null,
     },
     envio_hash: hash,
   });
@@ -3939,6 +3982,7 @@ async function processChargeForRecord(
     metadata: {
       provider_message_id: providerMessageId,
       sent_at: sentAt,
+      pdf_attachment: pdfAttached,
     },
   });
 
