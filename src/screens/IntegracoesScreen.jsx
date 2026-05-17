@@ -212,10 +212,10 @@ function ZapiIntegrationCard({
         phone_number: integration?.phone_number || '',
         connected: Boolean(integration?.connected),
       });
-      stopPolling();
-      setQrCodeDataUrl('');
-      setQrExpired(false);
-      setQrError('');
+      // ─── loadIntegration NEVER touches QR visual state (qrError / qrCodeDataUrl /
+      //     qrExpired). Those are reset by the dedicated companyId-change effect below
+      //     so that an unexpected re-run of loadIntegration cannot wipe a visible
+      //     QR/error card mid-attempt.
       setIntegrationMessage('');
       setStatus(integration?.connected ? 'salvo' : 'nao_configurado');
       setLastValidatedAt(integration?.updated_at || integration?.created_at || '');
@@ -225,7 +225,17 @@ function ZapiIntegrationCard({
     } finally {
       setLoading(false);
     }
-  }, [companyId, globalMode, stopPolling]);  // onToast intentionally omitted — use stable onToastRef
+  }, [companyId, globalMode]);  // stopPolling / onToast intentionally omitted — stable refs
+
+  // Reset QR visual state ONLY when the active company changes.
+  // Keeping this separate from loadIntegration guarantees that no unexpected
+  // re-execution of loadIntegration can wipe qrError/qrCodeDataUrl mid-attempt.
+  useEffect(() => {
+    stopPolling();
+    setQrCodeDataUrl('');
+    setQrExpired(false);
+    setQrError('');
+  }, [companyId, stopPolling]);
 
   useEffect(() => {
     loadIntegration();
@@ -743,6 +753,8 @@ function ZapiIntegrationCard({
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-50">
             <QrCode size={16} />
             QR Code — Conectar WhatsApp
+            {/* TEMP version marker — remove after confirming deploy */}
+            <span className="ml-auto font-mono text-[10px] text-slate-600 select-none">v1131536+</span>
           </div>
 
           {qrLoading && !qrCodeDataUrl ? (
