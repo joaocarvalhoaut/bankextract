@@ -94,6 +94,13 @@ function ZapiIntegrationCard({
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
   const [qrExpired, setQrExpired] = useState(false);
   const [qrError, setQrError] = useState('');
+  // qrPanelEverOpened is a latch: once true it NEVER goes false automatically.
+  // Only explicit actions clear it: "Fechar QR" button, successful connection,
+  // company change, or credential edit.  This guarantees the card survives any
+  // background state reset that we may have missed.
+  const [qrPanelEverOpened, setQrPanelEverOpened] = useState(false);
+  // qrDebug captures the raw API response shape for the debug panel.
+  const [qrDebug, setQrDebug] = useState(null);
   const pollingRef = useRef(null);
   const expiryRef = useRef(null);
   // Stable ref so callbacks that need onToast never cause loadIntegration / startPolling to
@@ -170,6 +177,8 @@ function ZapiIntegrationCard({
           const phoneNumber = String(result?.phone_number || '').trim();
           setQrCodeDataUrl('');
           setQrExpired(false);
+          setQrPanelEverOpened(false);
+          setQrDebug(null);
           setForm((current) => ({
             ...current,
             connected: true,
@@ -227,7 +236,7 @@ function ZapiIntegrationCard({
     }
   }, [companyId, globalMode]);  // stopPolling / onToast intentionally omitted — stable refs
 
-  // Reset QR visual state ONLY when the active company changes.
+  // Reset ALL QR visual state ONLY when the active company changes.
   // Keeping this separate from loadIntegration guarantees that no unexpected
   // re-execution of loadIntegration can wipe qrError/qrCodeDataUrl mid-attempt.
   useEffect(() => {
@@ -235,6 +244,8 @@ function ZapiIntegrationCard({
     setQrCodeDataUrl('');
     setQrExpired(false);
     setQrError('');
+    setQrPanelEverOpened(false);
+    setQrDebug(null);
   }, [companyId, stopPolling]);
 
   useEffect(() => {
@@ -258,6 +269,8 @@ function ZapiIntegrationCard({
       setQrCodeDataUrl('');
       setQrExpired(false);
       setQrError('');
+      setQrPanelEverOpened(false);
+      setQrDebug(null);
       setIntegrationMessage('');
     }
   };
@@ -319,10 +332,14 @@ function ZapiIntegrationCard({
     // Stop any previous polling before starting a new attempt
     stopPolling();
 
+    // Open the panel latch — once true, the card stays visible regardless of
+    // which background state setter clears qrError / qrCodeDataUrl.
+    setQrPanelEverOpened(true);
     setQrLoading(true);
     setQrError('');
     setQrCodeDataUrl('');
     setQrExpired(false);
+    setQrDebug({ lastAction: 'Aguardando resposta da API...' });
 
     if (isDev) console.log('[QR] generateQr:start', { companyId });
 
@@ -342,18 +359,23 @@ function ZapiIntegrationCard({
       ]);
       clearTimeout(timeoutId.ref);
 
+      const responseKeys = result ? Object.keys(result) : [];
       if (isDev) console.log('[QR] generateQr:response', {
         ok: result?.ok,
         connected: result?.connected,
         status: result?.status,
         hasQrCode: Boolean(result?.qrCode || result?.image_data_url),
-        keys: result ? Object.keys(result) : [],
+        keys: responseKeys,
       });
+
+      setQrDebug({ lastAction: 'Resposta recebida', responseKeys });
 
       const connected = Boolean(result?.connected) || String(result?.status || '').toLowerCase() === 'connected';
       if (connected) {
         setQrCodeDataUrl('');
         setQrError('');
+        setQrPanelEverOpened(false); // connection success → close panel
+        setQrDebug(null);
         setForm((current) => ({
           ...current,
           connected: true,
@@ -378,12 +400,13 @@ function ZapiIntegrationCard({
         ''
       );
 
-      if (isDev && !qrImage) console.warn('[QR] generateQr:no-image — full result:', result);
-
       if (!qrImage) {
+        if (isDev) console.warn('[QR] generateQr:no-image — full result:', result);
+        setQrDebug({ lastAction: 'Resposta sem QR Code', responseKeys });
         throw new Error('Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
       }
 
+      setQrDebug({ lastAction: 'QR Code recebido', responseKeys });
       setQrCodeDataUrl(qrImage);
       setQrError('');
       setQrExpired(false);
@@ -397,9 +420,10 @@ function ZapiIntegrationCard({
       const msg = String(error?.message || 'Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
       if (isDev) console.error('[QR] generateQr:error', { msg, error });
       setStatus('erro');
-      setQrError(msg);                    // ← keeps card visible with inline error
+      setQrError(msg);
+      setQrDebug((prev) => ({ ...(prev || {}), lastAction: 'Erro', rawError: msg }));
       setIntegrationMessage('');
-      onToastRef.current?.('erro', msg);  // ← also toast for accessibility
+      onToastRef.current?.('erro', msg);
     } finally {
       setQrLoading(false);
       if (isDev) console.log('[QR] generateQr:finally — qrLoading=false');
@@ -748,13 +772,46 @@ function ZapiIntegrationCard({
         </div>
       ) : null}
 
-      {(qrLoading && !qrCodeDataUrl) || qrCodeDataUrl || qrExpired || qrError ? (
+      {qrPanelEverOpened || qrLoading || qrCodeDataUrl || qrExpired || qrError ? (
         <div className="mt-5 rounded-3xl border border-slate-700 bg-slate-800/50 p-5 shadow-sm">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-50">
             <QrCode size={16} />
             QR Code — Conectar WhatsApp
-            {/* TEMP version marker — remove after confirming deploy */}
-            <span className="ml-auto font-mono text-[10px] text-slate-600 select-none">v1131536+</span>
+            {/* TEMP version marker — remove after confirming deploy in production */}
+            <span className="ml-2 font-mono text-[10px] text-slate-600 select-none">v6541372+</span>
+            <button
+              type="button"
+              onClick={() => {
+                stopPolling();
+                setQrPanelEverOpened(false);
+                setQrCodeDataUrl('');
+                setQrExpired(false);
+                setQrError('');
+                setQrDebug(null);
+              }}
+              className="ml-auto rounded-lg px-2 py-1 text-[11px] text-slate-500 hover:text-slate-300 transition"
+              title="Fechar painel QR"
+            >
+              Fechar QR ✕
+            </button>
+          </div>
+
+          {/* ── DEBUG PANEL — remove after validating deploy ── */}
+          <div className="mt-3 rounded-xl border border-slate-700/60 bg-slate-950/70 px-3 py-2.5 font-mono text-[10px] leading-relaxed text-slate-400">
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Debug State</p>
+            <p>qrLoading: <span className={qrLoading ? 'text-blue-400' : 'text-slate-500'}>{String(qrLoading)}</span></p>
+            <p>qrCodeDataUrl: <span className={qrCodeDataUrl ? 'text-green-400' : 'text-slate-500'}>{qrCodeDataUrl ? `sim (${qrCodeDataUrl.slice(0, 28)}...)` : 'vazio'}</span></p>
+            <p>qrExpired: <span className={qrExpired ? 'text-amber-400' : 'text-slate-500'}>{String(qrExpired)}</span></p>
+            <p>qrError: <span className={qrError ? 'text-red-400' : 'text-slate-500'}>{qrError || '(vazio)'}</span></p>
+            <p>qrPanelEverOpened: <span className="text-blue-400">{String(qrPanelEverOpened)}</span></p>
+            <p>status: <span className="text-slate-300">{status}</span></p>
+            {qrDebug ? (
+              <>
+                <p>lastAction: <span className="text-slate-300">{qrDebug.lastAction}</span></p>
+                {qrDebug.responseKeys ? <p>responseKeys: <span className="text-slate-300">[{qrDebug.responseKeys.join(', ')}]</span></p> : null}
+                {qrDebug.rawError ? <p>rawError: <span className="text-red-400">{qrDebug.rawError}</span></p> : null}
+              </>
+            ) : null}
           </div>
 
           {qrLoading && !qrCodeDataUrl ? (
