@@ -96,6 +96,10 @@ function ZapiIntegrationCard({
   const [qrError, setQrError] = useState('');
   const pollingRef = useRef(null);
   const expiryRef = useRef(null);
+  // Stable ref so callbacks that need onToast never cause loadIntegration / startPolling to
+  // be recreated on every render (which would re-run the useEffect and clear qrError).
+  const onToastRef = useRef(onToast);
+  useEffect(() => { onToastRef.current = onToast; });
   const [integrationMessage, setIntegrationMessage] = useState('');
   const [status, setStatus] = useState('nao_configurado');
   const [lastValidatedAt, setLastValidatedAt] = useState('');
@@ -174,7 +178,7 @@ function ZapiIntegrationCard({
           setStatus('conectado');
           setIntegrationMessage(String(result?.message || 'WhatsApp conectado com sucesso!'));
           setLastValidatedAt(new Date().toISOString());
-          onToast?.('sucesso', result?.message || 'WhatsApp conectado com sucesso!');
+          onToastRef.current?.('sucesso', result?.message || 'WhatsApp conectado com sucesso!');
           await saveCompanyIntegration(
             companyId,
             { ...form, connected: true, phone_number: phoneNumber },
@@ -191,7 +195,7 @@ function ZapiIntegrationCard({
       setQrExpired(true);
       stopPolling();
     }, 40000);
-  }, [companyId, form, onToast, stopPolling]);
+  }, [companyId, form, stopPolling]);  // onToast intentionally omitted — use stable onToastRef
 
   // Clean up intervals/timeouts on unmount
   useEffect(() => () => stopPolling(), [stopPolling]);
@@ -217,11 +221,11 @@ function ZapiIntegrationCard({
       setLastValidatedAt(integration?.updated_at || integration?.created_at || '');
       setEditingCredentials(!integration);
     } catch (error) {
-      onToast?.('erro', error.message || 'Falha ao carregar integracao WhatsApp.');
+      onToastRef.current?.('erro', error.message || 'Falha ao carregar integracao WhatsApp.');
     } finally {
       setLoading(false);
     }
-  }, [companyId, globalMode, onToast, stopPolling]);
+  }, [companyId, globalMode, stopPolling]);  // onToast intentionally omitted — use stable onToastRef
 
   useEffect(() => {
     loadIntegration();
@@ -250,7 +254,7 @@ function ZapiIntegrationCard({
 
   const handleValidate = async () => {
     if (!companyId) {
-      onToast?.('erro', 'Selecione uma empresa para validar a integracao.');
+      onToastRef.current?.('erro', 'Selecione uma empresa para validar a integracao.');
       return;
     }
 
@@ -258,7 +262,7 @@ function ZapiIntegrationCard({
       validateLocalFields();
     } catch (error) {
       setStatus('erro');
-      onToast?.('erro', error.message || 'Campos invalidos para a integracao.');
+      onToastRef.current?.('erro', error.message || 'Campos invalidos para a integracao.');
       return;
     }
 
@@ -275,20 +279,22 @@ function ZapiIntegrationCard({
       setStatus(connected ? 'conectado' : 'aguardando_qr');
       setIntegrationMessage(String(result?.message || ''));
       setLastValidatedAt(new Date().toISOString());
-      onToast?.('sucesso', result?.message || 'Integracao Z-API validada com sucesso.');
+      onToastRef.current?.('sucesso', result?.message || 'Integracao Z-API validada com sucesso.');
     } catch (error) {
       setForm((current) => ({ ...current, connected: false }));
       setStatus('erro');
       setIntegrationMessage('');
-      onToast?.('erro', error.message || 'Falha ao validar a integracao Z-API.');
+      onToastRef.current?.('erro', error.message || 'Falha ao validar a integracao Z-API.');
     } finally {
       setValidating(false);
     }
   };
 
   const handleGenerateQrCode = async () => {
+    const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV;
+
     if (!companyId) {
-      onToast?.('erro', 'Selecione uma empresa para gerar o QR Code.');
+      onToastRef.current?.('erro', 'Selecione uma empresa para gerar o QR Code.');
       return;
     }
 
@@ -296,28 +302,43 @@ function ZapiIntegrationCard({
       validateLocalFields();
     } catch (error) {
       setStatus('erro');
-      onToast?.('erro', error.message || 'Campos invalidos para a integracao.');
+      onToastRef.current?.('erro', error.message || 'Campos invalidos para a integracao.');
       return;
     }
+
+    // Stop any previous polling before starting a new attempt
+    stopPolling();
 
     setQrLoading(true);
     setQrError('');
     setQrCodeDataUrl('');
     setQrExpired(false);
 
+    if (isDev) console.log('[QR] generateQr:start', { companyId });
+
     // Client-side safety net: if invoke never resolves, surface a clear error after 35 s
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(
+    const timeoutId = { ref: null };
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId.ref = setTimeout(
         () => reject(new Error('QR Code nao retornou em tempo habil. Verifique a instancia e tente novamente.')),
         35000,
-      )
-    );
+      );
+    });
 
     try {
       const result = await Promise.race([
         getCompanyIntegrationQrCode(companyId, form),
         timeoutPromise,
       ]);
+      clearTimeout(timeoutId.ref);
+
+      if (isDev) console.log('[QR] generateQr:response', {
+        ok: result?.ok,
+        connected: result?.connected,
+        status: result?.status,
+        hasQrCode: Boolean(result?.qrCode || result?.image_data_url),
+        keys: result ? Object.keys(result) : [],
+      });
 
       const connected = Boolean(result?.connected) || String(result?.status || '').toLowerCase() === 'connected';
       if (connected) {
@@ -331,7 +352,7 @@ function ZapiIntegrationCard({
         setStatus('conectado');
         setIntegrationMessage(String(result?.message || 'WhatsApp ja conectado'));
         setLastValidatedAt(new Date().toISOString());
-        onToast?.('sucesso', result?.message || 'WhatsApp ja conectado');
+        onToastRef.current?.('sucesso', result?.message || 'WhatsApp ja conectado');
         return;
       }
 
@@ -347,6 +368,8 @@ function ZapiIntegrationCard({
         ''
       );
 
+      if (isDev && !qrImage) console.warn('[QR] generateQr:no-image — full result:', result);
+
       if (!qrImage) {
         throw new Error('Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
       }
@@ -357,22 +380,25 @@ function ZapiIntegrationCard({
       setStatus('aguardando_qr');
       setIntegrationMessage(String(result?.message || 'QR Code carregado com sucesso.'));
       setLastValidatedAt(new Date().toISOString());
-      onToast?.('sucesso', result?.message || 'QR Code carregado com sucesso.');
+      onToastRef.current?.('sucesso', result?.message || 'QR Code carregado com sucesso.');
       startPolling();
     } catch (error) {
+      clearTimeout(timeoutId.ref);
       const msg = String(error?.message || 'Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
+      if (isDev) console.error('[QR] generateQr:error', { msg, error });
       setStatus('erro');
-      setQrError(msg);          // ← keeps the card visible with inline error
+      setQrError(msg);                    // ← keeps card visible with inline error
       setIntegrationMessage('');
-      onToast?.('erro', msg);   // ← also toast for accessibility
+      onToastRef.current?.('erro', msg);  // ← also toast for accessibility
     } finally {
       setQrLoading(false);
+      if (isDev) console.log('[QR] generateQr:finally — qrLoading=false');
     }
   };
 
   const handleRefreshStatus = async () => {
     if (!companyId) {
-      onToast?.('erro', 'Selecione uma empresa para consultar o status da integracao.');
+      onToastRef.current?.('erro', 'Selecione uma empresa para consultar o status da integracao.');
       return;
     }
 
@@ -380,7 +406,7 @@ function ZapiIntegrationCard({
       validateLocalFields();
     } catch (error) {
       setStatus('erro');
-      onToast?.('erro', error.message || 'Campos invalidos para a integracao.');
+      onToastRef.current?.('erro', error.message || 'Campos invalidos para a integracao.');
       return;
     }
 
@@ -404,11 +430,11 @@ function ZapiIntegrationCard({
       } else if (!connected) {
         await saveCompanyIntegration(companyId, { ...form, connected: false }, 'zapi').catch(() => {});
       }
-      onToast?.('sucesso', result?.message || 'Status da integracao atualizado.');
+      onToastRef.current?.('sucesso', result?.message || 'Status da integracao atualizado.');
     } catch (error) {
       setStatus('erro');
       setIntegrationMessage('');
-      onToast?.('erro', error.message || 'Falha ao atualizar o status da integracao.');
+      onToastRef.current?.('erro', error.message || 'Falha ao atualizar o status da integracao.');
     } finally {
       setStatusLoading(false);
     }
@@ -416,7 +442,7 @@ function ZapiIntegrationCard({
 
   const handleSave = async () => {
     if (!companyId) {
-      onToast?.('erro', 'Selecione uma empresa para salvar a integracao.');
+      onToastRef.current?.('erro', 'Selecione uma empresa para salvar a integracao.');
       return;
     }
 
@@ -424,7 +450,7 @@ function ZapiIntegrationCard({
       validateLocalFields();
     } catch (error) {
       setStatus('erro');
-      onToast?.('erro', error.message || 'Campos invalidos para a integracao.');
+      onToastRef.current?.('erro', error.message || 'Campos invalidos para a integracao.');
       return;
     }
 
@@ -436,11 +462,11 @@ function ZapiIntegrationCard({
       setLastValidatedAt(new Date().toISOString());
       setEditingCredentials(false);
       onSaved?.();
-      onToast?.('sucesso', 'Integracao Z-API salva com sucesso.');
+      onToastRef.current?.('sucesso', 'Integracao Z-API salva com sucesso.');
     } catch (error) {
       setStatus('erro');
       setIntegrationMessage('');
-      onToast?.('erro', error.message || 'Falha ao salvar a integracao Z-API.');
+      onToastRef.current?.('erro', error.message || 'Falha ao salvar a integracao Z-API.');
     } finally {
       setSaving(false);
     }
