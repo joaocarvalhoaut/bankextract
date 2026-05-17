@@ -5654,6 +5654,42 @@ Deno.serve(async (req: Request) => {
           (body?.config || {}) as Record<string, unknown>,
           { allowTestMode: auth.bypass === true },
         );
+
+        // ── Pre-check via /status (fast, never hangs) ────────────────────────
+        // Z-API's /qr-code/image endpoint hangs indefinitely when the instance
+        // is already connected — it waits for a new QR that never materialises.
+        // Calling /status first lets us return immediately in the connected case
+        // without ever touching /qr-code/image.
+        let preCheckData: Record<string, unknown> | null = null;
+        try {
+          preCheckData = await validateZapiConnection({
+            instanceId: zapiConfig.instanceId,
+            token: zapiConfig.token,
+            clientToken: zapiConfig.clientToken,
+          });
+        } catch {
+          // Status check failed — proceed to QR endpoint anyway
+          preCheckData = null;
+        }
+
+        if (preCheckData && isZapiConnected(preCheckData)) {
+          const phoneNumber = extractZapiPhoneNumber(preCheckData);
+          console.log('[ZAPI QR PRE-CHECK] already connected — skipping /qr-code/image');
+          return jsonResponse({
+            ok: true,
+            success: true,
+            action: 'get_qr_code',
+            connected: true,
+            status: 'connected',
+            message: 'WhatsApp ja conectado',
+            phone_number: phoneNumber,
+            qrCode: null,
+            image_data_url: null,
+            data: preCheckData,
+          }, 200);
+        }
+
+        // ── Instance is disconnected — safe to call /qr-code/image ───────────
         const qrCode = await getZapiQrCodeData({
           instanceId: zapiConfig.instanceId,
           token: zapiConfig.token,

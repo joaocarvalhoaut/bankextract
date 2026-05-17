@@ -329,6 +329,15 @@ function ZapiIntegrationCard({
       return;
     }
 
+    // Guard: if local state already shows connected, the Z-API /qr-code/image
+    // endpoint will hang indefinitely — skip the call and inform the user.
+    if (status === 'conectado') {
+      setQrPanelEverOpened(false);
+      setQrDebug({ lastAction: 'Bloqueado: WhatsApp ja esta conectado' });
+      onToastRef.current?.('sucesso', 'WhatsApp ja esta conectado. Nao e necessario gerar QR Code.');
+      return;
+    }
+
     // Stop any previous polling before starting a new attempt
     stopPolling();
 
