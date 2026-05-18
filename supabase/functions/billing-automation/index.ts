@@ -1109,7 +1109,9 @@ async function googleJson<T>(url: string, token: string): Promise<T> {
     }
 
     if (!response.ok) {
-      throw new Error(await response.text());
+      const body = await response.text();
+      // Include HTTP status so callers can distinguish 403 (permission) from 404 (not found)
+      throw new Error(`HTTP ${response.status}: ${body}`);
     }
 
     return await response.json() as T;
@@ -1178,36 +1180,92 @@ async function listSubfolders(token: string, parentId: string): Promise<Array<{ 
   const query = encodeURIComponent(
     `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
   );
+  // corpora=allDrives covers My Drive + all Shared Drives the service account can access.
+  // supportsAllDrives + includeItemsFromAllDrives are required for Shared Drive content.
   const data = await googleJson<{ files?: Array<{ id: string; name: string }> }>(
-    `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&pageSize=50&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+    `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&pageSize=100&corpora=allDrives&supportsAllDrives=true&includeItemsFromAllDrives=true`,
     token,
   );
   return data.files || [];
 }
 
-// Recursively collect all folder IDs under a root (BFS, capped at maxDepth and maxFolders)
+interface FolderTraversalError {
+  folder_id: string;
+  folder_name: string;
+  depth: number;
+  error: string;
+  http_status: number | null;
+}
+
+// BFS that logs every step and collects real errors — used by testBoletoLookup and diagnostics.
+async function collectFolderIdsDetailed(
+  token: string,
+  rootId: string,
+  maxDepth: number,
+  maxFolders = 60,
+): Promise<{ ids: string[]; errors: FolderTraversalError[] }> {
+  const visited = new Set<string>([rootId]);
+  const queue: Array<{ id: string; name: string; depth: number }> = [{ id: rootId, name: 'root', depth: 0 }];
+  const errors: FolderTraversalError[] = [];
+
+  while (queue.length > 0 && visited.size < maxFolders) {
+    const item = queue.shift();
+    if (!item || item.depth >= maxDepth) continue;
+
+    let children: Array<{ id: string; name: string }> = [];
+    try {
+      children = await listSubfolders(token, item.id);
+      console.log(JSON.stringify({
+        event: 'bfs_visit',
+        folder_id: item.id,
+        folder_name: item.name,
+        depth: item.depth,
+        children_found: children.length,
+        child_names: children.map((c) => c.name),
+      }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Extract HTTP status from "HTTP 403: ..." pattern
+      const httpStatus = msg.match(/^HTTP (\d+):/)?.[1] ? Number(msg.match(/^HTTP (\d+):/)?.[1]) : null;
+      const traversalErr: FolderTraversalError = {
+        folder_id: item.id,
+        folder_name: item.name,
+        depth: item.depth,
+        error: msg,
+        http_status: httpStatus,
+      };
+      errors.push(traversalErr);
+      console.log(JSON.stringify({ event: 'bfs_error', ...traversalErr }));
+      continue;
+    }
+
+    for (const child of children) {
+      if (!visited.has(child.id) && visited.size < maxFolders) {
+        visited.add(child.id);
+        queue.push({ id: child.id, name: child.name, depth: item.depth + 1 });
+      }
+    }
+  }
+
+  console.log(JSON.stringify({
+    event: 'bfs_done',
+    root_id: rootId,
+    folders_found: visited.size,
+    traversal_errors: errors.length,
+  }));
+
+  return { ids: Array.from(visited), errors };
+}
+
+// Simplified wrapper kept for backward-compat with callers that only need IDs.
 async function collectFolderIds(
   token: string,
   rootId: string,
   maxDepth: number,
   maxFolders = 40,
 ): Promise<string[]> {
-  const visited = new Set<string>([rootId]);
-  const queue: Array<{ id: string; depth: number }> = [{ id: rootId, depth: 0 }];
-
-  while (queue.length > 0 && visited.size < maxFolders) {
-    const item = queue.shift();
-    if (!item || item.depth >= maxDepth) continue;
-    const children = await listSubfolders(token, item.id).catch(() => []);
-    for (const child of children) {
-      if (!visited.has(child.id) && visited.size < maxFolders) {
-        visited.add(child.id);
-        queue.push({ id: child.id, depth: item.depth + 1 });
-      }
-    }
-  }
-
-  return Array.from(visited);
+  const { ids } = await collectFolderIdsDetailed(token, rootId, maxDepth, maxFolders);
+  return ids;
 }
 
 async function listPdfFilesRecursive(
@@ -1250,17 +1308,35 @@ async function searchDriveFilesWithConfig(
   return [];
 }
 
-// Get folder structure (tree) for admin preview
+// Get folder structure (tree) for admin preview — now surfaces per-folder access errors.
 async function getDriveFolderStructure(
   token: string,
   rootFolderId: string,
   maxDepth = 2,
 ): Promise<unknown> {
   async function buildNode(id: string, name: string, depth: number): Promise<unknown> {
-    const pdfCount = await countPdfFilesInFolder(token, id).catch(() => 0);
-    const node: Record<string, unknown> = { id, name, pdf_count: pdfCount };
+    const node: Record<string, unknown> = { id, name };
+
+    // PDF count — capture error separately so the tree still renders
+    try {
+      node.pdf_count = await countPdfFilesInFolder(token, id);
+    } catch (err) {
+      node.pdf_count = null;
+      node.pdf_access_error = err instanceof Error ? err.message : String(err);
+    }
+
     if (depth < maxDepth) {
-      const children = await listSubfolders(token, id).catch(() => []);
+      let children: Array<{ id: string; name: string }> = [];
+      try {
+        children = await listSubfolders(token, id);
+        node.subfolders_error = null;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        node.subfolders_error = msg;
+        node.subfolders = [];
+        return node;
+      }
+      node.subfolders_found = children.length;
       if (children.length > 0) {
         node.subfolders = await Promise.all(
           children.slice(0, 20).map((child) => buildNode(child.id, child.name, depth + 1)),
@@ -1270,8 +1346,14 @@ async function getDriveFolderStructure(
     return node;
   }
 
-  const root = await getDriveFileMetadata(token, rootFolderId);
-  return buildNode(rootFolderId, root.name || 'Root', 0);
+  let rootName = rootFolderId;
+  try {
+    const root = await getDriveFileMetadata(token, rootFolderId);
+    rootName = root.name || rootFolderId;
+  } catch {
+    // proceed with ID as name
+  }
+  return buildNode(rootFolderId, rootName, 0);
 }
 
 // ── Query tokenizer ──────────────────────────────────────────────────────────
@@ -1369,6 +1451,12 @@ interface LookupResult {
   _debug?: Record<string, unknown>;
 }
 
+interface PdfFolderError {
+  folder_id: string;
+  error: string;
+  http_status: number | null;
+}
+
 interface LookupOutcome {
   results: LookupResult[];
   meta: {
@@ -1379,12 +1467,15 @@ interface LookupOutcome {
     tokens_names: string[];
     folder_errors: number;
     fallback_used: boolean;
+    // Full error details for diagnostic panel
+    traversal_errors: FolderTraversalError[];
+    pdf_errors: PdfFolderError[];
   };
 }
 
 // Test boleto lookup — two-phase: (1) list ALL PDFs recursively, (2) score locally.
-// Fallback: if recursive scan finds 0 PDFs (permission issue on subfolders?),
-// tries Drive API 'name contains' with each number token across all folder IDs.
+// Phase 4 fallback: if 0 PDFs found, tries Drive API 'name contains' per number token.
+// All errors are captured with HTTP status for diagnostic display.
 async function testBoletoLookup(
   token: string,
   rootFolderId: string,
@@ -1403,7 +1494,7 @@ async function testBoletoLookup(
     max_depth: maxDepth,
   }));
 
-  const emptyMeta = {
+  const emptyMeta: LookupOutcome['meta'] = {
     folders_visited: 0,
     pdfs_scanned: 0,
     tokens_all: allTokens,
@@ -1411,6 +1502,8 @@ async function testBoletoLookup(
     tokens_names: nameTokens,
     folder_errors: 0,
     fallback_used: false,
+    traversal_errors: [],
+    pdf_errors: [],
   };
 
   if (!allTokens.length) {
@@ -1418,36 +1511,47 @@ async function testBoletoLookup(
     return { results: [], meta: emptyMeta };
   }
 
-  // ── Phase 1: Collect all subfolder IDs (BFS, depth 4, max 60 folders) ────────
-  const folderIds = await collectFolderIds(token, rootFolderId, maxDepth, 60);
+  // ── Phase 1: BFS to collect all subfolder IDs — logs every step, captures errors ──
+  const { ids: folderIds, errors: traversalErrors } = await collectFolderIdsDetailed(
+    token, rootFolderId, maxDepth, 60,
+  );
   console.log(JSON.stringify({
     event: 'lookup_folders',
     count: folderIds.length,
-    folder_ids: folderIds.slice(0, 10), // log first 10 for inspection
+    traversal_errors: traversalErrors.length,
+    folder_ids: folderIds.slice(0, 15),
   }));
 
-  // ── Phase 2: List every PDF from every folder ─────────────────────────────────
+  // ── Phase 2: List every PDF from every collected folder ───────────────────────
   const allPdfs: DriveCandidate[] = [];
-  let folderErrors = 0;
+  const pdfErrors: PdfFolderError[] = [];
 
   for (const fid of folderIds) {
     if (allPdfs.length >= 300) break;
     try {
       const pdfs = await listPdfFilesInFolder(token, fid, 100);
-      for (const pdf of pdfs) {
-        console.log(JSON.stringify({ event: 'lookup_pdf', name: pdf.name, folder_id: fid }));
-        allPdfs.push(pdf);
+      if (pdfs.length > 0) {
+        console.log(JSON.stringify({ event: 'lookup_pdfs_in_folder', folder_id: fid, count: pdfs.length, names: pdfs.map((p) => p.name) }));
       }
+      allPdfs.push(...pdfs);
     } catch (err) {
-      folderErrors += 1;
+      const msg = err instanceof Error ? err.message : String(err);
+      const httpStatus = msg.match(/^HTTP (\d+):/)?.[1] ? Number(msg.match(/^HTTP (\d+):/)?.[1]) : null;
+      pdfErrors.push({ folder_id: fid, error: msg, http_status: httpStatus });
       console.log(JSON.stringify({
-        event: 'lookup_folder_error',
+        event: 'lookup_pdf_error',
         folder_id: fid,
-        error: err instanceof Error ? err.message : String(err),
+        http_status: httpStatus,
+        error: msg,
       }));
     }
   }
-  console.log(JSON.stringify({ event: 'lookup_pdfs_total', count: allPdfs.length, folder_errors: folderErrors }));
+  console.log(JSON.stringify({
+    event: 'lookup_pdfs_total',
+    count: allPdfs.length,
+    pdf_errors: pdfErrors.length,
+    traversal_errors: traversalErrors.length,
+  }));
 
   // ── Phase 3: Score every PDF locally against the extracted tokens ─────────────
   let scored = allPdfs
@@ -1467,11 +1571,17 @@ async function testBoletoLookup(
 
   let fallbackUsed = false;
 
-  // ── Phase 4 (fallback): Drive API 'name contains' per token ──────────────────
-  // Used when recursive scan found 0 PDFs (e.g. subfolder permission issue).
-  // Searches each number token directly via Drive API across all collected folders.
+  // ── Phase 4 (fallback): Drive API 'name contains' per number token ────────────
+  // Triggered when scan found 0 matches — typically a permission error on subfolders.
+  // Searches Drive API directly across all collected folder IDs.
   if (scored.length === 0 && numberTokens.length > 0) {
-    console.log(JSON.stringify({ event: 'lookup_fallback_start', reason: 'no_results_from_scan', tokens: numberTokens }));
+    console.log(JSON.stringify({
+      event: 'lookup_fallback_start',
+      reason: pdfErrors.length > 0 ? 'pdf_list_errors' : (traversalErrors.length > 0 ? 'traversal_errors' : 'no_matches'),
+      traversal_errors: traversalErrors.length,
+      pdf_errors: pdfErrors.length,
+      tokens: numberTokens,
+    }));
     fallbackUsed = true;
     const fallbackMap = new Map<string, DriveCandidate>();
 
@@ -1483,9 +1593,12 @@ async function testBoletoLookup(
           `name contains '${nt.replace(/'/g, "\\'")}' and '${fid}' in parents and mimeType='application/pdf' and trashed=false`,
         );
         const data = await googleJson<{ files?: DriveCandidate[] }>(
-          `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,webViewLink,webContentLink)&pageSize=10&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+          `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,webViewLink,webContentLink)&pageSize=10&corpora=allDrives&supportsAllDrives=true&includeItemsFromAllDrives=true`,
           token,
-        ).catch(() => ({ files: [] as DriveCandidate[] }));
+        ).catch((err) => {
+          console.log(JSON.stringify({ event: 'lookup_fallback_error', folder_id: fid, token: nt, error: String(err) }));
+          return { files: [] as DriveCandidate[] };
+        });
         for (const f of data.files || []) {
           if (!fallbackMap.has(f.id)) {
             console.log(JSON.stringify({ event: 'lookup_fallback_hit', name: f.name, token: nt, folder_id: fid }));
@@ -1509,17 +1622,26 @@ async function testBoletoLookup(
       .slice(0, 10);
   }
 
-  const meta = {
+  const meta: LookupOutcome['meta'] = {
     folders_visited: folderIds.length,
     pdfs_scanned: allPdfs.length,
     tokens_all: allTokens,
     tokens_numbers: numberTokens,
     tokens_names: nameTokens,
-    folder_errors: folderErrors,
+    folder_errors: pdfErrors.length + traversalErrors.length,
     fallback_used: fallbackUsed,
+    traversal_errors: traversalErrors,
+    pdf_errors: pdfErrors,
   };
 
-  console.log(JSON.stringify({ event: 'lookup_done', ...meta, results_found: scored.length }));
+  console.log(JSON.stringify({
+    event: 'lookup_done',
+    folders_visited: meta.folders_visited,
+    pdfs_scanned: meta.pdfs_scanned,
+    folder_errors: meta.folder_errors,
+    fallback_used: meta.fallback_used,
+    results_found: scored.length,
+  }));
 
   return { results: scored, meta };
 }
@@ -6711,9 +6833,117 @@ Deno.serve(async (req: Request) => {
       requireCompanyId(companyId);
       const config = await getSheetsDriveConfig(admin, companyId || '');
       const folderId = requireDriveFolderId(config?.drive_root_folder_id);
-      const maxDepth = Math.min(5, Math.max(1, Number(body?.max_depth ?? config?.drive_max_depth ?? 2)));
+      const maxDepth = Math.min(5, Math.max(1, Number(body?.max_depth ?? config?.drive_max_depth ?? 3)));
       const structure = await getDriveFolderStructure(googleToken, folderId, maxDepth);
-      return jsonResponse({ ok: true, company_id: companyId, folder_id: folderId, structure });
+      return jsonResponse({ ok: true, company_id: companyId, folder_id: folderId, max_depth: maxDepth, structure });
+    }
+
+    // ── Drive permission diagnostic ──────────────────────────────────────────────
+    // Tests root metadata, subfolder listing, PDF listing, and BFS at each level.
+    // Reveals exactly where the service account loses access (403 vs empty vs OK).
+    if (action === 'diagnose_drive_access') {
+      requireCompanyId(companyId);
+      const config = await getSheetsDriveConfig(admin, companyId || '');
+      const folderId = requireDriveFolderId(config?.drive_root_folder_id);
+      const serviceAccountEmail = Deno.env.get('GOOGLE_CLIENT_EMAIL') || '(não configurado)';
+
+      const steps: Array<Record<string, unknown>> = [];
+
+      // Step 1: Can we read the root folder metadata?
+      let rootMeta: Record<string, unknown> | null = null;
+      try {
+        const meta = await getDriveFileMetadata(googleToken, folderId);
+        rootMeta = { id: meta.id, name: meta.name, mimeType: meta.mimeType };
+        steps.push({ step: '1_root_metadata', ok: true, folder_id: folderId, name: meta.name });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        steps.push({ step: '1_root_metadata', ok: false, folder_id: folderId, error: msg });
+      }
+
+      // Step 2: Can we list subfolders of root?
+      let level1Folders: Array<{ id: string; name: string }> = [];
+      try {
+        level1Folders = await listSubfolders(googleToken, folderId);
+        steps.push({ step: '2_list_subfolders_root', ok: true, count: level1Folders.length, names: level1Folders.map((f) => f.name) });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        steps.push({ step: '2_list_subfolders_root', ok: false, error: msg, diagnosis: 'SERVICE_ACCOUNT_NOT_SHARED — compartilhe a pasta raiz com ' + serviceAccountEmail });
+      }
+
+      // Step 3: Can we list PDFs in root?
+      try {
+        const pdfs = await listPdfFilesInFolder(googleToken, folderId, 5);
+        steps.push({ step: '3_list_pdfs_root', ok: true, count: pdfs.length, names: pdfs.map((f) => f.name) });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        steps.push({ step: '3_list_pdfs_root', ok: false, error: msg });
+      }
+
+      // Step 4: For each level-1 subfolder, test listing (up to 5 folders)
+      const level2Results: Array<Record<string, unknown>> = [];
+      for (const f1 of level1Folders.slice(0, 5)) {
+        const entry: Record<string, unknown> = { folder_id: f1.id, folder_name: f1.name };
+        try {
+          const subs = await listSubfolders(googleToken, f1.id);
+          const pdfs = await listPdfFilesInFolder(googleToken, f1.id, 3);
+          entry.ok = true;
+          entry.subfolders = subs.length;
+          entry.subfolder_names = subs.map((s) => s.name);
+          entry.pdfs_direct = pdfs.length;
+          entry.pdf_names = pdfs.map((p) => p.name);
+        } catch (err) {
+          entry.ok = false;
+          entry.error = err instanceof Error ? err.message : String(err);
+        }
+        level2Results.push(entry);
+      }
+      if (level2Results.length > 0) {
+        steps.push({ step: '4_level2_subfolders', results: level2Results });
+      }
+
+      // Step 5: BFS diagnostic
+      const { ids: bfsIds, errors: bfsErrors } = await collectFolderIdsDetailed(googleToken, folderId, 4, 20);
+      steps.push({
+        step: '5_bfs_summary',
+        ok: bfsErrors.length === 0,
+        folders_found: bfsIds.length,
+        traversal_errors: bfsErrors.length,
+        error_details: bfsErrors,
+        all_folder_ids: bfsIds,
+      });
+
+      // Diagnosis summary
+      const hasRootAccess = steps.find((s) => s.step === '1_root_metadata')?.ok ?? false;
+      const hasSubfolderAccess = steps.find((s) => s.step === '2_list_subfolders_root')?.ok ?? false;
+      const hasPdfAccess = steps.find((s) => s.step === '3_list_pdfs_root')?.ok ?? false;
+
+      let diagnosis = 'OK';
+      let action_required: string | null = null;
+      if (!hasRootAccess) {
+        diagnosis = 'ROOT_NOT_ACCESSIBLE';
+        action_required = `A conta de serviço (${serviceAccountEmail}) não tem acesso à pasta raiz ${folderId}. Compartilhe a pasta com este email no Google Drive.`;
+      } else if (!hasSubfolderAccess) {
+        diagnosis = 'SUBFOLDERS_NOT_ACCESSIBLE';
+        action_required = `A conta de serviço tem acesso à raiz mas não consegue listar subpastas. Verifique se a pasta está em Shared Drive ou compartilhe com ${serviceAccountEmail} e marque "Compartilhar com subpastas".`;
+      } else if (!hasPdfAccess) {
+        diagnosis = 'PDF_LISTING_FAILED';
+        action_required = 'Listagem de PDFs na raiz falhou apesar do acesso à pasta. Verifique permissões de leitura de arquivo.';
+      } else if (bfsIds.length === 1 && bfsErrors.length > 0) {
+        diagnosis = 'PARTIAL_ACCESS_SUBFOLDERS_BLOCKED';
+        action_required = `Acesso parcial — subpastas estão bloqueadas. Erros: ${bfsErrors.map((e) => e.error).join('; ')}`;
+      }
+
+      return jsonResponse({
+        ok: hasRootAccess,
+        company_id: companyId,
+        folder_id: folderId,
+        service_account_email: serviceAccountEmail,
+        oauth_scope: 'https://www.googleapis.com/auth/drive.readonly',
+        diagnosis,
+        action_required,
+        root_info: rootMeta,
+        steps,
+      });
     }
 
     if (action === 'test_boleto_lookup') {
@@ -6754,6 +6984,9 @@ Deno.serve(async (req: Request) => {
         recursive: true,
         max_depth: maxDepth,
         results_found: results.length,
+        // OAuth / service account info — helps diagnose permission problems
+        service_account_email: Deno.env.get('GOOGLE_CLIENT_EMAIL') || '(não configurado)',
+        oauth_scope: 'https://www.googleapis.com/auth/drive.readonly',
         debug: {
           tokens_all: meta.tokens_all,
           tokens_numbers: meta.tokens_numbers,
@@ -6763,6 +6996,19 @@ Deno.serve(async (req: Request) => {
           pdfs_scanned: meta.pdfs_scanned,
           folder_errors: meta.folder_errors,
           fallback_used: meta.fallback_used,
+          // Full error details — traversal = BFS listing subfolders; pdf = listing files inside folder
+          traversal_errors: meta.traversal_errors.map((e) => ({
+            folder_id: e.folder_id,
+            folder_name: e.folder_name,
+            depth: e.depth,
+            http_status: e.http_status,
+            error: e.error,
+          })),
+          pdf_errors: meta.pdf_errors.map((e) => ({
+            folder_id: e.folder_id,
+            http_status: e.http_status,
+            error: e.error,
+          })),
         },
         results: results.map((r) => ({
           file_id: r.file.id,

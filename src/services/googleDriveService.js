@@ -7,6 +7,7 @@ import {
   testBoletoLookup,
   getDriveFolderStructure,
   extractFolderIdFromUrl,
+  diagnoseDriveAccess,
 } from './billingAutomationService';
 
 export async function getDriveBoletosConfig(companyId) {
@@ -43,4 +44,8 @@ export async function getDriveFolderTree(companyId) {
 
 export async function extractDriveFolderIdFromUrl(companyId, url) {
   return extractFolderIdFromUrl(companyId, url);
+}
+
+export async function diagnoseDriveAccessForCompany(companyId) {
+  return diagnoseDriveAccess(companyId);
 }

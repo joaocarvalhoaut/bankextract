@@ -10,6 +10,8 @@ import {
   Loader2,
   RefreshCw,
   Search,
+  ShieldAlert,
+  Stethoscope,
   TriangleAlert,
   X,
 } from 'lucide-react';
@@ -20,6 +22,7 @@ import {
   testDriveBoletoLookup,
   getDriveFolderTree,
   extractDriveFolderIdFromUrl,
+  diagnoseDriveAccessForCompany,
 } from '../services/googleDriveService';
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -89,6 +92,11 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
   const [lookupResults, setLookupResults] = useState(null);
   const [lookupRawResponse, setLookupRawResponse] = useState(null);
   const [debugOpen, setDebugOpen] = useState(true);
+
+  // diagnose state
+  const [diagnoseLoading, setDiagnoseLoading] = useState(false);
+  const [diagnoseResult, setDiagnoseResult] = useState(null);
+  const [diagnoseOpen, setDiagnoseOpen] = useState(true);
 
   // folder tree state
   const [treeLoading, setTreeLoading] = useState(false);
@@ -236,6 +244,27 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
     }
   }, [empresaId, lookupQuery, onToast]);
 
+  // ── diagnose drive access ────────────────────────────────────────────────
+
+  const handleDiagnose = useCallback(async () => {
+    if (!empresaId || !folderId) return;
+    setDiagnoseLoading(true);
+    setDiagnoseResult(null);
+    setDiagnoseOpen(true);
+    try {
+      const result = await diagnoseDriveAccessForCompany(empresaId);
+      // eslint-disable-next-line no-console
+      console.log('[DIAGNOSE_DRIVE_ACCESS]', result);
+      setDiagnoseResult(result);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.log('[DIAGNOSE_DRIVE_ACCESS] ERROR', err);
+      setDiagnoseResult({ ok: false, error: err.message });
+    } finally {
+      setDiagnoseLoading(false);
+    }
+  }, [empresaId, folderId]);
+
   // ── folder tree ──────────────────────────────────────────────────────────
 
   const handleLoadTree = useCallback(async () => {
@@ -260,6 +289,7 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
     setTestResult(null);
     setLookupResults(null);
     setLookupRawResponse(null);
+    setDiagnoseResult(null);
     setTreeData(null);
     setTreeOpen(false);
   }, [loadConfig]);
@@ -432,6 +462,15 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
           {treeLoading ? <Loader2 size={13} className="animate-spin" /> : <FolderTree size={13} />}
           {treeLoading ? 'Carregando...' : 'Ver estrutura'}
         </button>
+
+        <button
+          onClick={handleDiagnose}
+          disabled={diagnoseLoading || !hasFolder}
+          className="flex items-center gap-1.5 rounded-xl border border-violet-700/50 bg-violet-900/20 px-4 py-2 text-xs font-semibold text-violet-300 transition hover:bg-violet-900/40 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {diagnoseLoading ? <Loader2 size={13} className="animate-spin" /> : <Stethoscope size={13} />}
+          {diagnoseLoading ? 'Diagnosticando...' : 'Diagnóstico Drive'}
+        </button>
       </div>
 
       {/* ── Test result banner ───────────────────────────────────────────── */}
@@ -456,6 +495,113 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
           <button onClick={() => setTestResult(null)} className="ml-auto shrink-0 text-slate-400 hover:text-slate-200">
             <X size={12} />
           </button>
+        </div>
+      )}
+
+      {/* ── Diagnóstico Drive ───────────────────────────────────────────── */}
+      {diagnoseResult !== null && (
+        <div className="overflow-hidden rounded-xl border border-violet-600/40 bg-violet-950/30">
+          {/* header */}
+          <button
+            onClick={() => setDiagnoseOpen((v) => !v)}
+            className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-violet-900/20"
+          >
+            <div className="flex items-center gap-2">
+              <Stethoscope size={13} className="text-violet-400" />
+              <span className="text-xs font-semibold text-violet-300">Diagnóstico de Acesso ao Drive</span>
+              {diagnoseResult?.diagnosis && (
+                <span className={`rounded px-2 py-px text-[10px] font-bold ${diagnoseResult.ok ? 'bg-emerald-800/40 text-emerald-300' : 'bg-red-800/40 text-red-300'}`}>
+                  {diagnoseResult.diagnosis}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] text-slate-400">{diagnoseOpen ? '▲' : '▼'}</span>
+          </button>
+
+          {diagnoseOpen && (
+            <div className="border-t border-violet-800/30 px-3 pb-4 pt-3 space-y-3">
+
+              {/* action required callout */}
+              {diagnoseResult?.action_required && (
+                <div className="flex items-start gap-2 rounded-lg border border-red-600/30 bg-red-900/20 px-3 py-2.5">
+                  <ShieldAlert size={14} className="mt-px shrink-0 text-red-400" />
+                  <p className="text-xs text-red-200 leading-relaxed">{diagnoseResult.action_required}</p>
+                </div>
+              )}
+
+              {/* service account + scope */}
+              <div className="rounded-lg bg-slate-900/60 px-3 py-2 space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Conta de serviço OAuth</p>
+                <p className="font-mono text-[11px] text-cyan-300 break-all">{diagnoseResult?.service_account_email || '—'}</p>
+                <p className="font-mono text-[10px] text-slate-400">{diagnoseResult?.oauth_scope || '—'}</p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  ⚠ Certifique-se de que esta conta foi adicionada como <strong className="text-slate-200">Leitor</strong> na pasta raiz do Drive e em todas as subpastas.
+                </p>
+              </div>
+
+              {/* steps */}
+              {Array.isArray(diagnoseResult?.steps) && diagnoseResult.steps.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Etapas testadas</p>
+                  {diagnoseResult.steps.map((s, i) => {
+                    const isOk = s.ok !== false;
+                    const isErr = s.ok === false;
+                    return (
+                      <div key={i} className={`rounded-lg px-2.5 py-2 text-[11px] ${isErr ? 'border border-red-700/30 bg-red-900/20' : 'border border-slate-700/50 bg-slate-900/50'}`}>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`font-mono text-[10px] font-bold ${isErr ? 'text-red-400' : 'text-emerald-400'}`}>
+                            {isErr ? '✗' : '✓'}
+                          </span>
+                          <span className="font-mono text-[10px] text-slate-300">{s.step}</span>
+                          {s.count != null && <span className="text-[10px] text-slate-400">({s.count} itens)</span>}
+                          {s.folders_found != null && <span className="text-[10px] text-slate-400">{s.folders_found} pastas</span>}
+                        </div>
+                        {s.names && s.names.length > 0 && (
+                          <p className="mt-1 font-mono text-[10px] text-slate-400 break-all">{s.names.join(', ')}</p>
+                        )}
+                        {s.error && <p className="mt-1 font-mono text-[10px] text-red-300 break-all">{String(s.error)}</p>}
+                        {s.diagnosis && <p className="mt-1 text-[10px] text-amber-300">{s.diagnosis}</p>}
+                        {/* Level-2 subfolder results */}
+                        {Array.isArray(s.results) && s.results.map((r, j) => (
+                          <div key={j} className={`mt-1 ml-3 rounded px-2 py-1 text-[10px] ${r.ok ? 'bg-emerald-900/20' : 'bg-red-900/20'}`}>
+                            <span className={r.ok ? 'text-emerald-400' : 'text-red-400'}>{r.ok ? '✓' : '✗'}</span>
+                            {' '}<span className="font-mono text-slate-300">{r.folder_name}</span>
+                            {r.pdfs_direct != null && <span className="text-slate-400"> · {r.pdfs_direct} PDFs diretos</span>}
+                            {r.subfolders != null && <span className="text-slate-400"> · {r.subfolders} subpastas</span>}
+                            {r.error && <span className="ml-1 text-red-300 break-all"> {String(r.error)}</span>}
+                          </div>
+                        ))}
+                        {/* BFS errors */}
+                        {Array.isArray(s.error_details) && s.error_details.length > 0 && (
+                          <div className="mt-1 ml-3 space-y-0.5">
+                            {s.error_details.map((e, j) => (
+                              <p key={j} className="font-mono text-[10px] text-red-300 break-all">
+                                [{e.http_status ?? '?'}] {e.folder_name} ({e.folder_id}): {e.error}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* raw JSON */}
+              <details className="rounded-lg bg-slate-950/80">
+                <summary className="cursor-pointer select-none px-2.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-200">
+                  JSON completo ▾
+                </summary>
+                <pre className="max-h-80 overflow-auto px-2.5 pb-2.5 font-mono text-[10px] leading-relaxed text-slate-300 whitespace-pre-wrap break-all">
+                  {JSON.stringify(diagnoseResult, null, 2)}
+                </pre>
+              </details>
+
+              <button onClick={() => setDiagnoseResult(null)} className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300">
+                <X size={10} /> Fechar diagnóstico
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -639,6 +785,48 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
                     <p className="font-mono text-[10px] text-slate-500">
                       all: [{(lookupRawResponse.debug.tokens_all || []).join(', ')}]
                     </p>
+                  </div>
+                )}
+
+                {/* traversal errors — BFS subfolder listing failures */}
+                {lookupRawResponse?.debug?.traversal_errors?.length > 0 && (
+                  <div className="rounded-lg border border-red-700/30 bg-red-900/20 px-2.5 py-2 space-y-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-red-400">
+                      ⛔ Erros de travessia BFS ({lookupRawResponse.debug.traversal_errors.length})
+                    </p>
+                    <p className="text-[10px] text-red-300">A conta de serviço não conseguiu listar as subpastas abaixo:</p>
+                    {lookupRawResponse.debug.traversal_errors.map((e, i) => (
+                      <div key={i} className="rounded bg-red-950/40 px-2 py-1">
+                        <p className="font-mono text-[10px] text-red-200">
+                          [{e.http_status ?? '?'}] depth={e.depth} · {e.folder_name} ({e.folder_id})
+                        </p>
+                        <p className="font-mono text-[10px] text-red-300 break-all">{e.error}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* PDF listing errors — listPdfFilesInFolder failures */}
+                {lookupRawResponse?.debug?.pdf_errors?.length > 0 && (
+                  <div className="rounded-lg border border-orange-700/30 bg-orange-900/20 px-2.5 py-2 space-y-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-400">
+                      ⚠ Erros ao listar PDFs ({lookupRawResponse.debug.pdf_errors.length} pasta(s))
+                    </p>
+                    {lookupRawResponse.debug.pdf_errors.map((e, i) => (
+                      <div key={i} className="rounded bg-orange-950/40 px-2 py-1">
+                        <p className="font-mono text-[10px] text-orange-200">[{e.http_status ?? '?'}] {e.folder_id}</p>
+                        <p className="font-mono text-[10px] text-orange-300 break-all">{e.error}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* service account info */}
+                {lookupRawResponse?.service_account_email && (
+                  <div className="rounded-lg bg-slate-900/60 px-2.5 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Conta OAuth usada</p>
+                    <p className="font-mono text-[10px] text-cyan-300 break-all">{lookupRawResponse.service_account_email}</p>
+                    <p className="mt-0.5 text-[10px] text-slate-500">Compartilhe a pasta e subpastas do Drive com este email.</p>
                   </div>
                 )}
 

@@ -472,8 +472,19 @@ export async function getDriveFolderStructure(companyId) {
     {
       action: 'get_drive_folder_structure',
       company_id: companyId,
+      max_depth: 3,
     },
     'Falha ao carregar a estrutura de pastas do Drive.'
+  );
+}
+
+export async function diagnoseDriveAccess(companyId) {
+  return invokeBillingAutomation(
+    {
+      action: 'diagnose_drive_access',
+      company_id: companyId,
+    },
+    'Falha ao executar o diagnóstico de acesso ao Drive.'
   );
 }
 
