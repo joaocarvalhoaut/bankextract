@@ -87,6 +87,8 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
   const [lookupQuery, setLookupQuery] = useState('');
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupResults, setLookupResults] = useState(null);
+  const [lookupRawResponse, setLookupRawResponse] = useState(null);
+  const [debugOpen, setDebugOpen] = useState(true);
 
   // folder tree state
   const [treeLoading, setTreeLoading] = useState(false);
@@ -216,10 +218,18 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
     if (!empresaId || !lookupQuery.trim()) return;
     setLookupLoading(true);
     setLookupResults(null);
+    setLookupRawResponse(null);
+    setDebugOpen(true);
     try {
       const result = await testDriveBoletoLookup(empresaId, lookupQuery.trim());
+      // eslint-disable-next-line no-console
+      console.log('[TEST_BOLETO_LOOKUP_RESPONSE]', result);
+      setLookupRawResponse(result);
       setLookupResults(result?.results || result || []);
     } catch (err) {
+      // eslint-disable-next-line no-console
+      console.log('[TEST_BOLETO_LOOKUP_RESPONSE] ERROR', err);
+      setLookupRawResponse({ ok: false, error: err.message, stack: err.stack });
       onToast?.('erro', err.message || 'Falha ao buscar boleto no Drive.');
     } finally {
       setLookupLoading(false);
@@ -249,6 +259,7 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
     loadConfig();
     setTestResult(null);
     setLookupResults(null);
+    setLookupRawResponse(null);
     setTreeData(null);
     setTreeOpen(false);
   }, [loadConfig]);
@@ -547,11 +558,125 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
               })
             )}
             <button
-              onClick={() => setLookupResults(null)}
+              onClick={() => { setLookupResults(null); setLookupRawResponse(null); }}
               className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300"
             >
               <X size={10} /> Limpar resultados
             </button>
+          </div>
+        )}
+
+        {/* ── Debug API panel ─────────────────────────────────────────────── */}
+        {lookupRawResponse !== null && (
+          <div className="overflow-hidden rounded-xl border border-violet-700/40 bg-violet-950/30">
+            {/* header / toggle */}
+            <button
+              onClick={() => setDebugOpen((v) => !v)}
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-violet-900/20"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-violet-400">
+                  🔍 Debug API
+                </span>
+                <span className="rounded bg-violet-800/40 px-1.5 py-px text-[10px] text-violet-300">
+                  {lookupRawResponse?.results_found != null
+                    ? `${lookupRawResponse.results_found} resultado(s)`
+                    : lookupRawResponse?.ok === false
+                      ? 'ERRO'
+                      : 'resposta completa'}
+                </span>
+                {lookupRawResponse?.debug?.folders_visited != null && (
+                  <span className="text-[10px] text-slate-400">
+                    {lookupRawResponse.debug.folders_visited} pastas · {lookupRawResponse.debug.pdfs_scanned} PDFs
+                  </span>
+                )}
+                {lookupRawResponse?.debug?.fallback_used && (
+                  <span className="rounded bg-amber-800/40 px-1.5 py-px text-[10px] text-amber-300">
+                    fallback ativo
+                  </span>
+                )}
+                {lookupRawResponse?.debug?.folder_errors > 0 && (
+                  <span className="rounded bg-red-800/40 px-1.5 py-px text-[10px] text-red-300">
+                    {lookupRawResponse.debug.folder_errors} erro(s) de pasta
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] text-slate-400">
+                {debugOpen ? '▲ recolher' : '▼ expandir'}
+              </span>
+            </button>
+
+            {/* collapsible body */}
+            {debugOpen && (
+              <div className="border-t border-violet-800/30 px-3 pb-3 pt-2 space-y-2">
+
+                {/* quick-scan summary chips */}
+                <div className="flex flex-wrap gap-1.5 text-[10px]">
+                  {[
+                    ['ok', lookupRawResponse?.ok !== false ? '✓ ok=true' : '✗ ok=false', lookupRawResponse?.ok !== false ? 'bg-emerald-800/40 text-emerald-300' : 'bg-red-800/40 text-red-300'],
+                    ['folders', `📁 ${lookupRawResponse?.debug?.folders_visited ?? '?'} pastas visitadas`, 'bg-slate-800/60 text-slate-300'],
+                    ['pdfs', `📄 ${lookupRawResponse?.debug?.pdfs_scanned ?? '?'} PDFs escaneados`, 'bg-slate-800/60 text-slate-300'],
+                    ['errors', `⚠ ${lookupRawResponse?.debug?.folder_errors ?? 0} erros de pasta`, lookupRawResponse?.debug?.folder_errors > 0 ? 'bg-red-800/40 text-red-300' : 'bg-slate-800/60 text-slate-400'],
+                    ['fallback', lookupRawResponse?.debug?.fallback_used ? '🔄 fallback usado' : '— sem fallback', lookupRawResponse?.debug?.fallback_used ? 'bg-amber-800/40 text-amber-300' : 'bg-slate-800/60 text-slate-400'],
+                    ['results', `🎯 ${lookupRawResponse?.results_found ?? 0} resultado(s)`, lookupRawResponse?.results_found > 0 ? 'bg-emerald-800/40 text-emerald-300' : 'bg-slate-800/60 text-slate-400'],
+                  ].map(([key, label, cls]) => (
+                    <span key={key} className={`rounded px-2 py-0.5 font-mono ${cls}`}>{label}</span>
+                  ))}
+                </div>
+
+                {/* tokens */}
+                {lookupRawResponse?.debug?.tokens_all && (
+                  <div className="rounded-lg bg-slate-900/60 px-2.5 py-2 space-y-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Tokens extraídos</p>
+                    <div className="flex flex-wrap gap-1">
+                      {(lookupRawResponse.debug.tokens_numbers || []).map((t) => (
+                        <span key={t} className="rounded bg-cyan-800/40 px-1.5 py-px font-mono text-[10px] text-cyan-300">#{t}</span>
+                      ))}
+                      {(lookupRawResponse.debug.tokens_names || []).map((t) => (
+                        <span key={t} className="rounded bg-indigo-800/40 px-1.5 py-px font-mono text-[10px] text-indigo-300">{t}</span>
+                      ))}
+                    </div>
+                    <p className="font-mono text-[10px] text-slate-500">
+                      all: [{(lookupRawResponse.debug.tokens_all || []).join(', ')}]
+                    </p>
+                  </div>
+                )}
+
+                {/* per-result matched tokens + score */}
+                {Array.isArray(lookupRawResponse?.results) && lookupRawResponse.results.length > 0 && (
+                  <div className="rounded-lg bg-slate-900/60 px-2.5 py-2 space-y-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Candidatos encontrados</p>
+                    {lookupRawResponse.results.map((r, i) => (
+                      <div key={i} className="flex items-start gap-2 rounded bg-slate-800/50 px-2 py-1.5">
+                        <span className={`shrink-0 rounded px-1.5 py-px font-mono text-[10px] font-bold ${scoreColor(r.score ?? 0)}`}>
+                          {r.score ?? 0}pts
+                        </span>
+                        <div className="min-w-0 flex-1 space-y-0.5">
+                          <p className="truncate font-mono text-[10px] text-slate-200">{r.file_name || r.file?.name || '—'}</p>
+                          {r.matched_tokens?.length > 0 && (
+                            <p className="font-mono text-[10px] text-emerald-400">matched: [{r.matched_tokens.join(', ')}]</p>
+                          )}
+                          {r.reasons?.length > 0 && (
+                            <p className="font-mono text-[10px] text-slate-400">{r.reasons.join(' · ')}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* full raw JSON */}
+                <details open className="rounded-lg bg-slate-950/80">
+                  <summary className="cursor-pointer select-none px-2.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-200">
+                    JSON completo ▾
+                  </summary>
+                  <pre className="max-h-96 overflow-auto px-2.5 pb-2.5 font-mono text-[10px] leading-relaxed text-slate-300 whitespace-pre-wrap break-all">
+                    {JSON.stringify(lookupRawResponse, null, 2)}
+                  </pre>
+                </details>
+
+              </div>
+            )}
           </div>
         )}
       </div>
