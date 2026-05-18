@@ -365,16 +365,17 @@ function ZapiIntegrationCard({
     setQrError('');
     setQrCodeDataUrl('');
     setQrExpired(false);
-    setQrDebug({ lastAction: 'Aguardando resposta da API...' });
+    setQrDebug({ lastAction: 'Invocando Edge Function...' });
 
     if (isDev) console.log('[QR] generateQr:start', { companyId });
 
-    // Client-side safety net: if invoke never resolves, surface a clear error after 35 s
+    // Client-side safety net: if the Edge Function never resolves, surface a
+    // clear error after 20 s (backend timeouts are 8 s + 12 s = 20 s max).
     const timeoutId = { ref: null };
     const timeoutPromise = new Promise((_, reject) => {
       timeoutId.ref = setTimeout(
-        () => reject(new Error('QR Code nao retornou em tempo habil. Verifique a instancia e tente novamente.')),
-        35000,
+        () => reject(new Error('A geracao do QR Code demorou demais. Tente novamente.')),
+        20000,
       );
     });
 
@@ -394,9 +395,13 @@ function ZapiIntegrationCard({
         keys: responseKeys,
       });
 
-      setQrDebug({ lastAction: 'Resposta recebida', responseKeys });
+      setQrDebug({ lastAction: 'Resposta da Edge Function recebida', responseKeys });
 
-      const connected = Boolean(result?.connected) || String(result?.status || '').toLowerCase() === 'connected';
+      // Only treat as fully connected when a phone number is actually present.
+      // Backend can return connected=true for API-valid-but-not-paired instances;
+      // without a phone number the user still needs to scan the QR Code.
+      const phoneFromResult = String(result?.phone_number || '').trim();
+      const connected = (Boolean(result?.connected) || String(result?.status || '').toLowerCase() === 'connected') && Boolean(phoneFromResult);
       if (connected) {
         setQrCodeDataUrl('');
         setQrError('');
@@ -445,9 +450,10 @@ function ZapiIntegrationCard({
       clearTimeout(timeoutId.ref);
       const msg = String(error?.message || 'Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
       if (isDev) console.error('[QR] generateQr:error', { msg, error });
+      const isTimeout = msg.includes('demorou demais') || msg.includes('tempo habil') || msg.includes('Tempo limite');
       setStatus('erro');
       setQrError(msg);
-      setQrDebug((prev) => ({ ...(prev || {}), lastAction: 'Erro', rawError: msg }));
+      setQrDebug((prev) => ({ ...(prev || {}), lastAction: isTimeout ? 'Timeout cliente (20s)' : 'Erro da Edge Function', rawError: msg }));
       setIntegrationMessage('');
       onToastRef.current?.('erro', msg);
     } finally {

@@ -541,7 +541,7 @@ async function validateZapiConnection(config: {
         'Content-Type': 'application/json',
       },
     }),
-    15000,
+    8000,
     'Tempo limite excedido ao validar conexao Z-API.',
   );
 
@@ -772,7 +772,7 @@ async function getZapiQrCodeData(
         'Client-Token': clientToken,
       },
     }),
-    20000,
+    12000,
     'Tempo limite excedido ao carregar QR Code da Z-API. Verifique a instancia e tente novamente.',
   );
 
@@ -5672,8 +5672,12 @@ Deno.serve(async (req: Request) => {
           preCheckData = null;
         }
 
-        if (preCheckData && isZapiConnected(preCheckData)) {
-          const phoneNumber = extractZapiPhoneNumber(preCheckData);
+        // Only treat as fully connected when the instance has a paired phone number.
+        // isZapiConnected() alone can return true for API-valid-but-not-paired
+        // instances (credentials OK but QR never scanned). Without a phone number
+        // the WhatsApp session is not actually paired, so we must NOT block QR generation.
+        const preCheckPhone = preCheckData ? extractZapiPhoneNumber(preCheckData) : '';
+        if (preCheckData && isZapiConnected(preCheckData) && preCheckPhone) {
           console.log('[ZAPI QR PRE-CHECK] already connected — skipping /qr-code/image');
           return jsonResponse({
             ok: true,
@@ -5682,7 +5686,7 @@ Deno.serve(async (req: Request) => {
             connected: true,
             status: 'connected',
             message: 'WhatsApp ja conectado',
-            phone_number: phoneNumber,
+            phone_number: preCheckPhone,
             qrCode: null,
             image_data_url: null,
             data: preCheckData,
