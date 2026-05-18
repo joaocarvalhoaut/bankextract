@@ -833,7 +833,7 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
                 {/* per-result matched tokens + score */}
                 {Array.isArray(lookupRawResponse?.results) && lookupRawResponse.results.length > 0 && (
                   <div className="rounded-lg bg-slate-900/60 px-2.5 py-2 space-y-1.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Candidatos encontrados</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">✅ Candidatos aprovados</p>
                     {lookupRawResponse.results.map((r, i) => (
                       <div key={i} className="flex items-start gap-2 rounded bg-slate-800/50 px-2 py-1.5">
                         <span className={`shrink-0 rounded px-1.5 py-px font-mono text-[10px] font-bold ${scoreColor(r.score ?? 0)}`}>
@@ -851,6 +851,78 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
                       </div>
                     ))}
                   </div>
+                )}
+
+                {/* ── Diagnostic B: raw token presence ──────────────────────── */}
+                {/* Answer: "is the expected file even in the 238 scanned PDFs?" */}
+                {lookupRawResponse?.debug?.diagnostic_token_matches?.length > 0 && (
+                  <div className="rounded-lg border border-cyan-700/30 bg-cyan-950/20 px-2.5 py-2 space-y-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-cyan-400">
+                      🔬 Presença direta de tokens (sem scoring)
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      Busca substring bruta em nome + pasta. Se o arquivo esperado não aparece aqui, ele <strong className="text-slate-200">não está</strong> nos {lookupRawResponse?.debug?.pdfs_scanned} PDFs escaneados.
+                    </p>
+                    {lookupRawResponse.debug.diagnostic_token_matches.map((d, i) => (
+                      <details key={i} className="rounded-lg bg-slate-900/50">
+                        <summary className="cursor-pointer select-none px-2 py-1.5 text-[10px] hover:bg-slate-800/40">
+                          <span className="font-mono font-bold text-cyan-300">"{d.token}"</span>
+                          <span className="ml-1 text-slate-400">→ norm: <span className="text-cyan-200">"{d.normalized_token}"</span></span>
+                          <span className={`ml-2 rounded px-1.5 py-px text-[10px] font-bold ${d.matches_count > 0 ? 'bg-emerald-800/40 text-emerald-300' : 'bg-red-800/40 text-red-300'}`}>
+                            {d.matches_count} hit{d.matches_count !== 1 ? 's' : ''}
+                          </span>
+                        </summary>
+                        {d.matches_count > 0 ? (
+                          <div className="max-h-40 overflow-auto px-2 pb-2 space-y-0.5">
+                            {d.matches.map((m, j) => (
+                              <div key={j} className="font-mono text-[10px]">
+                                <span className="text-slate-200">{m.file_name}</span>
+                                <span className="text-slate-500"> / {m.parent_folder}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="px-2 pb-2 font-mono text-[10px] text-red-300">Nenhum PDF contém este token. Verifique a normalização.</p>
+                        )}
+                      </details>
+                    ))}
+                  </div>
+                )}
+
+                {/* ── Diagnostic A: rejected candidates ─────────────────────── */}
+                {/* Files that had at least one token substring match but scored < MIN_SCORE */}
+                {lookupRawResponse?.debug?.rejected_candidates?.length > 0 && (
+                  <details className="rounded-lg border border-amber-700/30 bg-amber-950/20">
+                    <summary className="cursor-pointer select-none px-2.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-amber-400 hover:bg-amber-900/20">
+                      ⚖ Candidatos rejeitados com tokens presentes ({lookupRawResponse.debug.rejected_candidates.length}) ▾
+                    </summary>
+                    <div className="max-h-72 overflow-auto px-2.5 pb-2.5 space-y-1.5">
+                      <p className="pt-1.5 text-[10px] text-slate-400">
+                        Se o arquivo esperado aparecer aqui, o problema é no <strong className="text-slate-200">algoritmo de scoring</strong> (não na listagem).
+                      </p>
+                      {lookupRawResponse.debug.rejected_candidates.map((c, i) => (
+                        <div key={i} className="rounded bg-slate-900/60 px-2 py-1.5 space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[10px] font-bold text-amber-300">{c.score}pts</span>
+                            <span className="truncate font-mono text-[10px] text-slate-200">{c.file_name}</span>
+                          </div>
+                          <p className="font-mono text-[10px] text-slate-400">📁 {c.parent_folder}</p>
+                          <p className="font-mono text-[10px] text-slate-500">
+                            norm: <span className="text-slate-300">{c.normalized_file}</span>
+                          </p>
+                          <p className="font-mono text-[10px] text-slate-500">
+                            folder_norm: <span className="text-slate-300">{c.normalized_folder}</span>
+                          </p>
+                          {c.matched_tokens?.length > 0 && (
+                            <p className="font-mono text-[10px] text-emerald-400">matched: [{c.matched_tokens.join(', ')}]</p>
+                          )}
+                          <p className={`font-mono text-[10px] ${c.rejected_reason.startsWith('rejected:') ? 'text-red-300' : 'text-amber-300'}`}>
+                            ✗ {c.rejected_reason}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
                 )}
 
                 {/* full raw JSON */}

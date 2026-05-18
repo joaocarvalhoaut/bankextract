@@ -1553,6 +1553,27 @@ interface PdfFolderError {
   http_status: number | null;
 }
 
+// A file that contained at least one query token as substring but did not reach MIN_SCORE.
+// Used in the debug panel to reveal whether the target file is present but scoring wrong.
+interface RejectedCandidate {
+  file_name: string;
+  parent_folder: string;
+  normalized_file: string;  // what the scorer actually sees for filename
+  normalized_folder: string; // what the scorer actually sees for folder
+  score: number;
+  matched_tokens: string[];
+  rejected_reason: string;  // e.g. "rejected:no_number_match" or "score_below_threshold"
+}
+
+// Raw substring presence of each query token across all scanned PDFs — no scoring,
+// just "does this string appear anywhere in name or folder?".
+interface DiagnosticTokenMatch {
+  token: string;
+  normalized_token: string;
+  matches_count: number;
+  matches: Array<{ file_name: string; parent_folder: string }>;
+}
+
 interface LookupOutcome {
   results: LookupResult[];
   meta: {
@@ -1566,6 +1587,9 @@ interface LookupOutcome {
     // Full error details for diagnostic panel
     traversal_errors: FolderTraversalError[];
     pdf_errors: PdfFolderError[];
+    // Scoring diagnostic — always populated regardless of results
+    rejected_candidates: RejectedCandidate[];
+    diagnostic_token_matches: DiagnosticTokenMatch[];
   };
 }
 
@@ -1600,6 +1624,8 @@ async function testBoletoLookup(
     fallback_used: false,
     traversal_errors: [],
     pdf_errors: [],
+    rejected_candidates: [],
+    diagnostic_token_matches: [],
   };
 
   if (!allTokens.length) {
@@ -1657,34 +1683,95 @@ async function testBoletoLookup(
   // MIN_SCORE: 50 when query has numbers (strict); 20 when names only (lenient).
   const MIN_SCORE = numberTokens.length > 0 ? 50 : 20;
 
-  let scored = allPdfs
-    .map((file) => {
-      const { score, matched, reasons } = scoreFileAgainstQuery(
-        file.name || '',
-        file._parentFolderName || '',
-        numberTokens,
-        nameTokens,
-      );
-      if (score > 0) {
-        console.log(JSON.stringify({
-          event: 'lookup_score',
-          name: file.name,
-          folder: file._parentFolderName,
-          score,
-          matched,
-          reasons,
-        }));
-      }
-      return {
-        file,
+  // Inline normalizer — same logic as inside scoreFileAgainstQuery.
+  // Used for rejected_candidates and diagnostic_token_matches without re-running the scorer.
+  const normStr = (s: string) =>
+    s.replace(/\.pdf$/i, '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  // Score ALL PDFs first (no filter yet) so we can inspect rejected candidates.
+  const allScored = allPdfs.map((file) => {
+    const fnNorm = normStr(file.name || '');
+    const folderNorm = normStr(file._parentFolderName || '');
+    const { score, matched, reasons } = scoreFileAgainstQuery(
+      file.name || '',
+      file._parentFolderName || '',
+      numberTokens,
+      nameTokens,
+    );
+    if (score > 0) {
+      console.log(JSON.stringify({
+        event: 'lookup_score',
+        name: file.name,
+        folder: file._parentFolderName,
         score,
+        matched,
         reasons,
-        _debug: { matched_tokens: matched, number_tokens: numberTokens, name_tokens: nameTokens, parent_folder: file._parentFolderName },
-      };
-    })
+      }));
+    }
+    return {
+      file,
+      score,
+      reasons,
+      fnNorm,
+      folderNorm,
+      _debug: { matched_tokens: matched, number_tokens: numberTokens, name_tokens: nameTokens, parent_folder: file._parentFolderName },
+    };
+  });
+
+  // Results that passed the threshold
+  let scored = allScored
     .filter((r) => r.score >= MIN_SCORE)
     .sort((a, b) => b.score - a.score)
     .slice(0, 10);
+
+  // ── Diagnostic A: rejected candidates ────────────────────────────────────────
+  // Files that were NOT returned (score < MIN_SCORE) but whose normalized filename
+  // OR normalized folder name contains at least one query token as a substring.
+  // This is the definitive proof of whether the target file is present but mis-scored.
+  const rejectedCandidates: RejectedCandidate[] = allScored
+    .filter((r) => {
+      if (r.score >= MIN_SCORE) return false; // already in results
+      // Does name or folder contain any query token?
+      return allTokens.some((t) => {
+        const tNorm = normStr(t);
+        return tNorm.length >= 2 && (r.fnNorm.includes(tNorm) || r.folderNorm.includes(tNorm));
+      });
+    })
+    .sort((a, b) => b.score - a.score) // highest partial score first
+    .slice(0, 20)
+    .map((r) => ({
+      file_name: r.file.name || '',
+      parent_folder: r.file._parentFolderName || '',
+      normalized_file: r.fnNorm,
+      normalized_folder: r.folderNorm,
+      score: r.score,
+      matched_tokens: r._debug.matched_tokens,
+      rejected_reason: r.reasons.filter((rr) => rr.startsWith('rejected:')).join(' | ') || 'score_below_threshold',
+    }));
+
+  console.log(JSON.stringify({
+    event: 'lookup_rejected_candidates',
+    count: rejectedCandidates.length,
+    top3: rejectedCandidates.slice(0, 3).map((c) => ({
+      file_name: c.file_name,
+      parent_folder: c.parent_folder,
+      score: c.score,
+      rejected_reason: c.rejected_reason,
+    })),
+  }));
+
+  // ── Diagnostic B: raw token presence ─────────────────────────────────────────
+  // For EACH query token, find every PDF whose normalized filename or folder contains it.
+  // No scoring — pure substring presence. Answers: "is MENEZESEBATISTALTDAME in the list?"
+  const diagnosticTokenMatches: DiagnosticTokenMatch[] = allTokens.map((t) => {
+    const tNorm = normStr(t);
+    const hits = allPdfs
+      .filter((f) => normStr(f.name || '').includes(tNorm) || normStr(f._parentFolderName || '').includes(tNorm))
+      .slice(0, 30)
+      .map((f) => ({ file_name: f.name || '', parent_folder: f._parentFolderName || '' }));
+    console.log(JSON.stringify({ event: 'lookup_diag_token', token: t, normalized: tNorm, hits: hits.length }));
+    return { token: t, normalized_token: tNorm, matches_count: hits.length, matches: hits };
+  });
 
   let fallbackUsed = false;
 
@@ -1757,6 +1844,8 @@ async function testBoletoLookup(
     fallback_used: fallbackUsed,
     traversal_errors: traversalErrors,
     pdf_errors: pdfErrors,
+    rejected_candidates: rejectedCandidates,
+    diagnostic_token_matches: diagnosticTokenMatches,
   };
 
   console.log(JSON.stringify({
@@ -7133,6 +7222,19 @@ Deno.serve(async (req: Request) => {
             folder_id: e.folder_id,
             http_status: e.http_status,
             error: e.error,
+          })),
+          // Scoring diagnostic — top 20 files that had token substring presence but scored < MIN_SCORE.
+          // If the expected file appears here, the scorer is wrong.
+          // If it does NOT appear here, the file is not in the scanned tree.
+          rejected_candidates: meta.rejected_candidates,
+          // Raw substring presence of each query token across all scanned PDFs (no scoring).
+          // If the expected file's name contains a token but doesn't appear here,
+          // the normalisation is stripping it.
+          diagnostic_token_matches: meta.diagnostic_token_matches.map((d) => ({
+            token: d.token,
+            normalized_token: d.normalized_token,
+            matches_count: d.matches_count,
+            matches: d.matches,
           })),
         },
         results: results.map((r) => ({
