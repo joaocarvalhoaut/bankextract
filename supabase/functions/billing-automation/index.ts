@@ -1197,23 +1197,68 @@ interface FolderTraversalError {
   http_status: number | null;
 }
 
-// BFS that logs every step and collects real errors — used by testBoletoLookup and diagnostics.
+interface VisitedFolder {
+  id: string;
+  name: string;
+  depth: number;
+  path: string; // e.g. "root / CLIENTES / MENEZES E BATISTA / 4239"
+}
+
+// BFS with full diagnostic support:
+//   - priorityTokens: children whose normalised name contains a token are pushed to the
+//     FRONT of the queue → ensures token-relevant branches are explored first even when
+//     the cap is hit (fixes the "60 folder cap exhausted at depth 2" scenario).
+//   - parentMap: used to reconstruct the full path for each visited folder.
+//   - Returns visitedFolders (with paths), bfsCapHit flag, queueAtCap snapshot.
 async function collectFolderIdsDetailed(
   token: string,
   rootId: string,
   maxDepth: number,
-  maxFolders = 60,
-): Promise<{ ids: string[]; nameMap: Map<string, string>; errors: FolderTraversalError[] }> {
+  maxFolders = 200,
+  priorityTokens: string[] = [],
+): Promise<{
+  ids: string[];
+  nameMap: Map<string, string>;
+  visitedFolders: VisitedFolder[];
+  bfsCapHit: boolean;
+  queueAtCap: Array<{ id: string; name: string; depth: number; path: string }>;
+  errors: FolderTraversalError[];
+}> {
+  const normStr = (s: string) =>
+    s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const priorityNorms = priorityTokens.map(normStr).filter(Boolean);
+
   const visited = new Set<string>([rootId]);
-  // nameMap: folder_id → folder_name — used by scorer to include parent folder context
   const nameMap = new Map<string, string>();
+  const parentMap = new Map<string, string>(); // child_id → parent_id
   nameMap.set(rootId, 'root');
-  const queue: Array<{ id: string; name: string; depth: number }> = [{ id: rootId, name: 'root', depth: 0 }];
+  parentMap.set(rootId, '');
+
+  type QueueItem = { id: string; name: string; depth: number };
+  const queue: QueueItem[] = [{ id: rootId, name: 'root', depth: 0 }];
+  const visitedFolders: VisitedFolder[] = [];
   const errors: FolderTraversalError[] = [];
 
+  // Build path string from parentMap
+  const getPath = (id: string): string => {
+    const parts: string[] = [];
+    let cur = id;
+    let guard = 0;
+    while (cur && guard++ < 10) {
+      parts.unshift(nameMap.get(cur) || cur);
+      const p = parentMap.get(cur);
+      if (!p) break;
+      cur = p;
+    }
+    return parts.join(' / ');
+  };
+
+  // Track root as first visited folder
+  visitedFolders.push({ id: rootId, name: 'root', depth: 0, path: 'root' });
+
   while (queue.length > 0 && visited.size < maxFolders) {
-    const item = queue.shift();
-    if (!item || item.depth >= maxDepth) continue;
+    const item = queue.shift()!;
+    if (item.depth >= maxDepth) continue;
 
     let children: Array<{ id: string; name: string }> = [];
     try {
@@ -1223,32 +1268,62 @@ async function collectFolderIdsDetailed(
         folder_id: item.id,
         folder_name: item.name,
         depth: item.depth,
+        path: getPath(item.id),
         children_found: children.length,
         child_names: children.map((c) => c.name),
       }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      // Extract HTTP status from "HTTP 403: ..." pattern
       const httpStatus = msg.match(/^HTTP (\d+):/)?.[1] ? Number(msg.match(/^HTTP (\d+):/)?.[1]) : null;
       const traversalErr: FolderTraversalError = {
-        folder_id: item.id,
-        folder_name: item.name,
-        depth: item.depth,
-        error: msg,
-        http_status: httpStatus,
+        folder_id: item.id, folder_name: item.name, depth: item.depth, error: msg, http_status: httpStatus,
       };
       errors.push(traversalErr);
       console.log(JSON.stringify({ event: 'bfs_error', ...traversalErr }));
       continue;
     }
 
+    // ── Token-guided prioritization ──────────────────────────────────────────
+    // Children whose normalised name contains a query token go to the FRONT of the
+    // queue so they are explored before unrelated siblings, even if the cap is hit.
+    const priority: QueueItem[] = [];
+    const normal: QueueItem[] = [];
     for (const child of children) {
       if (!visited.has(child.id) && visited.size < maxFolders) {
         visited.add(child.id);
         nameMap.set(child.id, child.name);
-        queue.push({ id: child.id, name: child.name, depth: item.depth + 1 });
+        parentMap.set(child.id, item.id);
+        const childNorm = normStr(child.name);
+        const isPriority = priorityNorms.some((t) => childNorm.includes(t));
+        const entry: QueueItem = { id: child.id, name: child.name, depth: item.depth + 1 };
+        const path = getPath(child.id);
+        visitedFolders.push({ id: child.id, name: child.name, depth: item.depth + 1, path });
+        if (isPriority) {
+          priority.push(entry);
+          console.log(JSON.stringify({ event: 'bfs_priority', folder_name: child.name, depth: item.depth + 1, path }));
+        } else {
+          normal.push(entry);
+        }
       }
     }
+    // Priority children inserted at front so they're processed before other breadth-siblings
+    queue.unshift(...priority);
+    queue.push(...normal);
+  }
+
+  const bfsCapHit = queue.length > 0;
+  const queueAtCap = bfsCapHit
+    ? queue.slice(0, 20).map((q) => ({ id: q.id, name: q.name, depth: q.depth, path: getPath(q.id) }))
+    : [];
+
+  if (bfsCapHit) {
+    console.log(JSON.stringify({
+      event: 'bfs_cap_hit',
+      max_folders: maxFolders,
+      folders_visited: visited.size,
+      queue_remaining: queue.length,
+      unvisited_sample: queueAtCap.map((q) => q.name),
+    }));
   }
 
   console.log(JSON.stringify({
@@ -1256,9 +1331,10 @@ async function collectFolderIdsDetailed(
     root_id: rootId,
     folders_found: visited.size,
     traversal_errors: errors.length,
+    cap_hit: bfsCapHit,
   }));
 
-  return { ids: Array.from(visited), nameMap, errors };
+  return { ids: Array.from(visited), nameMap, visitedFolders, bfsCapHit, queueAtCap, errors };
 }
 
 // Simplified wrapper kept for backward-compat with callers that only need IDs.
@@ -1574,6 +1650,12 @@ interface DiagnosticTokenMatch {
   matches: Array<{ file_name: string; parent_folder: string }>;
 }
 
+interface ScannedPdf {
+  file_name: string;
+  parent_folder: string;
+  folder_id: string;
+}
+
 interface LookupOutcome {
   results: LookupResult[];
   meta: {
@@ -1590,6 +1672,12 @@ interface LookupOutcome {
     // Scoring diagnostic — always populated regardless of results
     rejected_candidates: RejectedCandidate[];
     diagnostic_token_matches: DiagnosticTokenMatch[];
+    // Structural diagnostic — full BFS path map + raw PDF list
+    visited_folders: VisitedFolder[];
+    bfs_cap_hit: boolean;
+    queue_at_cap: Array<{ id: string; name: string; depth: number; path: string }>;
+    scanned_pdfs: ScannedPdf[];          // first 100 PDFs with parent folder name
+    all_folder_names: string[];          // just the names, for quick scan
   };
 }
 
@@ -1626,6 +1714,11 @@ async function testBoletoLookup(
     pdf_errors: [],
     rejected_candidates: [],
     diagnostic_token_matches: [],
+    visited_folders: [],
+    bfs_cap_hit: false,
+    queue_at_cap: [],
+    scanned_pdfs: [],
+    all_folder_names: [],
   };
 
   if (!allTokens.length) {
@@ -1633,25 +1726,35 @@ async function testBoletoLookup(
     return { results: [], meta: emptyMeta };
   }
 
-  // ── Phase 1: BFS — collect all subfolder IDs + folder name map ──────────────
-  const { ids: folderIds, nameMap: folderNameMap, errors: traversalErrors } = await collectFolderIdsDetailed(
-    token, rootFolderId, maxDepth, 60,
-  );
+  // ── Phase 1: BFS — collect all subfolder IDs, paths, and name map ───────────
+  // maxFolders=200 prevents the depth-2 cap issue (CLIENTES with 50+ clients).
+  // allTokens passed as priorityTokens so "MENEZES E BATISTA" / "4239" are
+  // explored before unrelated siblings even if the cap is eventually hit.
+  const {
+    ids: folderIds,
+    nameMap: folderNameMap,
+    visitedFolders,
+    bfsCapHit,
+    queueAtCap,
+    errors: traversalErrors,
+  } = await collectFolderIdsDetailed(token, rootFolderId, maxDepth, 200, allTokens);
+
   console.log(JSON.stringify({
     event: 'lookup_folders',
     count: folderIds.length,
+    bfs_cap_hit: bfsCapHit,
+    queue_remaining: queueAtCap.length,
     traversal_errors: traversalErrors.length,
-    folder_ids: folderIds.slice(0, 15),
+    all_folder_names: visitedFolders.map((f) => f.name),
   }));
 
-  // ── Phase 2: List every PDF — track parent folder name per file ───────────────
-  // We extend DriveCandidate in-memory with _parentFolderName so the scorer can
-  // include the parent folder in its match surface (e.g. folder "4239" matches token "4239").
-  const allPdfs: Array<DriveCandidate & { _parentFolderName: string }> = [];
+  // ── Phase 2: List every PDF — track parent folder name + id per file ──────────
+  const allPdfs: Array<DriveCandidate & { _parentFolderName: string; _parentFolderId: string }> = [];
   const pdfErrors: PdfFolderError[] = [];
+  const scannedPdfs: ScannedPdf[] = []; // capped at 150 for response size
 
   for (const fid of folderIds) {
-    if (allPdfs.length >= 300) break;
+    if (allPdfs.length >= 400) break;
     try {
       const pdfs = await listPdfFilesInFolder(token, fid, 100);
       const folderName = folderNameMap.get(fid) || fid;
@@ -1664,7 +1767,12 @@ async function testBoletoLookup(
           names: pdfs.map((p) => p.name),
         }));
       }
-      allPdfs.push(...pdfs.map((p) => ({ ...p, _parentFolderName: folderName })));
+      for (const p of pdfs) {
+        allPdfs.push({ ...p, _parentFolderName: folderName, _parentFolderId: fid });
+        if (scannedPdfs.length < 150) {
+          scannedPdfs.push({ file_name: p.name || '', parent_folder: folderName, folder_id: fid });
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const httpStatus = msg.match(/^HTTP (\d+):/)?.[1] ? Number(msg.match(/^HTTP (\d+):/)?.[1]) : null;
@@ -1677,6 +1785,7 @@ async function testBoletoLookup(
     count: allPdfs.length,
     pdf_errors: pdfErrors.length,
     traversal_errors: traversalErrors.length,
+    sample_names: scannedPdfs.slice(0, 20).map((p) => `${p.parent_folder}/${p.file_name}`),
   }));
 
   // ── Phase 3: Weighted scoring — numbers mandatory, folder name in surface ─────
@@ -1846,6 +1955,11 @@ async function testBoletoLookup(
     pdf_errors: pdfErrors,
     rejected_candidates: rejectedCandidates,
     diagnostic_token_matches: diagnosticTokenMatches,
+    visited_folders: visitedFolders,
+    bfs_cap_hit: bfsCapHit,
+    queue_at_cap: queueAtCap,
+    scanned_pdfs: scannedPdfs,
+    all_folder_names: visitedFolders.map((f) => f.name),
   };
 
   console.log(JSON.stringify({
@@ -7236,6 +7350,22 @@ Deno.serve(async (req: Request) => {
             matches_count: d.matches_count,
             matches: d.matches,
           })),
+          // ── Structural diagnostic — paths the BFS actually walked ─────────────
+          // Use this to confirm whether folder "4239" / "MENEZES E BATISTA" was reached.
+          bfs_cap_hit: meta.bfs_cap_hit,
+          // Folders still waiting in queue when the cap was hit (unvisited)
+          queue_at_cap: meta.queue_at_cap,
+          // Every folder visited by BFS with full path string (root / CLIENTES / MENEZES E BATISTA / 4239)
+          visited_folders: meta.visited_folders.map((f) => ({
+            name: f.name,
+            depth: f.depth,
+            path: f.path,
+            id: f.id,
+          })),
+          // Flat list of all folder names — quick scan to see if target folder is present
+          all_folder_names: meta.all_folder_names,
+          // Up to 150 PDF files actually scanned (file name + parent folder name)
+          scanned_pdfs: meta.scanned_pdfs,
         },
         results: results.map((r) => ({
           file_id: r.file.id,

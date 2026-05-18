@@ -746,6 +746,11 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
                     {lookupRawResponse.debug.folder_errors} erro(s) de pasta
                   </span>
                 )}
+                {lookupRawResponse?.debug?.bfs_cap_hit && (
+                  <span className="rounded bg-orange-800/40 px-1.5 py-px text-[10px] font-bold text-orange-300">
+                    ⚠ CAP BFS ATINGIDO
+                  </span>
+                )}
               </div>
               <span className="text-[10px] text-slate-400">
                 {debugOpen ? '▲ recolher' : '▼ expandir'}
@@ -921,6 +926,116 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
                           </p>
                         </div>
                       ))}
+                    </div>
+                  </details>
+                )}
+
+                {/* ── Structural: BFS cap hit warning ──────────────────────── */}
+                {lookupRawResponse?.debug?.bfs_cap_hit && (
+                  <div className="rounded-lg border border-orange-700/40 bg-orange-950/30 px-2.5 py-2 space-y-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-400">
+                      ⚠ Limite de pastas BFS atingido
+                    </p>
+                    <p className="text-[10px] text-orange-200 leading-relaxed">
+                      A travessia atingiu o limite máximo de pastas antes de explorar toda a árvore.
+                      As pastas abaixo estavam na fila mas <strong>não foram visitadas</strong>:
+                    </p>
+                    {lookupRawResponse.debug.queue_at_cap?.length > 0 && (
+                      <div className="max-h-32 overflow-auto space-y-0.5">
+                        {lookupRawResponse.debug.queue_at_cap.map((f, i) => (
+                          <div key={i} className="rounded bg-orange-950/50 px-2 py-0.5 font-mono text-[10px]">
+                            <span className="text-orange-300">{f.path || f.name}</span>
+                            <span className="ml-2 text-slate-500">(depth {f.depth})</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Structural: Explorar pastas visitadas ─────────────────── */}
+                {lookupRawResponse?.debug?.visited_folders?.length > 0 && (
+                  <details className="rounded-lg border border-slate-700/40 bg-slate-950/30">
+                    <summary className="cursor-pointer select-none px-2.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 hover:bg-slate-800/30">
+                      🗂 Pastas visitadas pelo BFS ({lookupRawResponse.debug.visited_folders.length}) ▾
+                    </summary>
+                    <div className="border-t border-slate-800/50 px-2.5 pb-2.5 pt-1.5 space-y-1">
+                      <p className="text-[10px] text-slate-400 leading-relaxed">
+                        Caminho completo de cada pasta percorrida. Se <code className="text-slate-300">4239</code> ou <code className="text-slate-300">MENEZES E BATISTA</code> não aparecerem aqui, o BFS parou antes de alcançá-las.
+                      </p>
+                      <div className="max-h-64 overflow-auto space-y-px">
+                        {lookupRawResponse.debug.visited_folders.map((f, i) => {
+                          const isTarget = ['4239','menezes','batista'].some((t) =>
+                            (f.name || '').toLowerCase().includes(t)
+                          );
+                          return (
+                            <div
+                              key={i}
+                              style={{ paddingLeft: `${(f.depth || 0) * 12}px` }}
+                              className={`flex items-center gap-1 rounded px-1 py-px font-mono text-[10px] ${isTarget ? 'bg-emerald-900/30 text-emerald-300' : 'text-slate-400'}`}
+                            >
+                              <span className="shrink-0 text-slate-600">{'·'.repeat(Math.max(0, f.depth || 0))}</span>
+                              <span className={isTarget ? 'font-bold' : ''}>{f.name}</span>
+                              <span className="ml-auto shrink-0 text-slate-600">{f.depth}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {/* Full paths as flat list */}
+                      <details className="mt-1 rounded bg-slate-900/60">
+                        <summary className="cursor-pointer px-2 py-1 text-[10px] text-slate-500 hover:text-slate-300">
+                          Ver caminhos completos ▾
+                        </summary>
+                        <div className="max-h-48 overflow-auto px-2 pb-1.5 space-y-px">
+                          {lookupRawResponse.debug.visited_folders.map((f, i) => (
+                            <p key={i} className="font-mono text-[10px] text-slate-400 break-all">
+                              {f.path}
+                            </p>
+                          ))}
+                        </div>
+                      </details>
+                    </div>
+                  </details>
+                )}
+
+                {/* ── Structural: PDFs escaneados (amostra 150) ─────────────── */}
+                {lookupRawResponse?.debug?.scanned_pdfs?.length > 0 && (
+                  <details className="rounded-lg border border-slate-700/40 bg-slate-950/30">
+                    <summary className="cursor-pointer select-none px-2.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 hover:bg-slate-800/30">
+                      📄 PDFs escaneados — amostra ({lookupRawResponse.debug.scanned_pdfs.length} de {lookupRawResponse.debug.pdfs_scanned}) ▾
+                    </summary>
+                    <div className="border-t border-slate-800/50 px-2.5 pb-2.5 pt-1.5 space-y-1">
+                      <p className="text-[10px] text-slate-400">
+                        Se <code className="text-slate-300">MENEZESEBATISTALTDAME_42392_4.pdf</code> não aparecer aqui, ele está numa pasta não visitada pelo BFS.
+                      </p>
+                      <div className="max-h-48 overflow-auto space-y-px">
+                        {lookupRawResponse.debug.scanned_pdfs.map((p, i) => {
+                          const isTarget = ['42392','4239','menezes','batista'].some((t) =>
+                            (p.file_name || '').toLowerCase().includes(t) ||
+                            (p.parent_folder || '').toLowerCase().includes(t)
+                          );
+                          return (
+                            <div key={i} className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${isTarget ? 'bg-emerald-900/30 text-emerald-300 font-bold' : 'text-slate-400'}`}>
+                              <span>{p.file_name}</span>
+                              <span className="ml-1 text-slate-600">/ {p.parent_folder}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </details>
+                )}
+
+                {/* ── Structural: Nomes de todas as pastas (busca rápida) ────── */}
+                {lookupRawResponse?.debug?.all_folder_names?.length > 0 && (
+                  <details className="rounded-lg border border-slate-700/40 bg-slate-950/30">
+                    <summary className="cursor-pointer select-none px-2.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 hover:bg-slate-800/30">
+                      📋 Todos os nomes de pastas visitadas ({lookupRawResponse.debug.all_folder_names.length}) ▾
+                    </summary>
+                    <div className="border-t border-slate-800/50 max-h-40 overflow-auto px-2.5 py-1.5">
+                      <p className="font-mono text-[10px] text-slate-400 break-words leading-relaxed">
+                        {lookupRawResponse.debug.all_folder_names.join(' · ')}
+                      </p>
                     </div>
                   </details>
                 )}
