@@ -397,20 +397,20 @@ function ZapiIntegrationCard({
 
       setQrDebug({ lastAction: 'Resposta da Edge Function recebida', responseKeys });
 
-      // Only treat as fully connected when a phone number is actually present.
-      // Backend can return connected=true for API-valid-but-not-paired instances;
-      // without a phone number the user still needs to scan the QR Code.
+      // ── Connected path ───────────────────────────────────────────────────────
       const phoneFromResult = String(result?.phone_number || '').trim();
-      const connected = (Boolean(result?.connected) || String(result?.status || '').toLowerCase() === 'connected') && Boolean(phoneFromResult);
-      if (connected) {
+      const apiSaysConnected = Boolean(result?.connected) || String(result?.status || '').toLowerCase() === 'connected';
+
+      if (apiSaysConnected && phoneFromResult) {
+        // Fully paired: connected=true AND phone present — close panel, update form
         setQrCodeDataUrl('');
         setQrError('');
-        setQrPanelEverOpened(false); // connection success → close panel
+        setQrPanelEverOpened(false);
         setQrDebug(null);
         setForm((current) => ({
           ...current,
           connected: true,
-          phone_number: result?.phone_number || current.phone_number,
+          phone_number: phoneFromResult || current.phone_number,
         }));
         setStatus('conectado');
         setIntegrationMessage(String(result?.message || 'WhatsApp ja conectado'));
@@ -419,6 +419,21 @@ function ZapiIntegrationCard({
         return;
       }
 
+      if (apiSaysConnected && !phoneFromResult) {
+        // Z-API confirmed connected but didn't return the phone number yet.
+        // Show an actionable message — user can refresh status to confirm.
+        setQrCodeDataUrl('');
+        setQrExpired(false);
+        setQrDebug({ lastAction: 'Conectado sem numero — aguardando confirmacao', responseKeys });
+        const msg = 'WhatsApp esta conectado na instancia Z-API, mas o numero nao foi retornado. Clique em "Atualizar Status" para confirmar.';
+        setQrError(msg);
+        setStatus('conectado');
+        setIntegrationMessage(String(result?.message || 'WhatsApp ja conectado'));
+        onToastRef.current?.('aviso', msg);
+        return;
+      }
+
+      // ── QR image path ────────────────────────────────────────────────────────
       // Normalise: try every field name variant Z-API is known to use
       const qrImage = String(
         result?.qrCode ||
@@ -434,7 +449,9 @@ function ZapiIntegrationCard({
       if (!qrImage) {
         if (isDev) console.warn('[QR] generateQr:no-image — full result:', result);
         setQrDebug({ lastAction: 'Resposta sem QR Code', responseKeys });
-        throw new Error('Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
+        // Surface the real backend message if available, otherwise fall back to generic
+        const backendMsg = String(result?.message || result?.error || '').trim();
+        throw new Error(backendMsg || 'Nao foi possivel gerar o QR Code. Confira se a instancia, token e client token estao corretos.');
       }
 
       setQrDebug({ lastAction: 'QR Code recebido', responseKeys });
@@ -704,7 +721,7 @@ function ZapiIntegrationCard({
                 onChange={(event) => setField('instance_id', event.target.value)}
                 disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
                 placeholder="Ex: ABC123DEF456GHI789JKL012MNO345"
-                className="w-full rounded-xl border border-slate-700 px-3 py-2.5 text-sm outline-none ring-blue-500 focus:ring-2 disabled:opacity-60"
+                className="w-full rounded-xl border border-slate-600 bg-slate-900 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 caret-cyan-400 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-50"
               />
             </label>
 
@@ -716,7 +733,7 @@ function ZapiIntegrationCard({
                 onChange={(event) => setField('token', event.target.value)}
                 disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
                 placeholder="Ex: SEU_TOKEN_DA_INSTANCIA"
-                className="w-full rounded-xl border border-slate-700 px-3 py-2.5 text-sm outline-none ring-blue-500 focus:ring-2 disabled:opacity-60"
+                className="w-full rounded-xl border border-slate-600 bg-slate-900 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 caret-cyan-400 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-50"
               />
             </label>
 
@@ -728,7 +745,7 @@ function ZapiIntegrationCard({
                 onChange={(event) => setField('client_token', event.target.value)}
                 disabled={loading || saving || validating || qrLoading || statusLoading || !canManage}
                 placeholder="Ex: SEU_CLIENT_TOKEN"
-                className="w-full rounded-xl border border-slate-700 px-3 py-2.5 text-sm outline-none ring-blue-500 focus:ring-2 disabled:opacity-60"
+                className="w-full rounded-xl border border-slate-600 bg-slate-900 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 caret-cyan-400 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-50"
               />
             </label>
 
@@ -740,7 +757,7 @@ function ZapiIntegrationCard({
                 onChange={(event) => setField('phone_number', event.target.value)}
                 disabled
                 placeholder="Preenchido apos conectar"
-                className="w-full rounded-xl border border-slate-700 bg-slate-800/40 px-3 py-2.5 text-sm outline-none disabled:opacity-60"
+                className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-400 placeholder:text-slate-600 outline-none disabled:cursor-not-allowed disabled:opacity-60"
               />
             </label>
           </div>

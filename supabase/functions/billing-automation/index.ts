@@ -5700,6 +5700,15 @@ Deno.serve(async (req: Request) => {
           clientToken: zapiConfig.clientToken,
         });
 
+        // When Z-API says "connected" at the QR endpoint it does not always
+        // echo the phone number back.  Try to get it from (a) the QR raw
+        // response, then (b) the pre-check /status data we already have.
+        const qrPhone = qrCode.connected === true
+          ? (extractZapiPhoneNumber(qrCode.raw as Record<string, unknown>) ||
+             extractZapiPhoneNumber(preCheckData) ||
+             '')
+          : null;
+
         return jsonResponse({
           ok: true,
           success: true,
@@ -5709,6 +5718,7 @@ Deno.serve(async (req: Request) => {
           message: qrCode.connected === true ? 'WhatsApp ja conectado' : 'QR Code carregado com sucesso.',
           qrCode: qrCode.connected === true ? null : qrCode.imageDataUrl,
           image_data_url: qrCode.connected === true ? null : qrCode.imageDataUrl,
+          phone_number: qrPhone,
           data: qrCode.raw,
         }, 200);
       } catch (error) {
