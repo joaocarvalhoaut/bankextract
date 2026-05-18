@@ -75,6 +75,19 @@ function CredentialSummaryItem({ label, value, sensitive = false, status }) {
   );
 }
 
+/**
+ * True only when WhatsApp is FULLY paired:
+ *   - Z-API credentials are valid (status === 'conectado')
+ *   - AND a real phone number has been returned by Z-API
+ *
+ * "status === 'conectado'" alone means the API key / instance_id / client_token
+ * are accepted by Z-API but the WhatsApp handset may not yet be linked.
+ * In that case the user still needs to scan a QR Code.
+ */
+function isWhatsAppPaired(status, phoneNumber) {
+  return status === 'conectado' && Boolean(String(phoneNumber || '').trim());
+}
+
 function ZapiIntegrationCard({
   companyId,
   companyName,
@@ -329,12 +342,16 @@ function ZapiIntegrationCard({
       return;
     }
 
-    // Guard: if local state already shows connected, the Z-API /qr-code/image
-    // endpoint will hang indefinitely — skip the call and inform the user.
-    if (status === 'conectado') {
+    // Guard: only block QR generation when WhatsApp is FULLY paired —
+    // i.e. the API is reachable (status='conectado') AND a phone_number
+    // is present.  "status='conectado'" alone means the Z-API credentials
+    // are valid but WhatsApp may still not be paired — in that case the
+    // user MUST scan a QR Code, so we must allow the flow.
+    const whatsAppPaired = isWhatsAppPaired(status, form.phone_number);
+    if (whatsAppPaired) {
       setQrPanelEverOpened(false);
-      setQrDebug({ lastAction: 'Bloqueado: WhatsApp ja esta conectado' });
-      onToastRef.current?.('sucesso', 'WhatsApp ja esta conectado. Nao e necessario gerar QR Code.');
+      setQrDebug({ lastAction: 'Bloqueado: WhatsApp ja esta pareado' });
+      onToastRef.current?.('sucesso', 'WhatsApp ja esta pareado e conectado. Nao e necessario gerar QR Code.');
       return;
     }
 
