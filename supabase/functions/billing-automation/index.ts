@@ -1362,17 +1362,35 @@ function scoreFilenameAgainstTokens(
   return { score, matched };
 }
 
+interface LookupResult {
+  file: DriveCandidate;
+  score: number;
+  reasons: string[];
+  _debug?: Record<string, unknown>;
+}
+
+interface LookupOutcome {
+  results: LookupResult[];
+  meta: {
+    folders_visited: number;
+    pdfs_scanned: number;
+    tokens_all: string[];
+    tokens_numbers: string[];
+    tokens_names: string[];
+    folder_errors: number;
+    fallback_used: boolean;
+  };
+}
+
 // Test boleto lookup — two-phase: (1) list ALL PDFs recursively, (2) score locally.
-// This avoids the Drive API "name contains" limitation, which requires an exact
-// substring. A filename like MENEZESEBATISTALTDAME_42392_4.pdf would never match
-// the literal string "menezes e batista, 4239-2" but scores 100% when tokenised.
+// Fallback: if recursive scan finds 0 PDFs (permission issue on subfolders?),
+// tries Drive API 'name contains' with each number token across all folder IDs.
 async function testBoletoLookup(
   token: string,
   rootFolderId: string,
   query: string,
   config: { recursive?: boolean; maxDepth?: number } = {},
-): Promise<Array<{ file: DriveCandidate; score: number; reasons: string[]; _debug?: Record<string, unknown> }>> {
-  // Always recursive for test lookup — no point searching only the root folder
+): Promise<LookupOutcome> {
   const maxDepth = Math.min(5, Math.max(4, Number(config.maxDepth || 4)));
   const { allTokens, numberTokens, nameTokens } = extractQueryTokens(query);
 
@@ -1385,38 +1403,61 @@ async function testBoletoLookup(
     max_depth: maxDepth,
   }));
 
+  const emptyMeta = {
+    folders_visited: 0,
+    pdfs_scanned: 0,
+    tokens_all: allTokens,
+    tokens_numbers: numberTokens,
+    tokens_names: nameTokens,
+    folder_errors: 0,
+    fallback_used: false,
+  };
+
   if (!allTokens.length) {
     console.log(JSON.stringify({ event: 'lookup_no_tokens', query }));
-    return [];
+    return { results: [], meta: emptyMeta };
   }
 
-  // Phase 1: Collect all subfolder IDs (BFS, max 60 folders, depth 4)
+  // ── Phase 1: Collect all subfolder IDs (BFS, depth 4, max 60 folders) ────────
   const folderIds = await collectFolderIds(token, rootFolderId, maxDepth, 60);
-  console.log(JSON.stringify({ event: 'lookup_folders', count: folderIds.length }));
+  console.log(JSON.stringify({
+    event: 'lookup_folders',
+    count: folderIds.length,
+    folder_ids: folderIds.slice(0, 10), // log first 10 for inspection
+  }));
 
-  // Phase 2: List every PDF from every folder
+  // ── Phase 2: List every PDF from every folder ─────────────────────────────────
   const allPdfs: DriveCandidate[] = [];
+  let folderErrors = 0;
+
   for (const fid of folderIds) {
     if (allPdfs.length >= 300) break;
-    const pdfs = await listPdfFilesInFolder(token, fid, 100).catch(() => [] as DriveCandidate[]);
-    for (const pdf of pdfs) {
-      console.log(JSON.stringify({ event: 'lookup_pdf', name: pdf.name, folder_id: fid }));
-      allPdfs.push(pdf);
+    try {
+      const pdfs = await listPdfFilesInFolder(token, fid, 100);
+      for (const pdf of pdfs) {
+        console.log(JSON.stringify({ event: 'lookup_pdf', name: pdf.name, folder_id: fid }));
+        allPdfs.push(pdf);
+      }
+    } catch (err) {
+      folderErrors += 1;
+      console.log(JSON.stringify({
+        event: 'lookup_folder_error',
+        folder_id: fid,
+        error: err instanceof Error ? err.message : String(err),
+      }));
     }
   }
-  console.log(JSON.stringify({ event: 'lookup_pdfs_total', count: allPdfs.length }));
+  console.log(JSON.stringify({ event: 'lookup_pdfs_total', count: allPdfs.length, folder_errors: folderErrors }));
 
-  // Phase 3: Score every PDF locally against the extracted tokens
-  const scored = allPdfs
+  // ── Phase 3: Score every PDF locally against the extracted tokens ─────────────
+  let scored = allPdfs
     .map((file) => {
       const { score, matched } = scoreFilenameAgainstTokens(file.name || '', allTokens);
       console.log(JSON.stringify({ event: 'lookup_score', name: file.name, score, matched }));
       return {
         file,
         score,
-        reasons: matched.length
-          ? matched.map((t) => `token:${t}`)
-          : ['search_hit_no_local_match'],
+        reasons: matched.length ? matched.map((t) => `token:${t}`) : ['no_local_match'],
         _debug: { matched_tokens: matched, all_tokens: allTokens },
       };
     })
@@ -1424,14 +1465,63 @@ async function testBoletoLookup(
     .sort((a, b) => b.score - a.score)
     .slice(0, 10);
 
-  console.log(JSON.stringify({
-    event: 'lookup_done',
+  let fallbackUsed = false;
+
+  // ── Phase 4 (fallback): Drive API 'name contains' per token ──────────────────
+  // Used when recursive scan found 0 PDFs (e.g. subfolder permission issue).
+  // Searches each number token directly via Drive API across all collected folders.
+  if (scored.length === 0 && numberTokens.length > 0) {
+    console.log(JSON.stringify({ event: 'lookup_fallback_start', reason: 'no_results_from_scan', tokens: numberTokens }));
+    fallbackUsed = true;
+    const fallbackMap = new Map<string, DriveCandidate>();
+
+    for (const fid of folderIds) {
+      if (fallbackMap.size >= 20) break;
+      for (const nt of numberTokens.slice(0, 3)) {
+        if (fallbackMap.size >= 20) break;
+        const q = encodeURIComponent(
+          `name contains '${nt.replace(/'/g, "\\'")}' and '${fid}' in parents and mimeType='application/pdf' and trashed=false`,
+        );
+        const data = await googleJson<{ files?: DriveCandidate[] }>(
+          `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,webViewLink,webContentLink)&pageSize=10&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+          token,
+        ).catch(() => ({ files: [] as DriveCandidate[] }));
+        for (const f of data.files || []) {
+          if (!fallbackMap.has(f.id)) {
+            console.log(JSON.stringify({ event: 'lookup_fallback_hit', name: f.name, token: nt, folder_id: fid }));
+            fallbackMap.set(f.id, f);
+          }
+        }
+      }
+    }
+
+    scored = Array.from(fallbackMap.values())
+      .map((file) => {
+        const { score, matched } = scoreFilenameAgainstTokens(file.name || '', allTokens);
+        return {
+          file,
+          score: Math.max(score, 30), // floor at 30 — came from explicit API search
+          reasons: matched.length ? matched.map((t) => `fallback:${t}`) : ['api_search_hit'],
+          _debug: { matched_tokens: matched, all_tokens: allTokens, fallback: true },
+        };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10);
+  }
+
+  const meta = {
     folders_visited: folderIds.length,
     pdfs_scanned: allPdfs.length,
-    results_found: scored.length,
-  }));
+    tokens_all: allTokens,
+    tokens_numbers: numberTokens,
+    tokens_names: nameTokens,
+    folder_errors: folderErrors,
+    fallback_used: fallbackUsed,
+  };
 
-  return scored;
+  console.log(JSON.stringify({ event: 'lookup_done', ...meta, results_found: scored.length }));
+
+  return { results: scored, meta };
 }
 
 
@@ -1881,11 +1971,30 @@ async function testDriveConnectionForCompany(
 
   try {
     const folder = await getDriveFolderInfo(token, folderId);
-    const pdfCount = await countPdfFilesInFolder(token, folderId);
+
+    // Count PDFs recursively (depth 3, max 40 folders) so the connection
+    // test reports the real count even when PDFs live in subfolders.
+    const folderIds = await collectFolderIds(token, folderId, 3, 40).catch(() => [folderId]);
+    let pdfCount = 0;
+    for (const fid of folderIds) {
+      pdfCount += await countPdfFilesInFolder(token, fid).catch(() => 0);
+    }
+
+    // Also expose subfolder count so the operator can verify traversal
+    const subfolderCount = folderIds.length - 1; // exclude root
+
+    console.log(JSON.stringify({
+      event: 'test_drive_connection',
+      folder_id: folderId,
+      folders_traversed: folderIds.length,
+      pdf_count_total: pdfCount,
+    }));
+
     return {
       status: 'sucesso',
       folder_name: folder.name || null,
       quantidade_arquivos_pdf: pdfCount,
+      subfolders_found: subfolderCount,
       mensagem_erro: null,
       service_account_email: Deno.env.get('GOOGLE_CLIENT_EMAIL') || '',
       drive_root_folder_id: folderId,
@@ -1899,6 +2008,7 @@ async function testDriveConnectionForCompany(
       status: 'erro',
       folder_name: null,
       quantidade_arquivos_pdf: 0,
+      subfolders_found: 0,
       mensagem_erro: friendly,
       service_account_email: Deno.env.get('GOOGLE_CLIENT_EMAIL') || '',
       drive_root_folder_id: folderId,
@@ -5364,6 +5474,11 @@ Deno.serve(async (req: Request) => {
         ok: true,
         company_id: companyId,
         drive_root_folder_id: config?.drive_root_folder_id || null,
+        // Return ALL drive config fields so the UI can reflect saved state correctly
+        drive_recursive_scan: config?.drive_recursive_scan ?? false,
+        drive_max_depth: config?.drive_max_depth ?? 2,
+        drive_matching_strategy: config?.drive_matching_strategy || 'auto',
+        drive_folder_name: config?.drive_folder_name || '',
         service_account_email: Deno.env.get('GOOGLE_CLIENT_EMAIL') || '',
         folder_name: connection.folder_name,
         status: connection.status,
@@ -6612,8 +6727,7 @@ Deno.serve(async (req: Request) => {
       // Test lookup is ALWAYS recursive — searching only the root folder is pointless
       // when PDFs live several levels deep (e.g. CLIENTES/CLIENTE/NUMERO/boleto.pdf).
       const maxDepth = Math.min(5, Math.max(4, Number(body?.max_depth ?? config?.drive_max_depth ?? 4)));
-      const { allTokens, numberTokens, nameTokens } = extractQueryTokens(query);
-      const results = await testBoletoLookup(googleToken, folderId, query, { recursive: true, maxDepth });
+      const { results, meta } = await testBoletoLookup(googleToken, folderId, query, { recursive: true, maxDepth });
       await admin.from('audit_logs').insert({
         company_id: companyId,
         user_id: auth.userId,
@@ -6623,8 +6737,11 @@ Deno.serve(async (req: Request) => {
           query,
           recursive: true,
           max_depth: maxDepth,
-          tokens: allTokens,
+          tokens: meta.tokens_all,
           results_found: results.length,
+          folders_visited: meta.folders_visited,
+          pdfs_scanned: meta.pdfs_scanned,
+          fallback_used: meta.fallback_used,
           folder_id: folderId,
         },
       }).then(() => {}).catch(() => {});
@@ -6638,10 +6755,14 @@ Deno.serve(async (req: Request) => {
         max_depth: maxDepth,
         results_found: results.length,
         debug: {
-          tokens_all: allTokens,
-          tokens_numbers: numberTokens,
-          tokens_names: nameTokens,
+          tokens_all: meta.tokens_all,
+          tokens_numbers: meta.tokens_numbers,
+          tokens_names: meta.tokens_names,
           folder_id: folderId,
+          folders_visited: meta.folders_visited,
+          pdfs_scanned: meta.pdfs_scanned,
+          folder_errors: meta.folder_errors,
+          fallback_used: meta.fallback_used,
         },
         results: results.map((r) => ({
           file_id: r.file.id,
