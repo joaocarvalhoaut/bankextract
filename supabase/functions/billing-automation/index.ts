@@ -1203,8 +1203,11 @@ async function collectFolderIdsDetailed(
   rootId: string,
   maxDepth: number,
   maxFolders = 60,
-): Promise<{ ids: string[]; errors: FolderTraversalError[] }> {
+): Promise<{ ids: string[]; nameMap: Map<string, string>; errors: FolderTraversalError[] }> {
   const visited = new Set<string>([rootId]);
+  // nameMap: folder_id → folder_name — used by scorer to include parent folder context
+  const nameMap = new Map<string, string>();
+  nameMap.set(rootId, 'root');
   const queue: Array<{ id: string; name: string; depth: number }> = [{ id: rootId, name: 'root', depth: 0 }];
   const errors: FolderTraversalError[] = [];
 
@@ -1242,6 +1245,7 @@ async function collectFolderIdsDetailed(
     for (const child of children) {
       if (!visited.has(child.id) && visited.size < maxFolders) {
         visited.add(child.id);
+        nameMap.set(child.id, child.name);
         queue.push({ id: child.id, name: child.name, depth: item.depth + 1 });
       }
     }
@@ -1254,7 +1258,7 @@ async function collectFolderIdsDetailed(
     traversal_errors: errors.length,
   }));
 
-  return { ids: Array.from(visited), errors };
+  return { ids: Array.from(visited), nameMap, errors };
 }
 
 // Simplified wrapper kept for backward-compat with callers that only need IDs.
@@ -1266,6 +1270,98 @@ async function collectFolderIds(
 ): Promise<string[]> {
   const { ids } = await collectFolderIdsDetailed(token, rootId, maxDepth, maxFolders);
   return ids;
+}
+
+// ── Weighted relevance scorer ─────────────────────────────────────────────────
+// Replaces the old proportional scorer with a token-type-aware algorithm.
+//
+// Key rules:
+//   1. If the query has number tokens → a file with ZERO number matches is REJECTED (score 0).
+//   2. If the query has 2+ name tokens and only 1 matched with no number match → REJECTED.
+//   3. Numbers carry 60/35 pts; names carry 25 pts each; folder-name matches carry 15 pts.
+//   4. Bonus: +20 when ALL name tokens match; +20 when ALL number tokens match.
+//   5. Score is capped at 100.
+//
+// Caller should filter results below MIN_SCORE_WITH_NUMBERS (50) or MIN_SCORE_NAMES_ONLY (20).
+function scoreFileAgainstQuery(
+  filename: string,
+  parentFolderName: string,
+  numberTokens: string[],
+  nameTokens: string[],
+): { score: number; matched: string[]; reasons: string[] } {
+  const normalize = (s: string) =>
+    s.replace(/\.pdf$/i, '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const fnNorm = normalize(filename);
+  const folderNorm = normalize(parentFolderName);
+
+  const matched: string[] = [];
+  const reasons: string[] = [];
+  let score = 0;
+
+  // ── Number tokens — most discriminating ──────────────────────────────────────
+  let numMatchedCount = 0;
+  // numberTokens are ordered: combined first (e.g. "42392"), then base (e.g. "4239")
+  const numPts = [60, 35, 25]; // weights for 1st, 2nd, 3rd number token
+  numberTokens.forEach((nt, idx) => {
+    const tNorm = normalize(nt);
+    if (!tNorm) return;
+    const inFile = fnNorm.includes(tNorm);
+    const inFolder = folderNorm.includes(tNorm);
+    if (inFile || inFolder) {
+      numMatchedCount++;
+      matched.push(nt);
+      const pts = numPts[idx] ?? 20;
+      score += inFile ? pts : Math.round(pts * 0.8); // slight discount for folder-only num match
+      reasons.push(`num${inFile ? '_file' : '_folder'}:${nt}`);
+    }
+  });
+
+  // HARD REJECTION: query has number tokens but NONE matched anywhere
+  if (numberTokens.length > 0 && numMatchedCount === 0) {
+    return { score: 0, matched: [], reasons: ['rejected:no_number_match'] };
+  }
+
+  // Bonus: all number tokens matched
+  if (numberTokens.length > 0 && numMatchedCount === numberTokens.length) {
+    score += 20;
+    reasons.push('bonus:all_numbers_matched');
+  }
+
+  // ── Name tokens ───────────────────────────────────────────────────────────────
+  let nameMatchedCount = 0;
+  for (const nt of nameTokens) {
+    const tNorm = normalize(nt);
+    if (!tNorm) continue;
+    const inFile = fnNorm.includes(tNorm);
+    const inFolder = folderNorm.includes(tNorm);
+    if (inFile || inFolder) {
+      nameMatchedCount++;
+      matched.push(nt);
+      score += inFile ? 25 : 15; // filename match > folder match for names
+      reasons.push(`name${inFile ? '_file' : '_folder'}:${nt}`);
+    }
+  }
+
+  // HARD REJECTION: query had 2+ name tokens but only 1 matched AND no number matched
+  if (nameTokens.length >= 2 && nameMatchedCount === 1 && numMatchedCount === 0) {
+    return { score: 0, matched: [], reasons: ['rejected:single_name_no_number'] };
+  }
+
+  // Bonus: all name tokens matched
+  if (nameTokens.length >= 2 && nameMatchedCount === nameTokens.length) {
+    score += 20;
+    reasons.push('bonus:all_names_matched');
+  }
+
+  // Cap
+  score = Math.min(100, score);
+
+  if (score === 0 || matched.length === 0) {
+    return { score: 0, matched: [], reasons: ['no_match'] };
+  }
+
+  return { score, matched, reasons };
 }
 
 async function listPdfFilesRecursive(
@@ -1511,8 +1607,8 @@ async function testBoletoLookup(
     return { results: [], meta: emptyMeta };
   }
 
-  // ── Phase 1: BFS to collect all subfolder IDs — logs every step, captures errors ──
-  const { ids: folderIds, errors: traversalErrors } = await collectFolderIdsDetailed(
+  // ── Phase 1: BFS — collect all subfolder IDs + folder name map ──────────────
+  const { ids: folderIds, nameMap: folderNameMap, errors: traversalErrors } = await collectFolderIdsDetailed(
     token, rootFolderId, maxDepth, 60,
   );
   console.log(JSON.stringify({
@@ -1522,28 +1618,32 @@ async function testBoletoLookup(
     folder_ids: folderIds.slice(0, 15),
   }));
 
-  // ── Phase 2: List every PDF from every collected folder ───────────────────────
-  const allPdfs: DriveCandidate[] = [];
+  // ── Phase 2: List every PDF — track parent folder name per file ───────────────
+  // We extend DriveCandidate in-memory with _parentFolderName so the scorer can
+  // include the parent folder in its match surface (e.g. folder "4239" matches token "4239").
+  const allPdfs: Array<DriveCandidate & { _parentFolderName: string }> = [];
   const pdfErrors: PdfFolderError[] = [];
 
   for (const fid of folderIds) {
     if (allPdfs.length >= 300) break;
     try {
       const pdfs = await listPdfFilesInFolder(token, fid, 100);
+      const folderName = folderNameMap.get(fid) || fid;
       if (pdfs.length > 0) {
-        console.log(JSON.stringify({ event: 'lookup_pdfs_in_folder', folder_id: fid, count: pdfs.length, names: pdfs.map((p) => p.name) }));
+        console.log(JSON.stringify({
+          event: 'lookup_pdfs_in_folder',
+          folder_id: fid,
+          folder_name: folderName,
+          count: pdfs.length,
+          names: pdfs.map((p) => p.name),
+        }));
       }
-      allPdfs.push(...pdfs);
+      allPdfs.push(...pdfs.map((p) => ({ ...p, _parentFolderName: folderName })));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const httpStatus = msg.match(/^HTTP (\d+):/)?.[1] ? Number(msg.match(/^HTTP (\d+):/)?.[1]) : null;
       pdfErrors.push({ folder_id: fid, error: msg, http_status: httpStatus });
-      console.log(JSON.stringify({
-        event: 'lookup_pdf_error',
-        folder_id: fid,
-        http_status: httpStatus,
-        error: msg,
-      }));
+      console.log(JSON.stringify({ event: 'lookup_pdf_error', folder_id: fid, http_status: httpStatus, error: msg }));
     }
   }
   console.log(JSON.stringify({
@@ -1553,40 +1653,59 @@ async function testBoletoLookup(
     traversal_errors: traversalErrors.length,
   }));
 
-  // ── Phase 3: Score every PDF locally against the extracted tokens ─────────────
+  // ── Phase 3: Weighted scoring — numbers mandatory, folder name in surface ─────
+  // MIN_SCORE: 50 when query has numbers (strict); 20 when names only (lenient).
+  const MIN_SCORE = numberTokens.length > 0 ? 50 : 20;
+
   let scored = allPdfs
     .map((file) => {
-      const { score, matched } = scoreFilenameAgainstTokens(file.name || '', allTokens);
-      console.log(JSON.stringify({ event: 'lookup_score', name: file.name, score, matched }));
+      const { score, matched, reasons } = scoreFileAgainstQuery(
+        file.name || '',
+        file._parentFolderName || '',
+        numberTokens,
+        nameTokens,
+      );
+      if (score > 0) {
+        console.log(JSON.stringify({
+          event: 'lookup_score',
+          name: file.name,
+          folder: file._parentFolderName,
+          score,
+          matched,
+          reasons,
+        }));
+      }
       return {
         file,
         score,
-        reasons: matched.length ? matched.map((t) => `token:${t}`) : ['no_local_match'],
-        _debug: { matched_tokens: matched, all_tokens: allTokens },
+        reasons,
+        _debug: { matched_tokens: matched, number_tokens: numberTokens, name_tokens: nameTokens, parent_folder: file._parentFolderName },
       };
     })
-    .filter((r) => r.score > 0)
+    .filter((r) => r.score >= MIN_SCORE)
     .sort((a, b) => b.score - a.score)
     .slice(0, 10);
 
   let fallbackUsed = false;
 
   // ── Phase 4 (fallback): Drive API 'name contains' per number token ────────────
-  // Triggered when scan found 0 matches — typically a permission error on subfolders.
-  // Searches Drive API directly across all collected folder IDs.
+  // Triggered only when Phase 3 found zero results — i.e. all PDFs failed the
+  // number-token requirement OR no PDFs were found at all (permission issue).
   if (scored.length === 0 && numberTokens.length > 0) {
     console.log(JSON.stringify({
       event: 'lookup_fallback_start',
-      reason: pdfErrors.length > 0 ? 'pdf_list_errors' : (traversalErrors.length > 0 ? 'traversal_errors' : 'no_matches'),
+      reason: pdfErrors.length > 0 ? 'pdf_list_errors' : (traversalErrors.length > 0 ? 'traversal_errors' : 'no_score_matches'),
       traversal_errors: traversalErrors.length,
       pdf_errors: pdfErrors.length,
       tokens: numberTokens,
     }));
     fallbackUsed = true;
-    const fallbackMap = new Map<string, DriveCandidate>();
+    // Map: file_id → { file, parentFolderName } so we can still score with folder context
+    const fallbackMap = new Map<string, { file: DriveCandidate; parentFolderName: string }>();
 
     for (const fid of folderIds) {
       if (fallbackMap.size >= 20) break;
+      const folderName = folderNameMap.get(fid) || fid;
       for (const nt of numberTokens.slice(0, 3)) {
         if (fallbackMap.size >= 20) break;
         const q = encodeURIComponent(
@@ -1601,23 +1720,29 @@ async function testBoletoLookup(
         });
         for (const f of data.files || []) {
           if (!fallbackMap.has(f.id)) {
-            console.log(JSON.stringify({ event: 'lookup_fallback_hit', name: f.name, token: nt, folder_id: fid }));
-            fallbackMap.set(f.id, f);
+            console.log(JSON.stringify({ event: 'lookup_fallback_hit', name: f.name, token: nt, folder_id: fid, folder_name: folderName }));
+            fallbackMap.set(f.id, { file: f, parentFolderName: folderName });
           }
         }
       }
     }
 
     scored = Array.from(fallbackMap.values())
-      .map((file) => {
-        const { score, matched } = scoreFilenameAgainstTokens(file.name || '', allTokens);
+      .map(({ file, parentFolderName }) => {
+        const { score, matched, reasons } = scoreFileAgainstQuery(
+          file.name || '', parentFolderName, numberTokens, nameTokens,
+        );
+        // Files found by explicit Drive API query already passed a 'name contains' filter,
+        // so apply a floor of 30 (they are at least weakly relevant).
         return {
           file,
-          score: Math.max(score, 30), // floor at 30 — came from explicit API search
-          reasons: matched.length ? matched.map((t) => `fallback:${t}`) : ['api_search_hit'],
-          _debug: { matched_tokens: matched, all_tokens: allTokens, fallback: true },
+          score: Math.max(score, 30),
+          reasons: reasons.length ? reasons.map((r) => `fallback:${r}`) : ['api_search_hit'],
+          _debug: { matched_tokens: matched, number_tokens: numberTokens, name_tokens: nameTokens, parent_folder: parentFolderName, fallback: true },
         };
       })
+      // Still apply MIN_SCORE after the floor to prevent garbage results
+      .filter((r) => r.score >= Math.min(MIN_SCORE, 30))
       .sort((a, b) => b.score - a.score)
       .slice(0, 10);
   }
