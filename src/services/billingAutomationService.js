@@ -453,6 +453,10 @@ export async function testBoletoLookup(companyId, query) {
       action: 'test_boleto_lookup',
       company_id: companyId,
       query,
+      // Always recursive — PDFs live several levels deep under the root folder.
+      // Backend also enforces this, but sending it explicitly makes the intent clear.
+      recursive: true,
+      max_depth: 4,
     },
     'Falha ao testar a busca de boleto no Drive.'
   );

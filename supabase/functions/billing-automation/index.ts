@@ -1120,7 +1120,7 @@ async function googleJson<T>(url: string, token: string): Promise<T> {
 
 async function getDriveFileMetadata(token: string, fileId: string) {
   return await googleJson<DriveCandidate>(
-    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,parents,webViewLink,webContentLink`,
+    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,parents,webViewLink,webContentLink&supportsAllDrives=true`,
     token,
   );
 }
@@ -1144,7 +1144,7 @@ async function getDriveFolderInfo(token: string, folderId: string) {
 async function countPdfFilesInFolder(token: string, folderId: string) {
   const query = encodeURIComponent(`'${folderId}' in parents and mimeType='application/pdf' and trashed=false`);
   const data = await googleJson<{ files?: DriveCandidate[] }>(
-    `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id)&pageSize=1000`,
+    `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id)&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true`,
     token,
   );
   return data.files?.length || 0;
@@ -1158,7 +1158,7 @@ async function listPdfFilesInFolder(token: string, folderId: string, limit = 50)
     const query = encodeURIComponent(`'${folderId}' in parents and mimeType='application/pdf' and trashed=false`);
     const suffix = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
     const data = await googleJson<{ files?: DriveCandidate[]; nextPageToken?: string }>(
-      `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType,parents,webViewLink,webContentLink,modifiedTime),nextPageToken&pageSize=${Math.min(100, limit - files.length)}${suffix}`,
+      `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType,parents,webViewLink,webContentLink,modifiedTime),nextPageToken&pageSize=${Math.min(100, limit - files.length)}${suffix}&supportsAllDrives=true&includeItemsFromAllDrives=true`,
       token,
     );
 
@@ -1179,7 +1179,7 @@ async function listSubfolders(token: string, parentId: string): Promise<Array<{ 
     `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
   );
   const data = await googleJson<{ files?: Array<{ id: string; name: string }> }>(
-    `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&pageSize=50`,
+    `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&pageSize=50&supportsAllDrives=true&includeItemsFromAllDrives=true`,
     token,
   );
   return data.files || [];
@@ -1274,64 +1274,164 @@ async function getDriveFolderStructure(
   return buildNode(rootFolderId, root.name || 'Root', 0);
 }
 
-// Test boleto lookup — finds PDFs matching a free-form search term
+// ── Query tokenizer ──────────────────────────────────────────────────────────
+// Splits a free-form lookup query into discriminating search tokens.
+// e.g. "menezes e batista, 4239-2" → numbers:["42392","4239"]  names:["menezes","batista"]
+function extractQueryTokens(query: string): {
+  nameTokens: string[];
+  numberTokens: string[];
+  allTokens: string[];
+} {
+  const STOP = new Set([
+    'e', 'de', 'da', 'do', 'dos', 'das', 'para', 'com', 'em', 'ou',
+    'a', 'o', 'as', 'os', 'no', 'na', 'nos', 'nas', 'ao', 'aos',
+    'pelo', 'pela', 'pelos', 'pelas', 'um', 'uma', 'uns', 'umas',
+    'ltda', 'me', 'epp', 'eireli', 'sa',
+  ]);
+
+  const norm = String(query || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim();
+
+  const numberTokens: string[] = [];
+  const nameTokens: string[] = [];
+
+  // Extract hyphenated numbers first: "4239-2" → combined "42392" + base "4239"
+  const hyphenNums = norm.match(/\d+-\d+/g) || [];
+  for (const hn of hyphenNums) {
+    const combined = hn.replace(/-/g, '');
+    if (combined.length >= 2) numberTokens.push(combined);
+    const base = hn.split('-')[0];
+    if (base.length >= 3) numberTokens.push(base);
+  }
+
+  // Tokenize the remainder
+  const remainder = norm.replace(/\d+-\d+/g, ' ');
+  const words = remainder.split(/[\s,;:\/\\.()+\-]+/).filter(Boolean);
+
+  for (const word of words) {
+    if (!word || word.length < 2 || STOP.has(word)) continue;
+    const clean = word.replace(/[^a-z0-9]/g, '');
+    if (!clean || clean.length < 2) continue;
+    if (/^\d+$/.test(clean)) {
+      numberTokens.push(clean);
+    } else {
+      if (!STOP.has(clean)) nameTokens.push(clean);
+    }
+  }
+
+  const uniqueNums = [...new Set(numberTokens)].filter((t) => t.length >= 2);
+  const uniqueNames = [...new Set(nameTokens)].filter((t) => t.length >= 2);
+  return {
+    numberTokens: uniqueNums,
+    nameTokens: uniqueNames,
+    allTokens: [...uniqueNums, ...uniqueNames],
+  };
+}
+
+// ── Local filename scorer ─────────────────────────────────────────────────────
+// Normalises the filename and checks how many query tokens are substrings of it.
+// Score = (matched / total) * 90 — guarantees no token-only hit scores above 90.
+function scoreFilenameAgainstTokens(
+  filename: string,
+  tokens: string[],
+): { score: number; matched: string[] } {
+  if (!tokens.length) return { score: 0, matched: [] };
+  const norm = filename
+    .replace(/\.pdf$/i, '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, ''); // strip everything non-alphanumeric for substring matching
+
+  const matched: string[] = [];
+  for (const t of tokens) {
+    if (!t || t.length < 2) continue;
+    const tNorm = t
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+    if (tNorm && norm.includes(tNorm)) matched.push(t);
+  }
+
+  if (!matched.length) return { score: 0, matched: [] };
+  const score = Math.min(90, Math.round((matched.length / tokens.length) * 90));
+  return { score, matched };
+}
+
+// Test boleto lookup — two-phase: (1) list ALL PDFs recursively, (2) score locally.
+// This avoids the Drive API "name contains" limitation, which requires an exact
+// substring. A filename like MENEZESEBATISTALTDAME_42392_4.pdf would never match
+// the literal string "menezes e batista, 4239-2" but scores 100% when tokenised.
 async function testBoletoLookup(
   token: string,
   rootFolderId: string,
   query: string,
   config: { recursive?: boolean; maxDepth?: number } = {},
-): Promise<Array<{ file: DriveCandidate; score: number; reasons: string[] }>> {
-  const recursive = Boolean(config.recursive);
-  const maxDepth = Math.min(5, Math.max(1, Number(config.maxDepth || 2)));
-  const folderIds = recursive
-    ? await collectFolderIds(token, rootFolderId, maxDepth)
-    : [rootFolderId];
+): Promise<Array<{ file: DriveCandidate; score: number; reasons: string[]; _debug?: Record<string, unknown> }>> {
+  // Always recursive for test lookup — no point searching only the root folder
+  const maxDepth = Math.min(5, Math.max(4, Number(config.maxDepth || 4)));
+  const { allTokens, numberTokens, nameTokens } = extractQueryTokens(query);
 
-  const term = normalizeText(String(query || '').trim());
-  if (!term) return [];
+  console.log(JSON.stringify({
+    event: 'lookup_start',
+    folder_id: rootFolderId,
+    query,
+    tokens_numbers: numberTokens,
+    tokens_names: nameTokens,
+    max_depth: maxDepth,
+  }));
 
-  const candidates: DriveCandidate[] = [];
-
-  for (const folderId of folderIds) {
-    if (candidates.length >= 10) break;
-
-    // Exact filename search
-    const escapedTerm = term.replace(/'/g, "\'");
-    const nameQuery = encodeURIComponent(
-      `name contains '${escapedTerm}' and '${folderId}' in parents and mimeType='application/pdf' and trashed=false`,
-    );
-    const nameData = await googleJson<{ files?: DriveCandidate[] }>(
-      `https://www.googleapis.com/drive/v3/files?q=${nameQuery}&fields=files(id,name,mimeType,webViewLink,webContentLink)&pageSize=5`,
-      token,
-    ).catch(() => ({ files: [] as DriveCandidate[] }));
-
-    for (const f of nameData.files || []) {
-      if (!candidates.find((c) => c.id === f.id)) candidates.push(f);
-    }
-
-    // Full-text search
-    if (candidates.length < 5) {
-      const ftQuery = encodeURIComponent(
-        `fullText contains '${escapedTerm}' and '${folderId}' in parents and mimeType='application/pdf' and trashed=false`,
-      );
-      const ftData = await googleJson<{ files?: DriveCandidate[] }>(
-        `https://www.googleapis.com/drive/v3/files?q=${ftQuery}&fields=files(id,name,mimeType,webViewLink,webContentLink)&pageSize=5`,
-        token,
-      ).catch(() => ({ files: [] as DriveCandidate[] }));
-
-      for (const f of ftData.files || []) {
-        if (!candidates.find((c) => c.id === f.id)) candidates.push(f);
-      }
-    }
+  if (!allTokens.length) {
+    console.log(JSON.stringify({ event: 'lookup_no_tokens', query }));
+    return [];
   }
 
-  // Score candidates
-  return candidates.slice(0, 5).map((file) => {
-    const nameLower = normalizeText(file.name || '');
-    const score = nameLower.includes(term) ? 80 : 50;
-    const reasons: string[] = nameLower.includes(term) ? ['filename_match'] : ['fulltext_match'];
-    return { file, score, reasons };
-  });
+  // Phase 1: Collect all subfolder IDs (BFS, max 60 folders, depth 4)
+  const folderIds = await collectFolderIds(token, rootFolderId, maxDepth, 60);
+  console.log(JSON.stringify({ event: 'lookup_folders', count: folderIds.length }));
+
+  // Phase 2: List every PDF from every folder
+  const allPdfs: DriveCandidate[] = [];
+  for (const fid of folderIds) {
+    if (allPdfs.length >= 300) break;
+    const pdfs = await listPdfFilesInFolder(token, fid, 100).catch(() => [] as DriveCandidate[]);
+    for (const pdf of pdfs) {
+      console.log(JSON.stringify({ event: 'lookup_pdf', name: pdf.name, folder_id: fid }));
+      allPdfs.push(pdf);
+    }
+  }
+  console.log(JSON.stringify({ event: 'lookup_pdfs_total', count: allPdfs.length }));
+
+  // Phase 3: Score every PDF locally against the extracted tokens
+  const scored = allPdfs
+    .map((file) => {
+      const { score, matched } = scoreFilenameAgainstTokens(file.name || '', allTokens);
+      console.log(JSON.stringify({ event: 'lookup_score', name: file.name, score, matched }));
+      return {
+        file,
+        score,
+        reasons: matched.length
+          ? matched.map((t) => `token:${t}`)
+          : ['search_hit_no_local_match'],
+        _debug: { matched_tokens: matched, all_tokens: allTokens },
+      };
+    })
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 10);
+
+  console.log(JSON.stringify({
+    event: 'lookup_done',
+    folders_visited: folderIds.length,
+    pdfs_scanned: allPdfs.length,
+    results_found: scored.length,
+  }));
+
+  return scored;
 }
 
 
@@ -6509,23 +6609,40 @@ Deno.serve(async (req: Request) => {
       if (!query) {
         return jsonResponse({ ok: false, error: 'Informe um termo de busca (documento, boleto, nome).' }, 400);
       }
-      const recursive = Boolean(body?.recursive ?? config?.drive_recursive_scan ?? false);
-      const maxDepth = Math.min(5, Math.max(1, Number(body?.max_depth ?? config?.drive_max_depth ?? 2)));
-      const results = await testBoletoLookup(googleToken, folderId, query, { recursive, maxDepth });
+      // Test lookup is ALWAYS recursive — searching only the root folder is pointless
+      // when PDFs live several levels deep (e.g. CLIENTES/CLIENTE/NUMERO/boleto.pdf).
+      const maxDepth = Math.min(5, Math.max(4, Number(body?.max_depth ?? config?.drive_max_depth ?? 4)));
+      const { allTokens, numberTokens, nameTokens } = extractQueryTokens(query);
+      const results = await testBoletoLookup(googleToken, folderId, query, { recursive: true, maxDepth });
       await admin.from('audit_logs').insert({
         company_id: companyId,
         user_id: auth.userId,
         action: 'drive_boleto_test_lookup',
         entity: 'google_sheets_config',
-        metadata: { query, recursive, results_found: results.length, folder_id: folderId },
+        metadata: {
+          query,
+          recursive: true,
+          max_depth: maxDepth,
+          tokens: allTokens,
+          results_found: results.length,
+          folder_id: folderId,
+        },
       }).then(() => {}).catch(() => {});
       return jsonResponse({
         ok: true,
         company_id: companyId,
         query,
         folder_id: folderId,
-        recursive,
+        folder_url: `https://drive.google.com/drive/folders/${folderId}`,
+        recursive: true,
+        max_depth: maxDepth,
         results_found: results.length,
+        debug: {
+          tokens_all: allTokens,
+          tokens_numbers: numberTokens,
+          tokens_names: nameTokens,
+          folder_id: folderId,
+        },
         results: results.map((r) => ({
           file_id: r.file.id,
           file_name: r.file.name,
@@ -6538,6 +6655,7 @@ Deno.serve(async (req: Request) => {
           },
           score: r.score,
           reasons: r.reasons,
+          matched_tokens: r._debug?.matched_tokens || [],
           match_origin: r.reasons?.[0] || null,
           view_url: r.file.webViewLink || `https://drive.google.com/file/d/${r.file.id}/view`,
         })),
