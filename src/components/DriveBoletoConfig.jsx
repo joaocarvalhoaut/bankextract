@@ -746,6 +746,16 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
                     {lookupRawResponse.debug.folder_errors} erro(s) de pasta
                   </span>
                 )}
+                {lookupRawResponse?.debug?.targeted_lookup_used && (
+                  <span className="rounded bg-emerald-800/40 px-1.5 py-px text-[10px] font-bold text-emerald-300">
+                    🎯 busca direcionada
+                  </span>
+                )}
+                {!lookupRawResponse?.debug?.targeted_lookup_used && lookupRawResponse?.debug?.folders_visited != null && (
+                  <span className="rounded bg-slate-700/60 px-1.5 py-px text-[10px] text-slate-400">
+                    BFS fallback
+                  </span>
+                )}
                 {lookupRawResponse?.debug?.bfs_cap_hit && (
                   <span className="rounded bg-orange-800/40 px-1.5 py-px text-[10px] font-bold text-orange-300">
                     ⚠ CAP BFS ATINGIDO
@@ -928,6 +938,26 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
                       ))}
                     </div>
                   </details>
+                )}
+
+                {/* ── Targeted lookup path log ──────────────────────────────── */}
+                {lookupRawResponse?.debug?.targeted_lookup_used && lookupRawResponse.debug.targeted_path_log?.length > 0 && (
+                  <div className="rounded-lg border border-emerald-700/30 bg-emerald-950/20 px-2.5 py-2 space-y-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-400">
+                      🎯 Caminho percorrido — busca direcionada
+                    </p>
+                    <p className="text-[10px] text-emerald-200 leading-relaxed">
+                      A busca navegou diretamente pela árvore de pastas usando os tokens da query — sem escanear toda a estrutura.
+                    </p>
+                    <div className="space-y-0.5">
+                      {lookupRawResponse.debug.targeted_path_log.map((step, i) => (
+                        <div key={i} className="flex items-start gap-1.5 font-mono text-[10px]">
+                          <span className="shrink-0 text-emerald-600">{i + 1}.</span>
+                          <span className="text-emerald-300 break-all">{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
 
                 {/* ── Structural: BFS cap hit warning ──────────────────────── */}

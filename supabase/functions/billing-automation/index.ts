@@ -1458,6 +1458,172 @@ async function listPdfFilesRecursive(
   return allFiles.slice(0, limit);
 }
 
+// ── Folder-name scorer ───────────────────────────────────────────────────────
+// Ranks folders against name/number tokens for the targeted lookup navigator.
+// Score 100 = all tokens matched; 0 = no match.
+function scoreFolderName(
+  folderName: string,
+  tokens: string[],
+): { matched: string[]; score: number } {
+  const n = (s: string) =>
+    s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!tokens.length) return { matched: [], score: 0 };
+  const fNorm = n(folderName);
+  const matched = tokens.filter((t) => { const tn = n(t); return tn.length >= 2 && fNorm.includes(tn); });
+  const frac = matched.length / tokens.length;
+  const score = Math.min(100, Math.round(frac * 80) + (matched.length === tokens.length ? 20 : 0));
+  return { matched, score };
+}
+
+// ── Targeted Drive Lookup ─────────────────────────────────────────────────────
+// Navigates DIRECTLY to the client folder using name tokens, then finds the
+// number-matching subfolder — skipping the BFS scan of unrelated folders.
+//
+// Strategy:
+//   1. List root → score children against name tokens ("menezes", "batista")
+//   2. No match at root level? Treat root children as containers (e.g. CLIENTES)
+//      and score THEIR children. Limit to 12 containers to stay fast.
+//   3. In each client folder candidate, pick subfolders matching number tokens
+//      ("4239", "42392") or BOLETOS-like keywords.
+//   4. Collect PDFs from client folder + matching subfolders + one deeper level.
+//
+// Returns null when it cannot determine a path (caller falls back to BFS).
+// Uses ~10–25 API calls vs 200+ for BFS.
+async function targetedDriveLookup(
+  token: string,
+  rootFolderId: string,
+  nameTokens: string[],
+  numberTokens: string[],
+): Promise<{
+  pdfs: Array<DriveCandidate & { _parentFolderName: string; _parentFolderId: string }>;
+  visitedFolderList: VisitedFolder[];
+  pathLog: string[];
+  apiCalls: number;
+} | null> {
+  if (nameTokens.length === 0) return null;
+
+  const n = (s: string) =>
+    s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  let apiCalls = 0;
+  const pathLog: string[] = [];
+  const visitedFolderList: VisitedFolder[] = [];
+
+  // Need at least half the name tokens to match a client folder.
+  // For 2 tokens ("menezes" + "batista") both must match to avoid "J E BATISTA & CIA LTDA".
+  const MIN_CLIENT_SCORE = nameTokens.length >= 2 ? 60 : 60;
+
+  type FolderEntry = { id: string; name: string; score: number; path: string; depth: number };
+  let clientCandidates: FolderEntry[] = [];
+
+  // ── Round A: score root's direct children ──────────────────────────────────
+  apiCalls++;
+  const rootChildren = await listSubfolders(token, rootFolderId).catch(() => [] as Array<{ id: string; name: string }>);
+  pathLog.push(`root/ → ${rootChildren.length} subpastas: [${rootChildren.map((c) => c.name).slice(0, 10).join(', ')}]`);
+  visitedFolderList.push({ id: rootFolderId, name: 'root', depth: 0, path: 'root' });
+  for (const child of rootChildren) {
+    visitedFolderList.push({ id: child.id, name: child.name, depth: 1, path: child.name });
+    const { score } = scoreFolderName(child.name, nameTokens);
+    if (score >= MIN_CLIENT_SCORE) clientCandidates.push({ ...child, score, path: child.name, depth: 1 });
+  }
+
+  // ── Round B: no match at root → treat root children as containers ──────────
+  // (e.g. CLIENTES has 50+ client subfolders that match the name tokens)
+  if (clientCandidates.length === 0) {
+    for (const container of rootChildren.slice(0, 12)) {
+      apiCalls++;
+      const level2 = await listSubfolders(token, container.id).catch(() => [] as Array<{ id: string; name: string }>);
+      if (level2.length > 0) pathLog.push(`${container.name}/ → ${level2.length} subpastas`);
+      for (const child of level2) {
+        visitedFolderList.push({ id: child.id, name: child.name, depth: 2, path: `${container.name} / ${child.name}` });
+        const { score } = scoreFolderName(child.name, nameTokens);
+        if (score >= MIN_CLIENT_SCORE) {
+          clientCandidates.push({ ...child, score, path: `${container.name} / ${child.name}`, depth: 2 });
+        }
+      }
+      // Early stop once we have a perfect full-token match
+      if (clientCandidates.some((c) => c.score === 100)) break;
+    }
+  }
+
+  clientCandidates = clientCandidates.sort((a, b) => b.score - a.score).slice(0, 3);
+
+  if (clientCandidates.length === 0) {
+    console.log(JSON.stringify({ event: 'targeted_no_client', name_tokens: nameTokens, api_calls: apiCalls }));
+    return null;
+  }
+
+  console.log(JSON.stringify({
+    event: 'targeted_client_found',
+    candidates: clientCandidates.map((c) => ({ name: c.name, score: c.score, path: c.path })),
+    api_calls_so_far: apiCalls,
+  }));
+
+  // ── Step 2: Collect PDFs from each client folder candidate ─────────────────
+  const collected: Array<DriveCandidate & { _parentFolderName: string; _parentFolderId: string }> = [];
+
+  for (const clientFolder of clientCandidates) {
+    // PDFs directly in the client folder
+    apiCalls++;
+    const directPdfs = await listPdfFilesInFolder(token, clientFolder.id, 100).catch(() => []);
+    pathLog.push(`${clientFolder.path}/ → ${directPdfs.length} PDFs diretos`);
+    collected.push(...directPdfs.map((f) => ({ ...f, _parentFolderName: clientFolder.name, _parentFolderId: clientFolder.id })));
+
+    // Subfolders of the client folder
+    apiCalls++;
+    const subfolders = await listSubfolders(token, clientFolder.id).catch(() => [] as Array<{ id: string; name: string }>);
+    pathLog.push(`${clientFolder.path}/ subpastas: [${subfolders.map((s) => s.name).join(', ')}]`);
+    for (const sub of subfolders) {
+      visitedFolderList.push({ id: sub.id, name: sub.name, depth: clientFolder.depth + 1, path: `${clientFolder.path} / ${sub.name}` });
+    }
+
+    // Pick subfolders that match number tokens or BOLETOS-like keywords.
+    // If nothing matches, scan all subfolders when there are few of them.
+    const targetSubs = subfolders.filter((sub) => {
+      const sn = n(sub.name);
+      const numMatch = numberTokens.some((nt) => { const nn = n(nt); return nn.length >= 2 && sn.includes(nn); });
+      const kwMatch = ['boleto', 'boletos', 'pdf', 'arquivos'].some((kw) => sn.includes(kw));
+      return numMatch || kwMatch;
+    });
+    const subsToScan = targetSubs.length > 0 ? targetSubs : subfolders.length <= 6 ? subfolders : subfolders.slice(0, 6);
+
+    console.log(JSON.stringify({
+      event: 'targeted_subfolder_selection',
+      client: clientFolder.name,
+      all_subs: subfolders.map((s) => s.name),
+      target_subs: targetSubs.map((s) => s.name),
+      will_scan: subsToScan.map((s) => s.name),
+    }));
+
+    for (const sub of subsToScan.slice(0, 6)) {
+      // PDFs in this subfolder (e.g. MENEZES E BATISTA / 4239)
+      apiCalls++;
+      const subPdfs = await listPdfFilesInFolder(token, sub.id, 100).catch(() => []);
+      pathLog.push(`${clientFolder.path} / ${sub.name}/ → ${subPdfs.length} PDFs`);
+      collected.push(...subPdfs.map((f) => ({ ...f, _parentFolderName: sub.name, _parentFolderId: sub.id })));
+
+      // One deeper level (e.g. MENEZES E BATISTA / 4239 / BOLETOS)
+      apiCalls++;
+      const subSubs = await listSubfolders(token, sub.id).catch(() => [] as Array<{ id: string; name: string }>);
+      if (subSubs.length > 0) {
+        pathLog.push(`${clientFolder.path} / ${sub.name}/ subpastas: [${subSubs.map((s) => s.name).join(', ')}]`);
+      }
+      for (const subsub of subSubs.slice(0, 4)) {
+        visitedFolderList.push({ id: subsub.id, name: subsub.name, depth: clientFolder.depth + 2, path: `${clientFolder.path} / ${sub.name} / ${subsub.name}` });
+        apiCalls++;
+        const subsubPdfs = await listPdfFilesInFolder(token, subsub.id, 50).catch(() => []);
+        pathLog.push(`${clientFolder.path} / ${sub.name} / ${subsub.name}/ → ${subsubPdfs.length} PDFs`);
+        collected.push(...subsubPdfs.map((f) => ({ ...f, _parentFolderName: subsub.name, _parentFolderId: subsub.id })));
+      }
+    }
+  }
+
+  console.log(JSON.stringify({ event: 'targeted_done', pdfs_collected: collected.length, api_calls: apiCalls }));
+
+  // Return even if collected is empty — caller inspects score to decide whether to fall back.
+  return { pdfs: collected, visitedFolderList, pathLog, apiCalls };
+}
+
 // Search Drive files across all folders (recursive when enabled)
 async function searchDriveFilesWithConfig(
   token: string,
@@ -1676,8 +1842,11 @@ interface LookupOutcome {
     visited_folders: VisitedFolder[];
     bfs_cap_hit: boolean;
     queue_at_cap: Array<{ id: string; name: string; depth: number; path: string }>;
-    scanned_pdfs: ScannedPdf[];          // first 100 PDFs with parent folder name
+    scanned_pdfs: ScannedPdf[];          // first 50 PDFs with parent folder name
     all_folder_names: string[];          // just the names, for quick scan
+    // Targeted lookup diagnostic
+    targeted_lookup_used: boolean;       // true when Phase 0 found the results (not BFS)
+    targeted_path_log: string[];         // navigation steps taken by targeted lookup
   };
 }
 
@@ -1723,11 +1892,112 @@ async function testBoletoLookup(
     queue_at_cap: [],
     scanned_pdfs: [],
     all_folder_names: [],
+    targeted_lookup_used: false,
+    targeted_path_log: [],
   };
 
   if (!allTokens.length) {
     console.log(JSON.stringify({ event: 'lookup_no_tokens', query }));
     return { results: [], meta: emptyMeta };
+  }
+
+  // Shared helpers used by both Phase 0 (targeted) and Phase 3 (scoring).
+  const MIN_SCORE = numberTokens.length > 0 ? 50 : 20;
+  const normStr = (s: string) =>
+    s.replace(/\.pdf$/i, '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  // ── Phase 0: Targeted lookup ──────────────────────────────────────────────
+  // Navigate directly using name tokens → find client folder → pick number-
+  // matching subfolder → collect PDFs. Uses ~10-25 API calls vs 200 for BFS.
+  // Falls back to BFS only when targeted cannot find a scored match.
+  if (nameTokens.length > 0) {
+    const targeted = await targetedDriveLookup(token, rootFolderId, nameTokens, numberTokens);
+    if (targeted) {
+      const { pdfs: tPdfs, visitedFolderList: tVisited, pathLog: tPathLog, apiCalls: tCalls } = targeted;
+
+      // Score every collected PDF
+      const tAllScored = tPdfs.map((file) => {
+        const fnNorm = normStr(file.name || '');
+        const folderNorm = normStr(file._parentFolderName || '');
+        const { score, matched, reasons } = scoreFileAgainstQuery(
+          file.name || '', file._parentFolderName || '', numberTokens, nameTokens,
+        );
+        if (score > 0) {
+          console.log(JSON.stringify({ event: 'targeted_score', name: file.name, folder: file._parentFolderName, score, matched }));
+        }
+        return {
+          file, score, reasons, fnNorm, folderNorm,
+          _debug: { matched_tokens: matched, number_tokens: numberTokens, name_tokens: nameTokens, parent_folder: file._parentFolderName },
+        };
+      });
+
+      const tScored = tAllScored.filter((r) => r.score >= MIN_SCORE).sort((a, b) => b.score - a.score).slice(0, 10);
+
+      if (tScored.length > 0) {
+        console.log(JSON.stringify({
+          event: 'targeted_success',
+          results: tScored.length,
+          api_calls: tCalls,
+          top_file: tScored[0].file.name,
+          top_score: tScored[0].score,
+          strategy: 'targeted',
+        }));
+
+        // Build full diagnostic meta from targeted PDFs
+        const tRejected: RejectedCandidate[] = tAllScored
+          .filter((r) => r.score < MIN_SCORE && allTokens.some((t) => {
+            const tn = normStr(t); return tn.length >= 2 && (r.fnNorm.includes(tn) || r.folderNorm.includes(tn));
+          }))
+          .sort((a, b) => b.score - a.score).slice(0, 20)
+          .map((r) => ({
+            file_name: r.file.name || '',
+            parent_folder: r.file._parentFolderName || '',
+            normalized_file: r.fnNorm,
+            normalized_folder: r.folderNorm,
+            score: r.score,
+            matched_tokens: r._debug.matched_tokens,
+            rejected_reason: r.reasons.filter((rr) => rr.startsWith('rejected:')).join(' | ') || 'score_below_threshold',
+          }));
+
+        const tDiagTokens: DiagnosticTokenMatch[] = allTokens.map((t) => {
+          const tNorm = normStr(t);
+          const hits = tPdfs
+            .filter((f) => normStr(f.name || '').includes(tNorm) || normStr(f._parentFolderName || '').includes(tNorm))
+            .slice(0, 30)
+            .map((f) => ({ file_name: f.name || '', parent_folder: f._parentFolderName || '' }));
+          return { token: t, normalized_token: tNorm, matches_count: hits.length, matches: hits };
+        });
+
+        const meta: LookupOutcome['meta'] = {
+          folders_visited: tCalls,
+          pdfs_scanned: tPdfs.length,
+          tokens_all: allTokens,
+          tokens_numbers: numberTokens,
+          tokens_names: nameTokens,
+          folder_errors: 0,
+          fallback_used: false,
+          traversal_errors: [],
+          pdf_errors: [],
+          rejected_candidates: tRejected,
+          diagnostic_token_matches: tDiagTokens,
+          visited_folders: tVisited,
+          bfs_cap_hit: false,
+          queue_at_cap: [],
+          scanned_pdfs: tPdfs.slice(0, 50).map((f) => ({
+            file_name: f.name || '', parent_folder: f._parentFolderName || '', folder_id: f._parentFolderId || '',
+          })),
+          all_folder_names: [...new Set(tVisited.map((f) => f.name))],
+          targeted_lookup_used: true,
+          targeted_path_log: tPathLog,
+        };
+
+        console.log(JSON.stringify({ event: 'lookup_done', strategy: 'targeted', folders_visited: tCalls, pdfs_scanned: tPdfs.length, results_found: tScored.length }));
+        return { results: tScored, meta };
+      }
+
+      // Targeted collected PDFs but none scored above threshold → fall through to BFS.
+      console.log(JSON.stringify({ event: 'targeted_no_score_match', pdfs_collected: tPdfs.length, api_calls: tCalls, path_log: tPathLog }));
+    }
   }
 
   // ── Phase 1: BFS — collect all subfolder IDs, paths, and name map ───────────
@@ -1793,13 +2063,8 @@ async function testBoletoLookup(
   }));
 
   // ── Phase 3: Weighted scoring — numbers mandatory, folder name in surface ─────
+  // MIN_SCORE and normStr are defined above (shared with Phase 0).
   // MIN_SCORE: 50 when query has numbers (strict); 20 when names only (lenient).
-  const MIN_SCORE = numberTokens.length > 0 ? 50 : 20;
-
-  // Inline normalizer — same logic as inside scoreFileAgainstQuery.
-  // Used for rejected_candidates and diagnostic_token_matches without re-running the scorer.
-  const normStr = (s: string) =>
-    s.replace(/\.pdf$/i, '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
   // Score ALL PDFs first (no filter yet) so we can inspect rejected candidates.
   const allScored = allPdfs.map((file) => {
@@ -1964,6 +2229,8 @@ async function testBoletoLookup(
     queue_at_cap: queueAtCap,
     scanned_pdfs: scannedPdfs,
     all_folder_names: visitedFolders.map((f) => f.name),
+    targeted_lookup_used: false,
+    targeted_path_log: [],
   };
 
   console.log(JSON.stringify({
@@ -7404,6 +7671,9 @@ Deno.serve(async (req: Request) => {
           // PDFs actually scanned (capped to MAX_SCANNED; full count in pdfs_scanned)
           scanned_pdfs: safeScanned,
           scanned_pdfs_total: meta.scanned_pdfs.length,
+          // Targeted lookup diagnostic
+          targeted_lookup_used: Boolean(meta.targeted_lookup_used),
+          targeted_path_log: Array.isArray(meta.targeted_path_log) ? meta.targeted_path_log : [],
         };
 
         // Log approximate response size so we can catch payload issues in future
