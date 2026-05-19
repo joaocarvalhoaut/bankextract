@@ -1688,9 +1688,12 @@ async function testBoletoLookup(
   token: string,
   rootFolderId: string,
   query: string,
-  config: { recursive?: boolean; maxDepth?: number } = {},
+  config: { recursive?: boolean; maxDepth?: number; maxFolders?: number } = {},
 ): Promise<LookupOutcome> {
   const maxDepth = Math.min(5, Math.max(4, Number(config.maxDepth || 4)));
+  // maxFolders: passed from the action handler which enforces 20–130 budget.
+  // Default 100 keeps us inside the ~60 s gateway timeout (100 × 2 calls × 250 ms ≈ 50 s).
+  const bfsMaxFolders = Math.min(130, Math.max(20, Number(config.maxFolders ?? 100)));
   const { allTokens, numberTokens, nameTokens } = extractQueryTokens(query);
 
   console.log(JSON.stringify({
@@ -1700,6 +1703,7 @@ async function testBoletoLookup(
     tokens_numbers: numberTokens,
     tokens_names: nameTokens,
     max_depth: maxDepth,
+    bfs_max_folders: bfsMaxFolders,
   }));
 
   const emptyMeta: LookupOutcome['meta'] = {
@@ -1737,7 +1741,7 @@ async function testBoletoLookup(
     bfsCapHit,
     queueAtCap,
     errors: traversalErrors,
-  } = await collectFolderIdsDetailed(token, rootFolderId, maxDepth, 200, allTokens);
+  } = await collectFolderIdsDetailed(token, rootFolderId, maxDepth, bfsMaxFolders, allTokens);
 
   console.log(JSON.stringify({
     event: 'lookup_folders',
@@ -1751,7 +1755,7 @@ async function testBoletoLookup(
   // ── Phase 2: List every PDF — track parent folder name + id per file ──────────
   const allPdfs: Array<DriveCandidate & { _parentFolderName: string; _parentFolderId: string }> = [];
   const pdfErrors: PdfFolderError[] = [];
-  const scannedPdfs: ScannedPdf[] = []; // capped at 150 for response size
+  const scannedPdfs: ScannedPdf[] = []; // capped at 50 for response size (sliced again in handler)
 
   for (const fid of folderIds) {
     if (allPdfs.length >= 400) break;
@@ -1769,7 +1773,7 @@ async function testBoletoLookup(
       }
       for (const p of pdfs) {
         allPdfs.push({ ...p, _parentFolderName: folderName, _parentFolderId: fid });
-        if (scannedPdfs.length < 150) {
+        if (scannedPdfs.length < 50) {
           scannedPdfs.push({ file_name: p.name || '', parent_folder: folderName, folder_id: fid });
         }
       }
@@ -7276,46 +7280,81 @@ Deno.serve(async (req: Request) => {
 
     if (action === 'test_boleto_lookup') {
       requireCompanyId(companyId);
-      const config = await getSheetsDriveConfig(admin, companyId || '');
-      const folderId = requireDriveFolderId(config?.drive_root_folder_id);
-      const query = String(body?.query || body?.documento || body?.numero_boleto || body?.cliente_nome || '').trim();
-      if (!query) {
-        return jsonResponse({ ok: false, error: 'Informe um termo de busca (documento, boleto, nome).' }, 400);
-      }
-      // Test lookup is ALWAYS recursive — searching only the root folder is pointless
-      // when PDFs live several levels deep (e.g. CLIENTES/CLIENTE/NUMERO/boleto.pdf).
-      const maxDepth = Math.min(5, Math.max(4, Number(body?.max_depth ?? config?.drive_max_depth ?? 4)));
-      const { results, meta } = await testBoletoLookup(googleToken, folderId, query, { recursive: true, maxDepth });
-      await admin.from('audit_logs').insert({
-        company_id: companyId,
-        user_id: auth.userId,
-        action: 'drive_boleto_test_lookup',
-        entity: 'google_sheets_config',
-        metadata: {
-          query,
-          recursive: true,
-          max_depth: maxDepth,
-          tokens: meta.tokens_all,
-          results_found: results.length,
-          folders_visited: meta.folders_visited,
-          pdfs_scanned: meta.pdfs_scanned,
-          fallback_used: meta.fallback_used,
-          folder_id: folderId,
-        },
-      }).then(() => {}).catch(() => {});
-      return jsonResponse({
-        ok: true,
-        company_id: companyId,
-        query,
-        folder_id: folderId,
-        folder_url: `https://drive.google.com/drive/folders/${folderId}`,
-        recursive: true,
-        max_depth: maxDepth,
-        results_found: results.length,
-        // OAuth / service account info — helps diagnose permission problems
-        service_account_email: Deno.env.get('GOOGLE_CLIENT_EMAIL') || '(não configurado)',
-        oauth_scope: 'https://www.googleapis.com/auth/drive.readonly',
-        debug: {
+      const lookupStart = Date.now();
+      try {
+        const config = await getSheetsDriveConfig(admin, companyId || '');
+        const folderId = requireDriveFolderId(config?.drive_root_folder_id);
+        const query = String(body?.query || body?.documento || body?.numero_boleto || body?.cliente_nome || '').trim();
+        if (!query) {
+          return jsonResponse({ ok: false, error: 'Informe um termo de busca (documento, boleto, nome).' }, 400);
+        }
+        // Test lookup is ALWAYS recursive — searching only the root folder is pointless
+        // when PDFs live several levels deep (e.g. CLIENTES/CLIENTE/NUMERO/boleto.pdf).
+        const maxDepth = Math.min(5, Math.max(4, Number(body?.max_depth ?? config?.drive_max_depth ?? 4)));
+
+        // ── maxFolders budget ───────────────────────────────────────────────────
+        // 100 folders × 2 API calls (BFS + PDF list) × ~250 ms = ~50 s.
+        // Deno hard-kills at 150 s but Supabase's gateway kills at ~60 s.
+        // Keeping at 100 means we still cover 40 % more than the old cap=60,
+        // while staying safely inside the gateway timeout.
+        // Pass body.max_folders to override during debugging (capped 20–130).
+        const bfsMaxFolders = Math.min(130, Math.max(20, Number(body?.max_folders ?? 100)));
+
+        const { results, meta } = await testBoletoLookup(
+          googleToken, folderId, query, { recursive: true, maxDepth, maxFolders: bfsMaxFolders },
+        );
+
+        await admin.from('audit_logs').insert({
+          company_id: companyId,
+          user_id: auth.userId,
+          action: 'drive_boleto_test_lookup',
+          entity: 'google_sheets_config',
+          metadata: {
+            query,
+            recursive: true,
+            max_depth: maxDepth,
+            bfs_max_folders: bfsMaxFolders,
+            tokens: meta.tokens_all,
+            results_found: results.length,
+            folders_visited: meta.folders_visited,
+            pdfs_scanned: meta.pdfs_scanned,
+            fallback_used: meta.fallback_used,
+            folder_id: folderId,
+            duration_ms: Date.now() - lookupStart,
+          },
+        }).then(() => {}).catch(() => {});
+
+        // ── Payload guards — hard-cap every large array before serialising ──────
+        // Supabase gateway limit is 6 MB; Deno JSON.stringify on large objects
+        // can also OOM. Caps below keep the debug block well under 200 KB.
+        const MAX_VISITED = 50;
+        const MAX_SCANNED = 50;
+        const MAX_FOLDER_NAMES = 100;
+        const MAX_QUEUE_CAP = 10;
+
+        const safeVisited = meta.visited_folders.slice(0, MAX_VISITED).map((f) => ({
+          name: String(f.name ?? ''),
+          depth: Number(f.depth ?? 0),
+          path: String(f.path ?? ''),
+          id: String(f.id ?? ''),
+        }));
+
+        const safeScanned = meta.scanned_pdfs.slice(0, MAX_SCANNED).map((p) => ({
+          file_name: String(p.file_name ?? ''),
+          parent_folder: String(p.parent_folder ?? ''),
+          folder_id: String(p.folder_id ?? ''),
+        }));
+
+        const safeQueueAtCap = meta.queue_at_cap.slice(0, MAX_QUEUE_CAP).map((q) => ({
+          name: String(q.name ?? ''),
+          depth: Number(q.depth ?? 0),
+          path: String(q.path ?? ''),
+          id: String(q.id ?? ''),
+        }));
+
+        const safeAllFolderNames = meta.all_folder_names.slice(0, MAX_FOLDER_NAMES).map(String);
+
+        const debugBlock = {
           tokens_all: meta.tokens_all,
           tokens_numbers: meta.tokens_numbers,
           tokens_names: meta.tokens_names,
@@ -7324,66 +7363,115 @@ Deno.serve(async (req: Request) => {
           pdfs_scanned: meta.pdfs_scanned,
           folder_errors: meta.folder_errors,
           fallback_used: meta.fallback_used,
+          bfs_max_folders: bfsMaxFolders,
+          duration_ms: Date.now() - lookupStart,
           // Full error details — traversal = BFS listing subfolders; pdf = listing files inside folder
           traversal_errors: meta.traversal_errors.map((e) => ({
-            folder_id: e.folder_id,
-            folder_name: e.folder_name,
-            depth: e.depth,
-            http_status: e.http_status,
-            error: e.error,
+            folder_id: String(e.folder_id ?? ''),
+            folder_name: String(e.folder_name ?? ''),
+            depth: Number(e.depth ?? 0),
+            http_status: e.http_status ?? null,
+            error: String(e.error ?? ''),
           })),
           pdf_errors: meta.pdf_errors.map((e) => ({
-            folder_id: e.folder_id,
-            http_status: e.http_status,
-            error: e.error,
+            folder_id: String(e.folder_id ?? ''),
+            http_status: e.http_status ?? null,
+            error: String(e.error ?? ''),
           })),
           // Scoring diagnostic — top 20 files that had token substring presence but scored < MIN_SCORE.
-          // If the expected file appears here, the scorer is wrong.
-          // If it does NOT appear here, the file is not in the scanned tree.
           rejected_candidates: meta.rejected_candidates,
           // Raw substring presence of each query token across all scanned PDFs (no scoring).
-          // If the expected file's name contains a token but doesn't appear here,
-          // the normalisation is stripping it.
           diagnostic_token_matches: meta.diagnostic_token_matches.map((d) => ({
-            token: d.token,
-            normalized_token: d.normalized_token,
-            matches_count: d.matches_count,
-            matches: d.matches,
+            token: String(d.token ?? ''),
+            normalized_token: String(d.normalized_token ?? ''),
+            matches_count: Number(d.matches_count ?? 0),
+            matches: (d.matches || []).map((m) => ({
+              file_name: String(m.file_name ?? ''),
+              parent_folder: String(m.parent_folder ?? ''),
+            })),
           })),
-          // ── Structural diagnostic — paths the BFS actually walked ─────────────
-          // Use this to confirm whether folder "4239" / "MENEZES E BATISTA" was reached.
-          bfs_cap_hit: meta.bfs_cap_hit,
-          // Folders still waiting in queue when the cap was hit (unvisited)
-          queue_at_cap: meta.queue_at_cap,
-          // Every folder visited by BFS with full path string (root / CLIENTES / MENEZES E BATISTA / 4239)
-          visited_folders: meta.visited_folders.map((f) => ({
-            name: f.name,
-            depth: f.depth,
-            path: f.path,
-            id: f.id,
+          // ── Structural diagnostic (capped to avoid payload bloat) ────────────
+          bfs_cap_hit: Boolean(meta.bfs_cap_hit),
+          // Folders unvisited when cap hit (capped to MAX_QUEUE_CAP)
+          queue_at_cap: safeQueueAtCap,
+          queue_at_cap_total: meta.queue_at_cap.length,
+          // Folders visited by BFS (capped to MAX_VISITED; full count in folders_visited)
+          visited_folders: safeVisited,
+          visited_folders_total: meta.visited_folders.length,
+          // Flat list of folder names (capped to MAX_FOLDER_NAMES)
+          all_folder_names: safeAllFolderNames,
+          all_folder_names_total: meta.all_folder_names.length,
+          // PDFs actually scanned (capped to MAX_SCANNED; full count in pdfs_scanned)
+          scanned_pdfs: safeScanned,
+          scanned_pdfs_total: meta.scanned_pdfs.length,
+        };
+
+        // Log approximate response size so we can catch payload issues in future
+        try {
+          const approxBytes = JSON.stringify(debugBlock).length;
+          console.log(JSON.stringify({
+            event: 'lookup_response_size',
+            approx_bytes: approxBytes,
+            duration_ms: Date.now() - lookupStart,
+            folders_visited: meta.folders_visited,
+            pdfs_scanned: meta.pdfs_scanned,
+            bfs_max_folders: bfsMaxFolders,
+          }));
+        } catch (_sizeErr) { /* ignore — size logging is best-effort */ }
+
+        return jsonResponse({
+          ok: true,
+          company_id: companyId,
+          query,
+          folder_id: folderId,
+          folder_url: `https://drive.google.com/drive/folders/${folderId}`,
+          recursive: true,
+          max_depth: maxDepth,
+          results_found: results.length,
+          duration_ms: Date.now() - lookupStart,
+          // OAuth / service account info — helps diagnose permission problems
+          service_account_email: Deno.env.get('GOOGLE_CLIENT_EMAIL') || '(não configurado)',
+          oauth_scope: 'https://www.googleapis.com/auth/drive.readonly',
+          debug: debugBlock,
+          results: results.map((r) => ({
+            file_id: String(r.file.id ?? ''),
+            file_name: String(r.file.name ?? ''),
+            file: {
+              id: String(r.file.id ?? ''),
+              name: String(r.file.name ?? ''),
+              mimeType: String(r.file.mimeType ?? ''),
+              webViewLink: r.file.webViewLink || `https://drive.google.com/file/d/${r.file.id}/view`,
+              webContentLink: r.file.webContentLink || null,
+            },
+            score: Number(r.score ?? 0),
+            reasons: Array.isArray(r.reasons) ? r.reasons.map(String) : [],
+            matched_tokens: Array.isArray(r._debug?.matched_tokens) ? r._debug.matched_tokens.map(String) : [],
+            match_origin: r.reasons?.[0] ? String(r.reasons[0]) : null,
+            view_url: r.file.webViewLink || `https://drive.google.com/file/d/${r.file.id}/view`,
           })),
-          // Flat list of all folder names — quick scan to see if target folder is present
-          all_folder_names: meta.all_folder_names,
-          // Up to 150 PDF files actually scanned (file name + parent folder name)
-          scanned_pdfs: meta.scanned_pdfs,
-        },
-        results: results.map((r) => ({
-          file_id: r.file.id,
-          file_name: r.file.name,
-          file: {
-            id: r.file.id,
-            name: r.file.name,
-            mimeType: r.file.mimeType,
-            webViewLink: r.file.webViewLink || `https://drive.google.com/file/d/${r.file.id}/view`,
-            webContentLink: r.file.webContentLink || null,
-          },
-          score: r.score,
-          reasons: r.reasons,
-          matched_tokens: r._debug?.matched_tokens || [],
-          match_origin: r.reasons?.[0] || null,
-          view_url: r.file.webViewLink || `https://drive.google.com/file/d/${r.file.id}/view`,
-        })),
-      });
+        });
+      } catch (lookupErr) {
+        const errMsg = lookupErr instanceof Error ? lookupErr.message : String(lookupErr);
+        const errStack = lookupErr instanceof Error ? (lookupErr.stack || null) : null;
+        const errName = lookupErr instanceof Error ? lookupErr.name : 'Error';
+        console.error(JSON.stringify({
+          event: 'test_boleto_lookup_error',
+          error: errMsg,
+          error_name: errName,
+          stack: errStack,
+          duration_ms: Date.now() - lookupStart,
+          company_id: companyId,
+        }));
+        return jsonResponse({
+          ok: false,
+          error: errMsg,
+          error_name: errName,
+          error_stack: errStack,
+          action: 'test_boleto_lookup',
+          duration_ms: Date.now() - lookupStart,
+          hint: 'Veja os logs da edge function para mais detalhes.',
+        }, 500);
+      }
     }
 
     if (action === 'scan_folder_recursive') {
