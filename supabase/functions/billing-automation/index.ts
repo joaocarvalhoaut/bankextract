@@ -1189,6 +1189,33 @@ async function listSubfolders(token: string, parentId: string): Promise<Array<{ 
   return data.files || [];
 }
 
+// Paginated version — needed when a container (e.g. CLIENTES) has >100 subfolders.
+// Without pagination, folders after the first 100 are invisible to targeted lookup.
+// Drive returns folders alphabetically; "MENEZES" starts at letter 13, so if there are
+// 100+ clients starting A–L, it would be on page 2 and get missed entirely.
+async function listSubfoldersAll(
+  token: string,
+  parentId: string,
+  maxResults = 500,
+): Promise<Array<{ id: string; name: string }>> {
+  const all: Array<{ id: string; name: string }> = [];
+  let pageToken: string | undefined;
+  do {
+    const q = encodeURIComponent(
+      `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+    );
+    const ptParam = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
+    const data = await googleJson<{ files?: Array<{ id: string; name: string }>; nextPageToken?: string }>(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name),nextPageToken&pageSize=100&corpora=allDrives&supportsAllDrives=true&includeItemsFromAllDrives=true${ptParam}`,
+      token,
+    );
+    all.push(...(data.files || []));
+    pageToken = data.nextPageToken;
+    if (all.length >= maxResults) break;
+  } while (pageToken);
+  return all;
+}
+
 interface FolderTraversalError {
   folder_id: string;
   folder_name: string;
@@ -1359,12 +1386,27 @@ async function collectFolderIds(
 //   5. Score is capped at 100.
 //
 // Caller should filter results below MIN_SCORE_WITH_NUMBERS (50) or MIN_SCORE_NAMES_ONLY (20).
+//
+// Scoring (no 100-cap — raw score enables exact vs base separation):
+//   numberTokens[0]  = exact combined number (e.g. "42392") — 100 in file / 90 in folder
+//   numberTokens[1]  = base number           (e.g. "4239")  —  30 in file / 20 in folder
+//   numberTokens[2+] = other numbers                        —  20 in file / 15 in folder
+//   name tokens                                             —  15 in file / 10 in folder
+//   all numbers matched bonus: +15
+//   all names matched bonus:   +10
+//
+// exact_match = true when numberTokens[0] matched (file OR folder).
+// Callers use this to separate exact results from base-only fallbacks.
+//
+// Example — "menezes e batista, 4239-2" → numberTokens=["42392","4239"]:
+//   MENEZESEBATISTALTDAME_42392_4.pdf → 100+30+15+15+15+10 = 185  exact_match=true
+//   MENEZESEBATISTALTDAME_42391_0.pdf →    0+30+ 0+15+15+10 =  70  exact_match=false
 function scoreFileAgainstQuery(
   filename: string,
   parentFolderName: string,
   numberTokens: string[],
   nameTokens: string[],
-): { score: number; matched: string[]; reasons: string[] } {
+): { score: number; matched: string[]; reasons: string[]; exact_match: boolean } {
   const normalize = (s: string) =>
     s.replace(/\.pdf$/i, '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -1374,11 +1416,10 @@ function scoreFileAgainstQuery(
   const matched: string[] = [];
   const reasons: string[] = [];
   let score = 0;
+  let exactMatch = false;
 
-  // ── Number tokens — most discriminating ──────────────────────────────────────
+  // ── Number tokens ─────────────────────────────────────────────────────────────
   let numMatchedCount = 0;
-  // numberTokens are ordered: combined first (e.g. "42392"), then base (e.g. "4239")
-  const numPts = [60, 35, 25]; // weights for 1st, 2nd, 3rd number token
   numberTokens.forEach((nt, idx) => {
     const tNorm = normalize(nt);
     if (!tNorm) return;
@@ -1387,20 +1428,28 @@ function scoreFileAgainstQuery(
     if (inFile || inFolder) {
       numMatchedCount++;
       matched.push(nt);
-      const pts = numPts[idx] ?? 20;
-      score += inFile ? pts : Math.round(pts * 0.8); // slight discount for folder-only num match
+      let pts: number;
+      if (idx === 0) {
+        pts = inFile ? 100 : 90;   // exact number — massive weight
+        exactMatch = true;         // mark as exact match
+      } else if (idx === 1) {
+        pts = inFile ? 30 : 20;    // base number — tiebreak only
+      } else {
+        pts = inFile ? 20 : 15;    // other numbers
+      }
+      score += pts;
       reasons.push(`num${inFile ? '_file' : '_folder'}:${nt}`);
     }
   });
 
   // HARD REJECTION: query has number tokens but NONE matched anywhere
   if (numberTokens.length > 0 && numMatchedCount === 0) {
-    return { score: 0, matched: [], reasons: ['rejected:no_number_match'] };
+    return { score: 0, matched: [], reasons: ['rejected:no_number_match'], exact_match: false };
   }
 
   // Bonus: all number tokens matched
   if (numberTokens.length > 0 && numMatchedCount === numberTokens.length) {
-    score += 20;
+    score += 15;
     reasons.push('bonus:all_numbers_matched');
   }
 
@@ -1414,30 +1463,31 @@ function scoreFileAgainstQuery(
     if (inFile || inFolder) {
       nameMatchedCount++;
       matched.push(nt);
-      score += inFile ? 25 : 15; // filename match > folder match for names
+      score += inFile ? 15 : 10;
       reasons.push(`name${inFile ? '_file' : '_folder'}:${nt}`);
     }
   }
 
   // HARD REJECTION: query had 2+ name tokens but only 1 matched AND no number matched
   if (nameTokens.length >= 2 && nameMatchedCount === 1 && numMatchedCount === 0) {
-    return { score: 0, matched: [], reasons: ['rejected:single_name_no_number'] };
+    return { score: 0, matched: [], reasons: ['rejected:single_name_no_number'], exact_match: false };
   }
 
   // Bonus: all name tokens matched
   if (nameTokens.length >= 2 && nameMatchedCount === nameTokens.length) {
-    score += 20;
+    score += 10;
     reasons.push('bonus:all_names_matched');
   }
 
-  // Cap
-  score = Math.min(100, score);
+  // NOTE: score is NOT capped at 100. Exact matches reach 185+, base-only ~70.
+  // The gap enables clean separation: if any exact_match exists, base-only results
+  // are demoted to `base_only_candidates` in debug and hidden from primary results.
 
   if (score === 0 || matched.length === 0) {
-    return { score: 0, matched: [], reasons: ['no_match'] };
+    return { score: 0, matched: [], reasons: ['no_match'], exact_match: false };
   }
 
-  return { score, matched, reasons };
+  return { score, matched, reasons, exact_match: exactMatch };
 }
 
 async function listPdfFilesRecursive(
@@ -1499,6 +1549,7 @@ async function targetedDriveLookup(
   visitedFolderList: VisitedFolder[];
   pathLog: string[];
   apiCalls: number;
+  candidates: Array<{ name: string; score: number; path: string }>;
 } | null> {
   if (nameTokens.length === 0) return null;
 
@@ -1516,10 +1567,14 @@ async function targetedDriveLookup(
   type FolderEntry = { id: string; name: string; score: number; path: string; depth: number };
   let clientCandidates: FolderEntry[] = [];
 
-  // ── Round A: score root's direct children ──────────────────────────────────
+  // ── Round A: score root's direct children (PAGINATED) ────────────────────────
+  // CRITICAL: root may have 700+ client folders. listSubfolders returns only the
+  // first 100 alphabetically — "MENEZES" (letter 13) would be on page 4 of 7
+  // with 702 folders and would never be found. listSubfoldersAll paginates all pages.
+  // 702 folders = 8 pages × 100ms each ≈ 800ms — well within the 60 s gateway limit.
   apiCalls++;
-  const rootChildren = await listSubfolders(token, rootFolderId).catch(() => [] as Array<{ id: string; name: string }>);
-  pathLog.push(`root/ → ${rootChildren.length} subpastas: [${rootChildren.map((c) => c.name).slice(0, 10).join(', ')}]`);
+  const rootChildren = await listSubfoldersAll(token, rootFolderId, 1000).catch(() => [] as Array<{ id: string; name: string }>);
+  pathLog.push(`root/ → ${rootChildren.length} subpastas (paginated): [${rootChildren.map((c) => c.name).slice(0, 10).join(', ')}…]`);
   visitedFolderList.push({ id: rootFolderId, name: 'root', depth: 0, path: 'root' });
   for (const child of rootChildren) {
     visitedFolderList.push({ id: child.id, name: child.name, depth: 1, path: child.name });
@@ -1529,11 +1584,15 @@ async function targetedDriveLookup(
 
   // ── Round B: no match at root → treat root children as containers ──────────
   // (e.g. CLIENTES has 50+ client subfolders that match the name tokens)
+  // IMPORTANT: uses listSubfoldersAll (paginated) so containers with >100 subfolders
+  // are fully scanned. Without pagination, "MENEZES" (letter 13) is invisible when
+  // there are 100+ clients starting A–L.
   if (clientCandidates.length === 0) {
-    for (const container of rootChildren.slice(0, 12)) {
+    for (const container of rootChildren.slice(0, 20)) {
       apiCalls++;
-      const level2 = await listSubfolders(token, container.id).catch(() => [] as Array<{ id: string; name: string }>);
-      if (level2.length > 0) pathLog.push(`${container.name}/ → ${level2.length} subpastas`);
+      // paginated — collects all pages up to 500 subfolders
+      const level2 = await listSubfoldersAll(token, container.id, 500).catch(() => [] as Array<{ id: string; name: string }>);
+      pathLog.push(`Round B: ${container.name}/ → ${level2.length} subpastas (paginated)`);
       for (const child of level2) {
         visitedFolderList.push({ id: child.id, name: child.name, depth: 2, path: `${container.name} / ${child.name}` });
         const { score } = scoreFolderName(child.name, nameTokens);
@@ -1549,7 +1608,7 @@ async function targetedDriveLookup(
   clientCandidates = clientCandidates.sort((a, b) => b.score - a.score).slice(0, 3);
 
   if (clientCandidates.length === 0) {
-    console.log(JSON.stringify({ event: 'targeted_no_client', name_tokens: nameTokens, api_calls: apiCalls }));
+    console.log(JSON.stringify({ event: 'targeted_no_client', name_tokens: nameTokens, api_calls: apiCalls, path_log: pathLog }));
     return null;
   }
 
@@ -1618,10 +1677,16 @@ async function targetedDriveLookup(
     }
   }
 
-  console.log(JSON.stringify({ event: 'targeted_done', pdfs_collected: collected.length, api_calls: apiCalls }));
+  console.log(JSON.stringify({ event: 'targeted_done', pdfs_collected: collected.length, api_calls: apiCalls, path_log: pathLog }));
 
   // Return even if collected is empty — caller inspects score to decide whether to fall back.
-  return { pdfs: collected, visitedFolderList, pathLog, apiCalls };
+  return {
+    pdfs: collected,
+    visitedFolderList,
+    pathLog,
+    apiCalls,
+    candidates: clientCandidates.map((c) => ({ name: c.name, score: c.score, path: c.path })),
+  };
 }
 
 // Search Drive files across all folders (recursive when enabled)
@@ -1786,7 +1851,18 @@ interface LookupResult {
   file: DriveCandidate;
   score: number;
   reasons: string[];
+  exact_match: boolean;   // true when numberTokens[0] (exact combined number) matched
   _debug?: Record<string, unknown>;
+}
+
+// A result that passed MIN_SCORE via base number only (numberTokens[0] did NOT match).
+// Hidden from primary results when any exact_match result exists; shown in debug only.
+interface BaseOnlyCandidate {
+  file_name: string;
+  parent_folder: string;
+  score: number;
+  matched_tokens: string[];
+  reasons: string[];
 }
 
 interface PdfFolderError {
@@ -1837,6 +1913,7 @@ interface LookupOutcome {
     pdf_errors: PdfFolderError[];
     // Scoring diagnostic — always populated regardless of results
     rejected_candidates: RejectedCandidate[];
+    base_only_candidates: BaseOnlyCandidate[];  // passed MIN_SCORE but no exact number match
     diagnostic_token_matches: DiagnosticTokenMatch[];
     // Structural diagnostic — full BFS path map + raw PDF list
     visited_folders: VisitedFolder[];
@@ -1847,6 +1924,13 @@ interface LookupOutcome {
     // Targeted lookup diagnostic
     targeted_lookup_used: boolean;       // true when Phase 0 found the results (not BFS)
     targeted_path_log: string[];         // navigation steps taken by targeted lookup
+    // Phase 0 trace — always populated even when BFS ran as fallback
+    targeted_phase0_ran: boolean;        // was Phase 0 attempted at all?
+    targeted_phase0_null: boolean;       // targetedDriveLookup() returned null (no client found)
+    targeted_phase0_pdfs_collected: number; // PDFs collected before scoring
+    targeted_phase0_error: string | null;   // error caught inside inner try/catch
+    targeted_phase0_path_log: string[];     // navigation steps even when falling to BFS
+    targeted_phase0_candidates: Array<{ name: string; score: number; path: string }>;
   };
 }
 
@@ -1886,6 +1970,7 @@ async function testBoletoLookup(
     traversal_errors: [],
     pdf_errors: [],
     rejected_candidates: [],
+    base_only_candidates: [],
     diagnostic_token_matches: [],
     visited_folders: [],
     bfs_cap_hit: false,
@@ -1894,6 +1979,12 @@ async function testBoletoLookup(
     all_folder_names: [],
     targeted_lookup_used: false,
     targeted_path_log: [],
+    targeted_phase0_ran: false,
+    targeted_phase0_null: false,
+    targeted_phase0_pdfs_collected: 0,
+    targeted_phase0_error: null,
+    targeted_phase0_path_log: [],
+    targeted_phase0_candidates: [],
   };
 
   if (!allTokens.length) {
@@ -1910,8 +2001,64 @@ async function testBoletoLookup(
   // Navigate directly using name tokens → find client folder → pick number-
   // matching subfolder → collect PDFs. Uses ~10-25 API calls vs 200 for BFS.
   // Falls back to BFS only when targeted cannot find a scored match.
+  // Phase 0 trace — captured regardless of outcome and carried to BFS meta when falling through.
+  // This is what surfaces in `targeted_phase0_*` debug fields so we can diagnose failures.
+  type Phase0Diag = {
+    ran: boolean;
+    null_result: boolean;
+    pdfs_collected: number;
+    error: string | null;
+    path_log: string[];
+    candidates: Array<{ name: string; score: number; path: string }>;
+  };
+  const phase0Diag: Phase0Diag = {
+    ran: false,
+    null_result: false,
+    pdfs_collected: 0,
+    error: null,
+    path_log: [],
+    candidates: [],
+  };
+
   if (nameTokens.length > 0) {
-    const targeted = await targetedDriveLookup(token, rootFolderId, nameTokens, numberTokens);
+    phase0Diag.ran = true;
+    console.log(JSON.stringify({
+      event: 'phase0_start',
+      name_tokens: nameTokens,
+      number_tokens: numberTokens,
+      root_folder_id: rootFolderId,
+    }));
+
+    let targeted: Awaited<ReturnType<typeof targetedDriveLookup>> = null;
+    try {
+      targeted = await targetedDriveLookup(token, rootFolderId, nameTokens, numberTokens);
+    } catch (targetedErr) {
+      phase0Diag.error = String(targetedErr);
+      console.error(JSON.stringify({
+        event: 'targeted_lookup_error',
+        error: String(targetedErr),
+        stack: targetedErr instanceof Error ? (targetedErr.stack || null) : null,
+      }));
+      // fall through to BFS
+    }
+
+    if (targeted === null) {
+      phase0Diag.null_result = true;
+    } else {
+      phase0Diag.pdfs_collected = targeted.pdfs.length;
+      phase0Diag.path_log = targeted.pathLog;
+      phase0Diag.candidates = targeted.candidates;
+    }
+
+    console.log(JSON.stringify({
+      event: 'phase0_result',
+      targeted_null: targeted === null,
+      pdfs_collected: targeted?.pdfs.length ?? 0,
+      candidates: targeted?.candidates ?? [],
+      path_log: targeted?.pathLog ?? [],
+      error: phase0Diag.error,
+    }));
+
     if (targeted) {
       const { pdfs: tPdfs, visitedFolderList: tVisited, pathLog: tPathLog, apiCalls: tCalls } = targeted;
 
@@ -1919,19 +2066,33 @@ async function testBoletoLookup(
       const tAllScored = tPdfs.map((file) => {
         const fnNorm = normStr(file.name || '');
         const folderNorm = normStr(file._parentFolderName || '');
-        const { score, matched, reasons } = scoreFileAgainstQuery(
+        const { score, matched, reasons, exact_match } = scoreFileAgainstQuery(
           file.name || '', file._parentFolderName || '', numberTokens, nameTokens,
         );
         if (score > 0) {
-          console.log(JSON.stringify({ event: 'targeted_score', name: file.name, folder: file._parentFolderName, score, matched }));
+          console.log(JSON.stringify({ event: 'targeted_score', name: file.name, folder: file._parentFolderName, score, exact_match, matched }));
         }
         return {
-          file, score, reasons, fnNorm, folderNorm,
+          file, score, reasons, exact_match, fnNorm, folderNorm,
           _debug: { matched_tokens: matched, number_tokens: numberTokens, name_tokens: nameTokens, parent_folder: file._parentFolderName },
         };
       });
 
-      const tScored = tAllScored.filter((r) => r.score >= MIN_SCORE).sort((a, b) => b.score - a.score).slice(0, 10);
+      // Sort by score; exact matches always win because their scores (185+) >> base-only (70)
+      const tAboveThreshold = tAllScored.filter((r) => r.score >= MIN_SCORE).sort((a, b) => b.score - a.score);
+      const tExactMatches = tAboveThreshold.filter((r) => r.exact_match);
+      const tBaseOnly     = tAboveThreshold.filter((r) => !r.exact_match);
+      // If any exact match exists, primary results = only exact matches; base-only → debug
+      const tScored       = (tExactMatches.length > 0 ? tExactMatches : tAboveThreshold).slice(0, 10);
+      const tBaseOnlyCandidates: BaseOnlyCandidate[] = tExactMatches.length > 0
+        ? tBaseOnly.slice(0, 20).map((r) => ({
+            file_name: r.file.name || '',
+            parent_folder: r.file._parentFolderName || '',
+            score: r.score,
+            matched_tokens: (r._debug.matched_tokens as string[]) || [],
+            reasons: r.reasons,
+          }))
+        : [];
 
       if (tScored.length > 0) {
         console.log(JSON.stringify({
@@ -1979,6 +2140,7 @@ async function testBoletoLookup(
           traversal_errors: [],
           pdf_errors: [],
           rejected_candidates: tRejected,
+          base_only_candidates: tBaseOnlyCandidates,
           diagnostic_token_matches: tDiagTokens,
           visited_folders: tVisited,
           bfs_cap_hit: false,
@@ -1989,6 +2151,12 @@ async function testBoletoLookup(
           all_folder_names: [...new Set(tVisited.map((f) => f.name))],
           targeted_lookup_used: true,
           targeted_path_log: tPathLog,
+          targeted_phase0_ran: true,
+          targeted_phase0_null: false,
+          targeted_phase0_pdfs_collected: tPdfs.length,
+          targeted_phase0_error: null,
+          targeted_phase0_path_log: tPathLog,
+          targeted_phase0_candidates: targeted.candidates,
         };
 
         console.log(JSON.stringify({ event: 'lookup_done', strategy: 'targeted', folders_visited: tCalls, pdfs_scanned: tPdfs.length, results_found: tScored.length }));
@@ -1996,6 +2164,10 @@ async function testBoletoLookup(
       }
 
       // Targeted collected PDFs but none scored above threshold → fall through to BFS.
+      // Update phase0Diag so BFS meta reflects what happened even after fallthrough.
+      phase0Diag.pdfs_collected = tPdfs.length;
+      phase0Diag.path_log = tPathLog;
+      phase0Diag.candidates = targeted.candidates;
       console.log(JSON.stringify({ event: 'targeted_no_score_match', pdfs_collected: tPdfs.length, api_calls: tCalls, path_log: tPathLog }));
     }
   }
@@ -2070,7 +2242,7 @@ async function testBoletoLookup(
   const allScored = allPdfs.map((file) => {
     const fnNorm = normStr(file.name || '');
     const folderNorm = normStr(file._parentFolderName || '');
-    const { score, matched, reasons } = scoreFileAgainstQuery(
+    const { score, matched, reasons, exact_match } = scoreFileAgainstQuery(
       file.name || '',
       file._parentFolderName || '',
       numberTokens,
@@ -2082,6 +2254,7 @@ async function testBoletoLookup(
         name: file.name,
         folder: file._parentFolderName,
         score,
+        exact_match,
         matched,
         reasons,
       }));
@@ -2090,17 +2263,28 @@ async function testBoletoLookup(
       file,
       score,
       reasons,
+      exact_match,
       fnNorm,
       folderNorm,
       _debug: { matched_tokens: matched, number_tokens: numberTokens, name_tokens: nameTokens, parent_folder: file._parentFolderName },
     };
   });
 
-  // Results that passed the threshold
-  let scored = allScored
-    .filter((r) => r.score >= MIN_SCORE)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 10);
+  // Results that passed the threshold — exact matches score 185+, base-only ~70
+  const aboveThreshold = allScored.filter((r) => r.score >= MIN_SCORE).sort((a, b) => b.score - a.score);
+  const exactMatches   = aboveThreshold.filter((r) => r.exact_match);
+  const baseOnlyItems  = aboveThreshold.filter((r) => !r.exact_match);
+  // Primary results: only exact matches when any exist; otherwise all above-threshold
+  let scored = (exactMatches.length > 0 ? exactMatches : aboveThreshold).slice(0, 10);
+  const bfsBaseOnlyCandidates: BaseOnlyCandidate[] = exactMatches.length > 0
+    ? baseOnlyItems.slice(0, 20).map((r) => ({
+        file_name: r.file.name || '',
+        parent_folder: r.file._parentFolderName || '',
+        score: r.score,
+        matched_tokens: (r._debug.matched_tokens as string[]) || [],
+        reasons: r.reasons,
+      }))
+    : [];
 
   // ── Diagnostic A: rejected candidates ────────────────────────────────────────
   // Files that were NOT returned (score < MIN_SCORE) but whose normalized filename
@@ -2194,7 +2378,7 @@ async function testBoletoLookup(
 
     scored = Array.from(fallbackMap.values())
       .map(({ file, parentFolderName }) => {
-        const { score, matched, reasons } = scoreFileAgainstQuery(
+        const { score, matched, reasons, exact_match } = scoreFileAgainstQuery(
           file.name || '', parentFolderName, numberTokens, nameTokens,
         );
         // Files found by explicit Drive API query already passed a 'name contains' filter,
@@ -2203,6 +2387,7 @@ async function testBoletoLookup(
           file,
           score: Math.max(score, 30),
           reasons: reasons.length ? reasons.map((r) => `fallback:${r}`) : ['api_search_hit'],
+          exact_match,
           _debug: { matched_tokens: matched, number_tokens: numberTokens, name_tokens: nameTokens, parent_folder: parentFolderName, fallback: true },
         };
       })
@@ -2223,6 +2408,7 @@ async function testBoletoLookup(
     traversal_errors: traversalErrors,
     pdf_errors: pdfErrors,
     rejected_candidates: rejectedCandidates,
+    base_only_candidates: bfsBaseOnlyCandidates,
     diagnostic_token_matches: diagnosticTokenMatches,
     visited_folders: visitedFolders,
     bfs_cap_hit: bfsCapHit,
@@ -2231,6 +2417,13 @@ async function testBoletoLookup(
     all_folder_names: visitedFolders.map((f) => f.name),
     targeted_lookup_used: false,
     targeted_path_log: [],
+    // Phase 0 trace — populated even when BFS ran as fallback
+    targeted_phase0_ran: phase0Diag.ran,
+    targeted_phase0_null: phase0Diag.null_result,
+    targeted_phase0_pdfs_collected: phase0Diag.pdfs_collected,
+    targeted_phase0_error: phase0Diag.error,
+    targeted_phase0_path_log: phase0Diag.path_log,
+    targeted_phase0_candidates: phase0Diag.candidates,
   };
 
   console.log(JSON.stringify({
@@ -2413,6 +2606,107 @@ async function downloadDriveFileBytes(token: string, fileId: string) {
   }
 
   return new Uint8Array(await response.arrayBuffer());
+}
+
+// ── downloadDrivePdfFile ──────────────────────────────────────────────────────
+// Structured PDF download with mimeType/size validation and one retry.
+// Returns a rich result so callers can log and branch without try/catch.
+const PDF_MAX_SIZE_BYTES_DEFAULT = 15 * 1024 * 1024; // 15 MB
+
+interface DrivePdfDownloadResult {
+  ok: boolean;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  base64: string | null;
+  error?: string;
+  errorCode?: 'not_found' | 'forbidden' | 'too_large' | 'not_pdf' | 'quota_exceeded' | 'timeout' | 'unknown';
+}
+
+async function downloadDrivePdfFile(
+  token: string,
+  fileId: string,
+  maxSizeBytes = PDF_MAX_SIZE_BYTES_DEFAULT,
+): Promise<DrivePdfDownloadResult> {
+  // Step 1 — fetch file metadata (mimeType + size) before downloading
+  let mimeType: string | null = null;
+  let sizeBytes: number | null = null;
+  try {
+    const metaResp = await withTimeout(
+      (signal) => fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,mimeType,size&supportsAllDrives=true`,
+        { signal, headers: { Authorization: `Bearer ${token}` } },
+      ),
+      15000,
+      'Timeout ao obter metadados do PDF no Drive.',
+    );
+    if (metaResp.status === 404) {
+      return { ok: false, mimeType: null, sizeBytes: null, base64: null, error: 'Arquivo não encontrado no Drive.', errorCode: 'not_found' };
+    }
+    if (metaResp.status === 403) {
+      return { ok: false, mimeType: null, sizeBytes: null, base64: null, error: 'Sem permissão para acessar o arquivo no Drive.', errorCode: 'forbidden' };
+    }
+    if (!metaResp.ok) {
+      const body = await metaResp.text().catch(() => '');
+      if (body.includes('quotaExceeded') || body.includes('userRateLimitExceeded')) {
+        return { ok: false, mimeType: null, sizeBytes: null, base64: null, error: 'Quota do Drive excedida.', errorCode: 'quota_exceeded' };
+      }
+      return { ok: false, mimeType: null, sizeBytes: null, base64: null, error: `Erro ao obter metadados: HTTP ${metaResp.status} — ${body.slice(0, 200)}` };
+    }
+    const meta = await metaResp.json().catch(() => ({})) as { mimeType?: string; size?: string };
+    mimeType = meta.mimeType || null;
+    sizeBytes = meta.size ? Number(meta.size) : null;
+  } catch (metaErr) {
+    const msg = metaErr instanceof Error ? metaErr.message : String(metaErr);
+    return { ok: false, mimeType: null, sizeBytes: null, base64: null, error: msg, errorCode: msg.includes('imeout') ? 'timeout' : 'unknown' };
+  }
+
+  // Step 2 — validate mimeType
+  if (mimeType && mimeType !== 'application/pdf') {
+    return { ok: false, mimeType, sizeBytes, base64: null, error: `Arquivo não é PDF (mimeType: ${mimeType}).`, errorCode: 'not_pdf' };
+  }
+
+  // Step 3 — validate size (guard before download)
+  if (sizeBytes !== null && sizeBytes > maxSizeBytes) {
+    const sizeMb = (sizeBytes / 1024 / 1024).toFixed(1);
+    const maxMb = (maxSizeBytes / 1024 / 1024).toFixed(0);
+    return { ok: false, mimeType, sizeBytes, base64: null, error: `PDF muito grande: ${sizeMb} MB (máximo: ${maxMb} MB).`, errorCode: 'too_large' };
+  }
+
+  // Step 4 — download with one retry
+  let lastErr = '';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const dlResp = await withTimeout(
+        (signal) => fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+          { signal, headers: { Authorization: `Bearer ${token}` } },
+        ),
+        30000,
+        'Timeout ao baixar PDF do Drive.',
+      );
+      if (dlResp.status === 404) {
+        return { ok: false, mimeType, sizeBytes, base64: null, error: 'Arquivo removido ou movido no Drive.', errorCode: 'not_found' };
+      }
+      if (dlResp.status === 403) {
+        const body = await dlResp.text().catch(() => '');
+        if (body.includes('quotaExceeded') || body.includes('userRateLimitExceeded')) {
+          return { ok: false, mimeType, sizeBytes, base64: null, error: 'Quota do Drive excedida (download).', errorCode: 'quota_exceeded' };
+        }
+        return { ok: false, mimeType, sizeBytes, base64: null, error: 'Sem permissão para baixar o arquivo.', errorCode: 'forbidden' };
+      }
+      if (!dlResp.ok) {
+        lastErr = `HTTP ${dlResp.status}`;
+        continue; // retry
+      }
+      const bytes = new Uint8Array(await dlResp.arrayBuffer());
+      return { ok: true, mimeType: mimeType || 'application/pdf', sizeBytes: bytes.length, base64: bytesToBase64(bytes) };
+    } catch (dlErr) {
+      lastErr = dlErr instanceof Error ? dlErr.message : String(dlErr);
+      if (attempt < 1) continue; // retry once
+      return { ok: false, mimeType, sizeBytes, base64: null, error: lastErr, errorCode: lastErr.includes('imeout') ? 'timeout' : 'unknown' };
+    }
+  }
+  return { ok: false, mimeType, sizeBytes, base64: null, error: lastErr || 'Falha ao baixar PDF após tentativas.' };
 }
 
 async function readSheetRows(token: string, spreadsheetId: string, sheetName: string) {
@@ -4012,6 +4306,9 @@ async function sendZapiDocument(
   });
   console.log('[ZAPI COMPANY RESPONSE]', data);
 
+  if (response.status === 429) {
+    throw new Error(`ZAPI_RATE_LIMITED: Rate limit atingido (HTTP 429). O lote será pausado automaticamente.`);
+  }
   if (!response.ok) {
     console.error('[ZAPI ERROR]', data);
     throw new Error(String(data?.message || data?.error || `HTTP ${response.status}`));
@@ -4221,8 +4518,51 @@ async function insertLog(
   payload: Record<string, unknown>,
 ) {
   console.log('[LOG_COBRANCA] payload', payload);
-  const { error } = await supabaseAdmin.from('logs_cobranca').insert(payload);
-  if (error) throw new Error(error.message);
+  const { data, error } = await supabaseAdmin
+    .from('logs_cobranca')
+    .insert(payload)
+    .select('id, status_envio, envio_hash')
+    .maybeSingle();
+
+  if (!error) return data || null;
+  if (!isEnvioHashConflictMessage(error.message)) throw new Error(error.message);
+
+  const envioHash = String(payload.envio_hash || '').trim();
+  const companyId = String(payload.company_id || '').trim();
+  if (!envioHash || !companyId) throw new Error(error.message);
+
+  const { data: existingLog, error: existingLogError } = await supabaseAdmin
+    .from('logs_cobranca')
+    .select('id, status_envio, envio_hash')
+    .eq('company_id', companyId)
+    .eq('envio_hash', envioHash)
+    .maybeSingle();
+
+  if (existingLogError) throw new Error(existingLogError.message);
+  if (!existingLog?.id) throw new Error(error.message);
+
+  const incomingStatus = String(payload.status_envio || '').trim().toLowerCase();
+  const existingStatus = String(existingLog.status_envio || '').trim().toLowerCase();
+
+  if (isSuccessfulLogStatus(existingStatus) && ['erro', 'ignorado'].includes(incomingStatus)) {
+    return existingLog;
+  }
+
+  const updatePayload = {
+    ...payload,
+    data_hora: payload.data_hora || new Date().toISOString(),
+  };
+
+  const { data: updatedLog, error: updateError } = await supabaseAdmin
+    .from('logs_cobranca')
+    .update(updatePayload)
+    .eq('id', existingLog.id)
+    .eq('company_id', companyId)
+    .select('id, status_envio, envio_hash')
+    .maybeSingle();
+
+  if (updateError) throw new Error(updateError.message);
+  return updatedLog || existingLog;
 }
 
 async function tryInsertLog(
@@ -4400,6 +4740,213 @@ async function finalizeAutomationDispatch(
   }
 }
 
+// ── Retry classification ──────────────────────────────────────────────────────
+// Error codes returned by processChargeForRecord that warrant automatic retry.
+const RETRY_MAX_ATTEMPTS = 3;
+// Backoff: attempt 0→1: +5 min | 1→2: +15 min | 2→3: +1 h | then stop
+const RETRY_BACKOFF_MS: number[] = [5 * 60_000, 15 * 60_000, 60 * 60_000];
+const SUCCESS_LOG_STATUSES = new Set(['sucesso', 'sucesso_simulado', 'sucesso_sem_boleto', 'simulado']);
+
+const RETRYABLE_ERROR_CODES = new Set([
+  'timeout',
+  'network_error',
+  'zapi_rate_limited',
+  'zapi_5xx',
+  'drive_quota',
+  'temporary_unavailable',
+]);
+
+const NON_RETRYABLE_ERROR_CODES = new Set([
+  'telefone_invalido',
+  'boleto_not_found',
+  'boleto_not_pdf',
+  'boleto_too_large',
+  'forbidden',
+  'duplicate_recent',
+  'exact_match_false',
+  'conflito_boleto',
+]);
+
+function normalizeRetryErrorCode(
+  reason: string | null | undefined,
+  errorMessage?: string | null,
+): string {
+  const code = String(reason || '').trim().toLowerCase();
+  const message = String(errorMessage || '').trim().toLowerCase();
+
+  if (code === 'zapi_rate_limited' || message.includes('rate limited') || message.includes('http 429')) {
+    return 'zapi_rate_limited';
+  }
+  if (code === 'telefone_invalido' || code === 'invalid_phone_sem_boleto') return 'telefone_invalido';
+  if (code === 'boleto_conflito' || code === 'boleto_conflito_live_search') return 'conflito_boleto';
+  if (code === 'exact_match_false') return 'exact_match_false';
+  if (code === 'duplicado_no_dia' || code === 'duplicado_idempotencia' || code === 'dispatch_already_exists') {
+    return 'duplicate_recent';
+  }
+  if (code === 'boleto_nao_encontrado' || code === 'pdf_download_not_found') return 'boleto_not_found';
+  if (code === 'pdf_download_not_pdf') return 'boleto_not_pdf';
+  if (code === 'pdf_download_too_large') return 'boleto_too_large';
+  if (code === 'pdf_download_forbidden') return 'forbidden';
+  if (code === 'pdf_download_quota_exceeded') return 'drive_quota';
+  if (code === 'pdf_download_timeout' || code === 'batch_timeout' || message.includes('tempo limite') || message.includes('timeout')) {
+    return 'timeout';
+  }
+  if (
+    message.includes('fetch failed')
+    || message.includes('network')
+    || message.includes('econnreset')
+    || message.includes('socket hang up')
+    || message.includes('connection reset')
+  ) {
+    return 'network_error';
+  }
+  if (/http 5\d\d/.test(message) || /z-api erro 5\d\d/.test(message)) {
+    return 'zapi_5xx';
+  }
+  if (code === 'zapi_circuit_open' || code === 'zapi_text_sem_boleto_error' || code === 'unexpected_exception') {
+    return 'temporary_unavailable';
+  }
+
+  return code || 'temporary_unavailable';
+}
+
+function classifyError(
+  reason: string | null | undefined,
+  errorMessage?: string | null,
+): { retryable: boolean; errorCode: string } {
+  const errorCode = normalizeRetryErrorCode(reason, errorMessage);
+  if (NON_RETRYABLE_ERROR_CODES.has(errorCode)) return { retryable: false, errorCode };
+  if (RETRYABLE_ERROR_CODES.has(errorCode)) return { retryable: true, errorCode };
+  return { retryable: true, errorCode };
+}
+
+/** Compute the ISO timestamp for the next retry given the current attempt count (0-based). */
+function computeNextRetryAt(currentRetryCount: number): string | null {
+  if (currentRetryCount >= RETRY_BACKOFF_MS.length) return null;
+  return new Date(Date.now() + RETRY_BACKOFF_MS[currentRetryCount]).toISOString();
+}
+
+/** Fields added to every error log payload so the retry handler can filter and schedule. */
+function buildRetryMeta(
+  reason: string | null | undefined,
+  retryCount: number,
+  errorMessage?: string | null,
+): Record<string, unknown> {
+  const { retryable, errorCode } = classifyError(reason, errorMessage);
+  return {
+    retryable,
+    retry_count: retryCount,
+    max_retries: RETRY_MAX_ATTEMPTS,
+    next_retry_at: retryable ? computeNextRetryAt(retryCount) : null,
+    last_error_code: errorCode,
+    last_error_message: errorMessage || String(reason || '') || null,
+  };
+}
+
+function readPayloadObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function isSuccessfulLogStatus(status: string | null | undefined) {
+  return SUCCESS_LOG_STATUSES.has(String(status || '').trim().toLowerCase());
+}
+
+function isRetryableLogCode(code: string | null | undefined) {
+  return RETRYABLE_ERROR_CODES.has(normalizeRetryErrorCode(code));
+}
+
+function isEnvioHashConflictMessage(message: string | null | undefined) {
+  const normalized = String(message || '').trim().toLowerCase();
+  return normalized.includes('idx_logs_cobranca_envio_hash')
+    || (normalized.includes('duplicate key value') && normalized.includes('envio_hash'));
+}
+
+// ── lookupBoletoFileForRecord ─────────────────────────────────────────────────
+// Replaces legacy searchDriveFilesScored() in processChargeForRecord.
+// Builds a query from the FinancialRow, calls testBoletoLookup (Phase 0 targeted
+// + BFS fallback), and returns the best file with exact_match metadata.
+interface BoletoLookupResult {
+  file: DriveCandidate | null;
+  score: number;
+  exactMatch: boolean;
+  strategy: string;
+  viewUrl: string | null;
+  secondScore: number | null;
+  secondFile: DriveCandidate | null;
+}
+
+async function lookupBoletoFileForRecord(
+  token: string,
+  folderId: string,
+  record: FinancialRow,
+): Promise<BoletoLookupResult> {
+  const empty: BoletoLookupResult = {
+    file: null, score: 0, exactMatch: false,
+    strategy: 'not_found', viewUrl: null, secondScore: null, secondFile: null,
+  };
+
+  // Build query: "<numero_boleto>, <nome_cliente>"
+  // numero_boleto is the raw field (e.g. "4239-2"); nome / cliente_nome is the client.
+  const numPart = String(record.numero_boleto || record.documento || '').trim();
+  const namePart = String(record.cliente_nome || record.nome || '').trim();
+  const queryParts: string[] = [];
+  if (numPart) queryParts.push(numPart);
+  if (namePart) queryParts.push(namePart);
+  const query = queryParts.join(', ');
+
+  if (!query) {
+    return { ...empty, strategy: 'no_query' };
+  }
+
+  let outcome: LookupOutcome;
+  try {
+    outcome = await testBoletoLookup(token, folderId, query, { maxFolders: 100 });
+  } catch (err) {
+    console.error(JSON.stringify({
+      event: 'lookup_boleto_file_error',
+      error: String(err),
+      record_id: record.id,
+      query,
+    }));
+    return { ...empty, strategy: 'lookup_error' };
+  }
+
+  const results = outcome.results;
+  if (!results.length) {
+    return { ...empty, strategy: 'not_found' };
+  }
+
+  const best = results[0];
+  const second = results[1] ?? null;
+  const strategy = outcome.meta.targeted_lookup_used
+    ? (best.exact_match ? 'targeted_exact' : 'targeted_base')
+    : (best.exact_match ? 'bfs_exact' : 'bfs_base');
+
+  console.log(JSON.stringify({
+    event: 'lookup_boleto_file_result',
+    record_id: record.id,
+    query,
+    file_id: best.file.id,
+    file_name: best.file.name,
+    score: best.score,
+    exact_match: best.exact_match,
+    strategy,
+    targeted_used: outcome.meta.targeted_lookup_used,
+  }));
+
+  return {
+    file: best.file,
+    score: best.score,
+    exactMatch: best.exact_match,
+    strategy,
+    viewUrl: best.file.webViewLink || null,
+    secondScore: second?.score ?? null,
+    secondFile: second?.file ?? null,
+  };
+}
+
 async function processChargeForRecord(
   supabaseAdmin: AdminClient,
   record: FinancialRow,
@@ -4410,6 +4957,7 @@ async function processChargeForRecord(
   force = false,
   simulate = false,
   companyName = '',
+  batchCtx?: { batchId: string; batchIndex: number; batchTotal: number; retryCount?: number; previousLogId?: string | null },
 ) {
   const normalizedStatus = normalizeText(record.status);
   if (CLOSED_STATUSES.has(normalizedStatus)) {
@@ -4450,7 +4998,9 @@ async function processChargeForRecord(
 
   const diasAtraso = diff < 0 ? Math.abs(diff) : 0;
   const { numeroBoletoEfetivo, clienteEfetivo } = logCobrancaMapping(record);
-  const hash = await sha256Hex(`${record.company_id}|${record.id}|${numeroBoletoEfetivo || ''}|${tipo}|${todayIso}`);
+  const retryCount = batchCtx?.retryCount ?? 0;
+  const hashSeed = `${record.company_id}|${record.id}|${numeroBoletoEfetivo || ''}|${tipo}|${todayIso}`;
+  const hash = await sha256Hex(hashSeed);
   const template = resolveTemplate(config, tipo);
   const dispatchType = simulate ? `whatsapp_${tipo}_simulado` : `whatsapp_${tipo}_real`;
   const dispatch = await reserveAutomationDispatch(supabaseAdmin, {
@@ -4513,7 +5063,12 @@ async function processChargeForRecord(
       drive_file_id: record.drive_file_id || null,
       status_envio: 'erro',
       erro: 'boleto_conflito',
-      payload: { company_id: record.company_id, record_id: record.id, boleto_status: boletoStatus },
+      payload: {
+        company_id: record.company_id,
+        record_id: record.id,
+        boleto_status: boletoStatus,
+        ...buildRetryMeta('boleto_conflito', retryCount, 'Registro bloqueado por conflito de boleto preexistente.'),
+      },
       envio_hash: hash,
     });
     await finalizeAutomationDispatch(supabaseAdmin, {
@@ -4531,24 +5086,42 @@ async function processChargeForRecord(
   const usePreMatched = boletoStatus === 'encontrado' && preMatchedConfidence >= 80 && Boolean(record.drive_file_id);
 
   let file: DriveCandidate | null = null;
+  // Tracking vars for new lookup — used in all insertLog payloads below
+  let boletoLookupScore = 0;
+  let boletoExactMatch = false;
+  let boletoViewUrl: string | null = null;
+  let boletoLookupStrategy = 'not_searched';
+  let lookupBlockedReason: 'exact_match_false' | null = null;
+
   if (usePreMatched) {
     // Verify the pre-matched file still exists in Drive (cheap metadata call, no re-search)
     file = await getDriveFileMetadata(token, record.drive_file_id!).catch(() => null);
     if (!file?.id) {
       // Pre-matched file missing or inaccessible — fall back to live search
       file = null;
+    } else {
+      boletoLookupStrategy = 'pre_matched';
+      boletoViewUrl = file.webViewLink || null;
+      boletoLookupScore = Number(record.boleto_match_confidence || 0);
     }
   }
 
-  // ETAPA 1: Scored live search with blocking rules
+  // ETAPA 1: Targeted Drive lookup (replaces legacy searchDriveFilesScored)
   if (!file) {
-    const scoredCandidates = await searchDriveFilesScored(token, folderId, record);
-    const best = scoredCandidates[0];
-    const second = scoredCandidates[1];
+    const lookupResult = await lookupBoletoFileForRecord(token, folderId, record);
+    boletoLookupScore = lookupResult.score;
+    boletoExactMatch = lookupResult.exactMatch;
+    boletoViewUrl = lookupResult.viewUrl;
+    boletoLookupStrategy = lookupResult.strategy;
 
-    if (best) {
+    if (lookupResult.file) {
+      const bestScore = lookupResult.score;
+      const bestFile = lookupResult.file;
+      const secondScore = lookupResult.secondScore;
+      const secondFile = lookupResult.secondFile;
+
       // Conflict: two candidates both >= 80 and within 5 points of each other
-      if (best.score >= 80 && second && second.score >= 80 && Math.abs(best.score - second.score) <= 5) {
+      if (bestScore >= 80 && secondScore !== null && secondScore >= 80 && Math.abs(bestScore - secondScore) <= 5) {
         await tryInsertLog(supabaseAdmin, {
           financeiro_id: record.id,
           company_id: record.company_id,
@@ -4563,49 +5136,69 @@ async function processChargeForRecord(
           tipo_cobranca: tipo,
           dias_atraso: diasAtraso,
           arquivo_encontrado: false,
-          drive_file_id: best.file.id,
+          drive_file_id: bestFile.id,
           status_envio: 'erro',
           erro: 'boleto_conflito_live_search',
           payload: {
-            winner_score: best.score, winner_file_id: best.file.id, winner_file_name: best.file.name,
-            second_score: second.score, second_file_id: second.file.id, company_id: record.company_id,
+            winner_score: bestScore, winner_file_id: bestFile.id, winner_file_name: bestFile.name,
+            second_score: secondScore, second_file_id: secondFile?.id ?? null, company_id: record.company_id,
+            boleto_lookup_score: boletoLookupScore, boleto_exact_match: boletoExactMatch,
+            boleto_lookup_strategy: boletoLookupStrategy,
+            ...buildRetryMeta('boleto_conflito_live_search', retryCount, 'Busca ao vivo encontrou dois boletos concorrentes com alta confianca.'),
           },
           envio_hash: hash,
         });
         await insertAutomationAuditLog(supabaseAdmin, {
           company_id: record.company_id, action: 'live_search_conflict_blocked',
           registro_id: record.id, charge_id: record.id,
-          boleto_file_id: best.file.id, boleto_score: best.score, boleto_strategy: best.strategy,
-          boleto_second_score: second.score, blocked_reason: 'conflict_live_search',
+          boleto_file_id: bestFile.id, boleto_score: bestScore, boleto_strategy: boletoLookupStrategy,
+          boleto_second_score: secondScore, blocked_reason: 'conflict_live_search',
         });
         await finalizeAutomationDispatch(supabaseAdmin, {
           companyId: record.company_id, dispatchType, operationHash: dispatch.operationHash,
-          status: 'failed', metadata: { reason: 'boleto_conflito_live_search', winner_score: best.score, second_score: second.score },
+          status: 'failed', metadata: { reason: 'boleto_conflito_live_search', winner_score: bestScore, second_score: secondScore },
         });
         return { status: 'erro', reason: 'boleto_conflito_live_search' };
       }
       // Low confidence: block attachment if score < 80
-      if (best.score < 80) {
+      if (bestScore < 80) {
         await insertAutomationAuditLog(supabaseAdmin, {
           company_id: record.company_id, action: 'live_search_low_confidence_blocked',
           registro_id: record.id, charge_id: record.id,
-          boleto_file_id: best.file.id, boleto_score: best.score, boleto_strategy: best.strategy,
-          blocked_reason: `baixa_confianca_score_${best.score}`,
+          boleto_file_id: bestFile.id, boleto_score: bestScore, boleto_strategy: boletoLookupStrategy,
+          blocked_reason: `baixa_confianca_score_${bestScore}`,
         });
         // file stays null — will be handled by the !file check below
+      } else if (!boletoExactMatch) {
+        // Score is sufficient but number was only a base match (exact idx=0 token did NOT match).
+        // Never attach a PDF without an exact number match — risk of wrong boleto delivery.
+        await insertAutomationAuditLog(supabaseAdmin, {
+          company_id: record.company_id, action: 'live_search_base_match_no_attach',
+          registro_id: record.id, charge_id: record.id,
+          boleto_file_id: bestFile.id, boleto_score: bestScore, boleto_strategy: boletoLookupStrategy,
+          blocked_reason: 'exact_match_required_for_attachment',
+        });
+        console.log(JSON.stringify({
+          event: 'attachment_blocked_base_match',
+          company_id: record.company_id, record_id: record.id,
+          file_name: bestFile.name, score: bestScore,
+        }));
+        lookupBlockedReason = 'exact_match_false';
+        // file stays null — falls through to !permitirEnvioSemBoleto check or text-only
       } else {
-        file = best.file;
+        file = bestFile;
         await insertAutomationAuditLog(supabaseAdmin, {
           company_id: record.company_id, action: 'live_search_matched',
-          registro_id: record.id, boleto_file_id: best.file.id,
-          boleto_score: best.score, boleto_strategy: best.strategy,
-          boleto_second_score: second?.score ?? null,
+          registro_id: record.id, boleto_file_id: bestFile.id,
+          boleto_score: bestScore, boleto_strategy: boletoLookupStrategy,
+          boleto_second_score: secondScore ?? null,
         });
       }
     }
   }
 
   if (!file?.id && !permitirEnvioSemBoleto) {
+    const errorReason = lookupBlockedReason || 'boleto_nao_encontrado';
     await insertLog(supabaseAdmin, {
       financeiro_id: record.id,
       company_id: record.company_id,
@@ -4622,8 +5215,16 @@ async function processChargeForRecord(
       arquivo_encontrado: false,
       drive_file_id: null,
       status_envio: 'erro',
-      erro: 'boleto_nao_encontrado',
-      payload: { company_id: record.company_id, record_id: record.id },
+      erro: errorReason,
+      payload: {
+        company_id: record.company_id,
+        record_id: record.id,
+        boleto_lookup_score: boletoLookupScore,
+        boleto_exact_match: boletoExactMatch,
+        boleto_view_url: boletoViewUrl,
+        boleto_lookup_strategy: boletoLookupStrategy,
+        ...buildRetryMeta(errorReason, retryCount, lookupBlockedReason ? 'Arquivo localizado sem exact match seguro para anexo.' : 'Nenhum boleto elegivel encontrado para envio.'),
+      },
       envio_hash: hash,
     });
     await finalizeAutomationDispatch(supabaseAdmin, {
@@ -4631,14 +5232,59 @@ async function processChargeForRecord(
       dispatchType,
       operationHash: dispatch.operationHash,
       status: 'failed',
-      metadata: { reason: 'boleto_nao_encontrado' },
+      metadata: { reason: errorReason },
     });
-    return { status: 'erro', reason: 'boleto_nao_encontrado' };
+    return { status: 'erro', reason: errorReason };
   }
 
   const message = fillTemplate(template, record, diasAtraso, companyName);
 
   if (simulate) {
+    // Validate attachment readiness without downloading the full PDF.
+    // Fetch Drive file metadata (mimeType + size) to confirm the PDF is accessible.
+    let attachmentStrategy = 'none';
+    let attachmentReady = false;
+    let attachmentBlockReason: string | null = null;
+    let attachmentSizeMb: number | null = null;
+    let simMimeType: string | null = null;
+    let simSizeBytes: number | null = null;
+
+    if (file?.id) {
+      try {
+        const simMetaResp = await withTimeout(
+          (signal) => fetch(
+            `https://www.googleapis.com/drive/v3/files/${file!.id}?fields=id,mimeType,size&supportsAllDrives=true`,
+            { signal, headers: { Authorization: `Bearer ${token}` } },
+          ),
+          10000,
+          'Timeout ao validar metadados do PDF na simulação.',
+        );
+        if (simMetaResp.ok) {
+          const simMeta = await simMetaResp.json().catch(() => ({})) as { mimeType?: string; size?: string };
+          simMimeType = simMeta.mimeType || null;
+          simSizeBytes = simMeta.size ? Number(simMeta.size) : null;
+          attachmentSizeMb = simSizeBytes !== null ? Math.round((simSizeBytes / 1024 / 1024) * 100) / 100 : null;
+
+          if (simMimeType && simMimeType !== 'application/pdf') {
+            attachmentBlockReason = `not_pdf:${simMimeType}`;
+          } else if (simSizeBytes !== null && simSizeBytes > PDF_MAX_SIZE_BYTES_DEFAULT) {
+            attachmentBlockReason = `too_large:${attachmentSizeMb}MB`;
+          } else {
+            attachmentReady = true;
+            attachmentStrategy = boletoExactMatch ? 'exact_match_pdf' : 'pre_matched_pdf';
+          }
+        } else {
+          attachmentBlockReason = `drive_http_${simMetaResp.status}`;
+        }
+      } catch (simMetaErr) {
+        attachmentBlockReason = `meta_error:${simMetaErr instanceof Error ? simMetaErr.message : String(simMetaErr)}`;
+      }
+    } else {
+      attachmentBlockReason = boletoExactMatch
+        ? 'file_not_set'
+        : (!boletoLookupScore ? 'not_found' : 'base_match_only');
+    }
+
     await insertLog(supabaseAdmin, {
       financeiro_id: record.id,
       company_id: record.company_id,
@@ -4663,6 +5309,22 @@ async function processChargeForRecord(
         simulate: true,
         file_name: file?.name || null,
         message_preview: message,
+        boleto_lookup_score: boletoLookupScore,
+        boleto_exact_match: boletoExactMatch,
+        boleto_view_url: boletoViewUrl,
+        boleto_lookup_strategy: boletoLookupStrategy,
+        // Attachment simulation fields
+        attachment_strategy: attachmentStrategy,
+        attachment_ready: attachmentReady,
+        attachment_block_reason: attachmentBlockReason,
+        attachment_size_mb: attachmentSizeMb,
+        boleto_download_mime: simMimeType,
+        boleto_download_size: simSizeBytes,
+        would_send_attachment: attachmentReady,
+        // Batch context
+        batch_id: batchCtx?.batchId ?? null,
+        batch_index: batchCtx?.batchIndex ?? null,
+        batch_total: batchCtx?.batchTotal ?? null,
       },
       envio_hash: hash,
     });
@@ -4671,7 +5333,12 @@ async function processChargeForRecord(
       dispatchType,
       operationHash: dispatch.operationHash,
       status: 'completed',
-      metadata: { simulated: true, file_name: file?.name || null },
+      metadata: {
+        simulated: true,
+        file_name: file?.name || null,
+        attachment_ready: attachmentReady,
+        attachment_block_reason: attachmentBlockReason,
+      },
     });
     // Forensic audit for simulated sends — allows BoletoMatchStatus panel to show them
     await insertAutomationAuditLog(supabaseAdmin, {
@@ -4681,12 +5348,19 @@ async function processChargeForRecord(
       charge_id: record.id,
       telefone: phone,
       boleto_file_id: file?.id || null,
-      boleto_score: Number(record.boleto_match_confidence || 0) || null,
-      boleto_strategy: record.boleto_match_strategy || null,
+      boleto_score: boletoLookupScore || Number(record.boleto_match_confidence || 0) || null,
+      boleto_strategy: boletoLookupStrategy || record.boleto_match_strategy || null,
       template_used: tipo,
       zapi_status: 'simulated',
       request_payload: { tipo, dias_atraso: diasAtraso, simulate: true, document: record.documento, phone },
-      response_payload: { simulated: true, file_name: file?.name || null, message_preview: message },
+      response_payload: {
+        simulated: true,
+        file_name: file?.name || null,
+        message_preview: message,
+        attachment_ready: attachmentReady,
+        attachment_block_reason: attachmentBlockReason,
+        attachment_size_mb: attachmentSizeMb,
+      },
     });
 
     return {
@@ -4696,6 +5370,11 @@ async function processChargeForRecord(
       simulated: true,
       message,
       fileName: file?.name || `${numeroBoletoEfetivo || record.documento || record.id}.pdf`,
+      attachment_strategy: attachmentStrategy,
+      attachment_ready: attachmentReady,
+      attachment_block_reason: attachmentBlockReason,
+      attachment_size_mb: attachmentSizeMb,
+      would_send_attachment: attachmentReady,
     };
   }
 
@@ -4706,6 +5385,21 @@ async function processChargeForRecord(
       const zapiTextConfig = await resolveCompanyZapiConfig(supabaseAdmin, record.company_id, { allowTestMode: false });
       const normalizedPhone = normalizeBrazilPhone(phone);
       if (!validatePhone(normalizedPhone)) {
+        await tryInsertLog(supabaseAdmin, {
+          financeiro_id: record.id, company_id: record.company_id,
+          cliente_nome: clienteEfetivo || record.nome, cliente_numero: record.cliente_numero,
+          telefone: normalizedPhone, documento: record.documento,
+          numero_boleto: numeroBoletoEfetivo || null, numero_nf: record.numero_nf,
+          valor: record.valor, vencimento: record.data_vencimento, tipo_cobranca: tipo,
+          dias_atraso: diasAtraso, arquivo_encontrado: false, drive_file_id: null,
+          status_envio: 'erro', erro: 'invalid_phone_sem_boleto', envio_hash: hash,
+          payload: {
+            company_id: record.company_id,
+            record_id: record.id,
+            sem_boleto: true,
+            ...buildRetryMeta('invalid_phone_sem_boleto', retryCount, 'Telefone invalido para envio sem boleto.'),
+          },
+        });
         await finalizeAutomationDispatch(supabaseAdmin, {
           companyId: record.company_id, dispatchType, operationHash: dispatch.operationHash,
           status: 'failed', metadata: { reason: 'invalid_phone_sem_boleto' },
@@ -4724,6 +5418,23 @@ async function processChargeForRecord(
       );
       const textData = await textResponse.json().catch(() => ({}));
       if (!textResponse.ok) {
+        const textErrorMessage = `Z-API text sem boleto HTTP ${textResponse.status}: ${JSON.stringify(textData)}`;
+        await tryInsertLog(supabaseAdmin, {
+          financeiro_id: record.id, company_id: record.company_id,
+          cliente_nome: clienteEfetivo || record.nome, cliente_numero: record.cliente_numero,
+          telefone: normalizedPhone, documento: record.documento,
+          numero_boleto: numeroBoletoEfetivo || null, numero_nf: record.numero_nf,
+          valor: record.valor, vencimento: record.data_vencimento, tipo_cobranca: tipo,
+          dias_atraso: diasAtraso, arquivo_encontrado: false, drive_file_id: null,
+          status_envio: 'erro', erro: 'zapi_text_sem_boleto_error', envio_hash: hash,
+          payload: {
+            company_id: record.company_id,
+            record_id: record.id,
+            sem_boleto: true,
+            zapi_status_code: textResponse.status,
+            ...buildRetryMeta('zapi_text_sem_boleto_error', retryCount, textErrorMessage),
+          },
+        });
         await finalizeAutomationDispatch(supabaseAdmin, {
           companyId: record.company_id, dispatchType, operationHash: dispatch.operationHash,
           status: 'failed', metadata: { reason: 'zapi_text_sem_boleto_error' },
@@ -4739,7 +5450,15 @@ async function processChargeForRecord(
         valor: record.valor, vencimento: record.data_vencimento, tipo_cobranca: tipo,
         dias_atraso: diasAtraso, arquivo_encontrado: false, drive_file_id: null,
         status_envio: 'sucesso_sem_boleto', erro: null, envio_hash: hash,
-        payload: { tipo, phone: normalizedPhone, message_preview: message, sem_boleto: true },
+        payload: {
+          tipo,
+          phone: normalizedPhone,
+          message_preview: message,
+          sem_boleto: true,
+          retry_count: retryCount,
+          max_retries: RETRY_MAX_ATTEMPTS,
+          previous_log_id: batchCtx?.previousLogId ?? null,
+        },
       });
       await finalizeAutomationDispatch(supabaseAdmin, {
         companyId: record.company_id, dispatchType, operationHash: dispatch.operationHash,
@@ -4769,7 +5488,12 @@ async function processChargeForRecord(
       valor: record.valor, vencimento: record.data_vencimento, tipo_cobranca: tipo,
       dias_atraso: diasAtraso, arquivo_encontrado: Boolean(file?.id), drive_file_id: file?.id || null,
       status_envio: 'erro', erro: 'zapi_circuit_open', envio_hash: hash,
-      payload: { company_id: record.company_id, record_id: record.id, circuit_reason: circuit.reason },
+      payload: {
+        company_id: record.company_id,
+        record_id: record.id,
+        circuit_reason: circuit.reason,
+        ...buildRetryMeta('zapi_circuit_open', retryCount, circuit.reason || 'Circuit breaker da Z-API aberto.'),
+      },
     });
     await finalizeAutomationDispatch(supabaseAdmin, {
       companyId: record.company_id, dispatchType, operationHash: dispatch.operationHash,
@@ -4779,23 +5503,169 @@ async function processChargeForRecord(
   }
 
   const zapiConfig = await resolveCompanyZapiConfig(supabaseAdmin, record.company_id, { allowTestMode: false });
-  const base64 = await downloadDriveFileBase64(token, file.id);
+
+  // ── ETAPA 2: Download PDF with validation ─────────────────────────────────
+  const pdfFileName = file.name || `${numeroBoletoEfetivo || record.documento || record.id}.pdf`;
+  const dlResult = await downloadDrivePdfFile(token, file.id);
+
+  console.log(JSON.stringify({
+    event: dlResult.ok ? 'pdf_download_ok' : 'pdf_download_failed',
+    company_id: record.company_id, record_id: record.id,
+    file_id: file.id, file_name: pdfFileName,
+    mime_type: dlResult.mimeType, size_bytes: dlResult.sizeBytes,
+    error: dlResult.error ?? null, error_code: dlResult.errorCode ?? null,
+  }));
+
+  // If download failed for a structural reason (not_found, forbidden, too_large, not_pdf),
+  // block the send and log — do NOT silently fall back to text when the PDF was found but invalid.
+  if (!dlResult.ok) {
+    const hardBlock = dlResult.errorCode === 'not_found'
+      || dlResult.errorCode === 'forbidden'
+      || dlResult.errorCode === 'too_large'
+      || dlResult.errorCode === 'not_pdf';
+
+    if (hardBlock) {
+      await insertLog(supabaseAdmin, {
+        financeiro_id: record.id, company_id: record.company_id,
+        cliente_nome: clienteEfetivo || record.nome, cliente_numero: record.cliente_numero,
+        telefone: phone, documento: record.documento,
+        numero_boleto: numeroBoletoEfetivo || null, numero_nf: record.numero_nf,
+        valor: record.valor, vencimento: record.data_vencimento, tipo_cobranca: tipo,
+        dias_atraso: diasAtraso, arquivo_encontrado: true, drive_file_id: file.id,
+        status_envio: 'erro', erro: `pdf_download_${dlResult.errorCode}`, envio_hash: hash,
+        payload: {
+          company_id: record.company_id, record_id: record.id,
+          boleto_file_id: file.id, boleto_file_name: pdfFileName,
+          boleto_download_ok: false, boleto_download_size: dlResult.sizeBytes,
+          boleto_download_mime: dlResult.mimeType,
+          download_error: dlResult.error, download_error_code: dlResult.errorCode,
+          boleto_lookup_score: boletoLookupScore, boleto_exact_match: boletoExactMatch,
+          boleto_view_url: boletoViewUrl, boleto_lookup_strategy: boletoLookupStrategy,
+          ...buildRetryMeta(`pdf_download_${dlResult.errorCode}`, retryCount, dlResult.error),
+        },
+      });
+      await finalizeAutomationDispatch(supabaseAdmin, {
+        companyId: record.company_id, dispatchType, operationHash: dispatch.operationHash,
+        status: 'failed', metadata: { reason: `pdf_download_${dlResult.errorCode}`, error: dlResult.error },
+      });
+      return { status: 'erro', reason: `pdf_download_${dlResult.errorCode}` };
+    }
+    // Transient errors (timeout, quota, unknown) → fall back to text-only send
+  }
+
   let sendResult: { provider_id: string; raw: unknown };
-  let pdfAttached = true;
+  let pdfAttached = dlResult.ok;
+  let attachmentError: string | null = null;
   const sendStartedAt = Date.now();
-  try {
-    sendResult = await sendZapiDocument(zapiConfig, phone, message, file.name || `${numeroBoletoEfetivo || record.documento || record.id}.pdf`, base64);
-    await recordZapiSuccess(supabaseAdmin, record.company_id);
-  } catch (sendErr) {
-    const errMsg = sendErr instanceof Error ? sendErr.message : String(sendErr);
-    await recordZapiFailure(supabaseAdmin, record.company_id, errMsg);
-    console.log(JSON.stringify({
-      event: 'attachment_failed', company_id: record.company_id,
-      financial_record_id: record.id, file_id: file.id, file_name: file.name,
-      tipo, phone, error: errMsg,
-    }));
-    // Fallback: Z-API rejected the PDF attachment (too large, format, etc.).
-    // Attempt a text-only send so the customer still receives the charge message.
+
+  if (dlResult.ok && dlResult.base64) {
+    // ── ETAPA 3: Send with PDF attachment ────────────────────────────────────
+    try {
+      sendResult = await sendZapiDocument(zapiConfig, phone, message, pdfFileName, dlResult.base64);
+      await recordZapiSuccess(supabaseAdmin, record.company_id);
+      console.log(JSON.stringify({
+        event: 'attachment_sent', company_id: record.company_id, record_id: record.id,
+        file_id: file.id, file_name: pdfFileName, size_bytes: dlResult.sizeBytes, tipo, phone,
+      }));
+    } catch (sendErr) {
+      attachmentError = sendErr instanceof Error ? sendErr.message : String(sendErr);
+      await recordZapiFailure(supabaseAdmin, record.company_id, attachmentError);
+      console.log(JSON.stringify({
+        event: 'attachment_send_failed', company_id: record.company_id, record_id: record.id,
+        file_id: file.id, file_name: pdfFileName, tipo, phone, error: attachmentError,
+      }));
+
+      // 429 Rate limit — stop immediately, do not fall back to text (that would also hit the limit)
+      if (attachmentError.includes('ZAPI_RATE_LIMITED:') || attachmentError.includes('429')) {
+        await tryInsertLog(supabaseAdmin, {
+          financeiro_id: record.id, company_id: record.company_id,
+          cliente_nome: clienteEfetivo || record.nome, cliente_numero: record.cliente_numero,
+          telefone: phone, documento: record.documento,
+          numero_boleto: numeroBoletoEfetivo || null, numero_nf: record.numero_nf,
+          valor: record.valor, vencimento: record.data_vencimento, tipo_cobranca: tipo,
+          dias_atraso: diasAtraso, arquivo_encontrado: true, drive_file_id: file.id,
+          status_envio: 'erro', erro: 'zapi_rate_limited', envio_hash: hash,
+          payload: {
+            company_id: record.company_id, record_id: record.id,
+            boleto_file_id: file.id, boleto_file_name: pdfFileName,
+            boleto_download_ok: true, boleto_exact_match: boletoExactMatch,
+            boleto_lookup_strategy: boletoLookupStrategy,
+            batch_id: batchCtx?.batchId ?? null,
+            batch_index: batchCtx?.batchIndex ?? null,
+            batch_total: batchCtx?.batchTotal ?? null,
+            ...buildRetryMeta('zapi_rate_limited', retryCount, attachmentError),
+          },
+        });
+        await finalizeAutomationDispatch(supabaseAdmin, {
+          companyId: record.company_id, dispatchType, operationHash: dispatch.operationHash,
+          status: 'failed', metadata: { reason: 'zapi_rate_limited' },
+        });
+        return { status: 'erro', reason: 'zapi_rate_limited' };
+      }
+
+      // Fallback: Z-API rejected the PDF (too large for WA, format issue, etc.)
+      // Try text-only so the customer still receives the charge message.
+      pdfAttached = false;
+      try {
+        const textResp = await withTimeout(
+          (signal) => fetch(
+            `https://api.z-api.io/instances/${zapiConfig.instanceId}/token/${zapiConfig.token}/send-text`,
+            {
+              method: 'POST', signal,
+              headers: { 'Client-Token': zapiConfig.clientToken, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ phone, message }),
+            },
+          ),
+          15000,
+          'Timeout ao enviar texto fallback após falha de anexo PDF.',
+        );
+        const textData = await textResp.json().catch(() => ({}));
+        if (!textResp.ok) {
+          throw new Error(`Z-API text fallback HTTP ${textResp.status}: ${JSON.stringify(textData)}`);
+        }
+        sendResult = { provider_id: String(textData?.zaapId || textData?.messageId || ''), raw: textData };
+        await recordZapiSuccess(supabaseAdmin, record.company_id);
+        console.log(JSON.stringify({
+          event: 'attachment_text_fallback_sent', company_id: record.company_id,
+          record_id: record.id, tipo, phone, original_pdf_error: attachmentError,
+        }));
+      } catch (textFallbackErr) {
+        const textErrMsg = textFallbackErr instanceof Error ? textFallbackErr.message : String(textFallbackErr);
+        await recordZapiFailure(supabaseAdmin, record.company_id, textErrMsg);
+        console.log(JSON.stringify({
+          event: 'attachment_text_fallback_failed', company_id: record.company_id,
+          record_id: record.id, tipo, phone, error: textErrMsg,
+        }));
+        await tryInsertLog(supabaseAdmin, {
+          financeiro_id: record.id, company_id: record.company_id,
+          cliente_nome: clienteEfetivo || record.nome, cliente_numero: record.cliente_numero,
+          telefone: phone, documento: record.documento,
+          numero_boleto: numeroBoletoEfetivo || null, numero_nf: record.numero_nf,
+          valor: record.valor, vencimento: record.data_vencimento, tipo_cobranca: tipo,
+          dias_atraso: diasAtraso, arquivo_encontrado: true, drive_file_id: file.id,
+          status_envio: 'erro', erro: 'zapi_text_sem_boleto_error', envio_hash: hash,
+          payload: {
+            company_id: record.company_id,
+            record_id: record.id,
+            boleto_file_id: file.id,
+            boleto_file_name: pdfFileName,
+            boleto_lookup_score: boletoLookupScore,
+            boleto_exact_match: boletoExactMatch,
+            boleto_lookup_strategy: boletoLookupStrategy,
+            attachment_error: attachmentError,
+            fallback_text_error: textErrMsg,
+            ...buildRetryMeta('zapi_text_sem_boleto_error', retryCount, textErrMsg),
+          },
+        });
+        await finalizeAutomationDispatch(supabaseAdmin, {
+          companyId: record.company_id, dispatchType, operationHash: dispatch.operationHash,
+          status: 'failed', metadata: { reason: 'zapi_text_sem_boleto_error', error: textErrMsg },
+        });
+        return { status: 'erro', reason: 'zapi_text_sem_boleto_error' };
+      }
+    }
+  } else {
+    // Download had a transient error — send text-only directly
     pdfAttached = false;
     try {
       const textResp = await withTimeout(
@@ -4808,34 +5678,51 @@ async function processChargeForRecord(
           },
         ),
         15000,
-        'Timeout ao enviar texto fallback apos falha de anexo PDF.',
+        'Timeout ao enviar texto (fallback por falha de download do PDF).',
       );
       const textData = await textResp.json().catch(() => ({}));
       if (!textResp.ok) {
-        throw new Error(`Z-API text fallback HTTP ${textResp.status}: ${JSON.stringify(textData)}`);
+        throw new Error(`Z-API text (dl-fallback) HTTP ${textResp.status}: ${JSON.stringify(textData)}`);
       }
-      sendResult = {
-        provider_id: String(textData?.zaapId || textData?.messageId || ''),
-        raw: textData,
-      };
+      sendResult = { provider_id: String(textData?.zaapId || textData?.messageId || ''), raw: textData };
       await recordZapiSuccess(supabaseAdmin, record.company_id);
       console.log(JSON.stringify({
-        event: 'attachment_text_fallback_sent', company_id: record.company_id,
-        financial_record_id: record.id, tipo, phone,
-        original_pdf_error: errMsg,
+        event: 'download_failed_text_fallback_sent', company_id: record.company_id,
+        record_id: record.id, tipo, phone, download_error: dlResult.error,
       }));
-    } catch (textFallbackErr) {
-      const textErrMsg = textFallbackErr instanceof Error ? textFallbackErr.message : String(textFallbackErr);
+    } catch (textErr) {
+      const textErrMsg = textErr instanceof Error ? textErr.message : String(textErr);
       await recordZapiFailure(supabaseAdmin, record.company_id, textErrMsg);
-      console.log(JSON.stringify({
-        event: 'attachment_text_fallback_failed', company_id: record.company_id,
-        financial_record_id: record.id, tipo, phone, error: textErrMsg,
-      }));
-      throw textFallbackErr;
+      await tryInsertLog(supabaseAdmin, {
+        financeiro_id: record.id, company_id: record.company_id,
+        cliente_nome: clienteEfetivo || record.nome, cliente_numero: record.cliente_numero,
+        telefone: phone, documento: record.documento,
+        numero_boleto: numeroBoletoEfetivo || null, numero_nf: record.numero_nf,
+        valor: record.valor, vencimento: record.data_vencimento, tipo_cobranca: tipo,
+        dias_atraso: diasAtraso, arquivo_encontrado: Boolean(file?.id), drive_file_id: file?.id || null,
+        status_envio: 'erro', erro: 'zapi_text_sem_boleto_error', envio_hash: hash,
+        payload: {
+          company_id: record.company_id,
+          record_id: record.id,
+          boleto_file_id: file?.id || null,
+          boleto_file_name: pdfFileName,
+          boleto_download_ok: dlResult.ok,
+          boleto_download_mime: dlResult.mimeType,
+          boleto_download_size: dlResult.sizeBytes,
+          fallback_text_error: textErrMsg,
+          ...buildRetryMeta('zapi_text_sem_boleto_error', retryCount, textErrMsg),
+        },
+      });
+      await finalizeAutomationDispatch(supabaseAdmin, {
+        companyId: record.company_id, dispatchType, operationHash: dispatch.operationHash,
+        status: 'failed', metadata: { reason: 'zapi_text_sem_boleto_error', error: textErrMsg },
+      });
+      return { status: 'erro', reason: 'zapi_text_sem_boleto_error' };
     }
   }
+
   const sentAt = new Date().toISOString();
-  const providerMessageId = sendResult.provider_id || null;
+  const providerMessageId = sendResult!.provider_id || null;
 
   await insertWhatsappCharge(supabaseAdmin, {
     empresa_id: record.company_id,
@@ -4902,7 +5789,28 @@ async function processChargeForRecord(
       stage: tipo,
       sent_at: sentAt,
       pdf_attachment: pdfAttached,
-      pdf_file_name: pdfAttached ? (file.name || null) : null,
+      pdf_file_name: pdfAttached ? pdfFileName : null,
+      // Drive lookup
+      boleto_lookup_score: boletoLookupScore,
+      boleto_exact_match: boletoExactMatch,
+      boleto_view_url: boletoViewUrl,
+      boleto_lookup_strategy: boletoLookupStrategy,
+      // Download result
+      boleto_file_id: file.id,
+      boleto_file_name: pdfFileName,
+      boleto_download_ok: dlResult.ok,
+      boleto_download_size: dlResult.sizeBytes,
+      boleto_download_mime: dlResult.mimeType,
+      // Attachment result
+      whatsapp_attachment_sent: pdfAttached,
+      whatsapp_attachment_error: attachmentError,
+      retry_count: retryCount,
+      max_retries: RETRY_MAX_ATTEMPTS,
+      previous_log_id: batchCtx?.previousLogId ?? null,
+      // Batch context
+      batch_id: batchCtx?.batchId ?? null,
+      batch_index: batchCtx?.batchIndex ?? null,
+      batch_total: batchCtx?.batchTotal ?? null,
     },
     envio_hash: hash,
   });
@@ -4927,14 +5835,23 @@ async function processChargeForRecord(
     charge_id: record.id,
     telefone: phone,
     boleto_file_id: file.id,
-    boleto_score: Number(record.boleto_match_confidence || 0) || null,
-    boleto_strategy: record.boleto_match_strategy || null,
+    boleto_score: boletoLookupScore || Number(record.boleto_match_confidence || 0) || null,
+    boleto_strategy: boletoLookupStrategy || record.boleto_match_strategy || null,
     template_used: tipo,
     zapi_status: 'sent',
     provider_message_id: providerMessageId,
     duration_ms: Date.now() - sendStartedAt,
-    request_payload: { tipo, dias_atraso: diasAtraso, document: record.documento, phone },
-    response_payload: { provider_message_id: providerMessageId, sent_at: sentAt },
+    request_payload: {
+      tipo, dias_atraso: diasAtraso, document: record.documento, phone,
+      file_id: file.id, file_name: pdfFileName,
+      boleto_exact_match: boletoExactMatch,
+    },
+    response_payload: {
+      provider_message_id: providerMessageId, sent_at: sentAt,
+      pdf_attached: pdfAttached,
+      download_size_bytes: dlResult.sizeBytes,
+      attachment_error: attachmentError,
+    },
   });
 
   console.log(JSON.stringify({
@@ -4949,7 +5866,16 @@ async function processChargeForRecord(
     sent_at: sentAt,
   }));
 
-  return { status: 'sucesso', tipo, fileId: file.id };
+  return {
+    status: 'sucesso',
+    tipo,
+    fileId: file.id,
+    fileName: pdfFileName,
+    providerMessageId,
+    pdfAttached,
+    boletoExactMatch,
+    boletoLookupStrategy,
+  };
 }
 
 function explainRecordEligibility(
@@ -5004,6 +5930,17 @@ function explainRecordEligibility(
     telefone_valido: validatePhone(phone),
     vencimento_parseado: diff !== null,
   };
+}
+
+async function computeEnvioHashForRecord(
+  record: FinancialRow,
+  config: BillingConfigRow | null,
+  todayIso: string,
+) {
+  const eligibility = explainRecordEligibility(record, config, todayIso);
+  if (!eligibility.etapa) return null;
+  const { numeroBoletoEfetivo } = logCobrancaMapping(record);
+  return sha256Hex(`${record.company_id}|${record.id}|${numeroBoletoEfetivo || ''}|${eligibility.etapa}|${todayIso}`);
 }
 
 async function getOverview(supabaseAdmin: AdminClient, companyId: string, todayIso: string) {
@@ -5885,6 +6822,1949 @@ async function checkSendPermissionData(
   };
 }
 
+// ── Batch processor ──────────────────────────────────────────────────────────
+// Processes records with concurrency control, jittered delay, rate-limit pause,
+// and timeout guard. Used by both simulate and real send paths.
+
+const BATCH_MAX_RECORDS = 50;
+const BATCH_CONCURRENCY_DEFAULT = 3;
+const BATCH_CONCURRENCY_MAX = 5;
+const BATCH_DELAY_MIN_MS = 800;
+const BATCH_DELAY_MAX_MS = 1500;
+const BATCH_TIMEOUT_GUARD_MS = 52_000; // stop 52s before EF gateway (60s limit)
+const BATCH_RATE_LIMIT_PAUSE_MS = 12_000; // pause after 429
+
+interface BatchItemResult {
+  record_id: string;
+  cliente_nome: string;
+  documento: string | null;
+  numero_boleto: string | null;
+  telefone: string | null;
+  previous_log_id: string | null;
+  retry_count: number;
+  retryable: boolean;
+  next_retry_at: string | null;
+  status: 'enviado' | 'simulado' | 'erro' | 'ignorado';
+  tipo: string | null;
+  boleto_file_name: string | null;
+  boleto_exact_match: boolean;
+  whatsapp_attachment_sent: boolean;
+  provider_message_id: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  duration_ms: number;
+}
+
+interface BatchSummary {
+  total: number;
+  enviados: number;
+  simulados: number;
+  com_anexo: number;
+  texto_only: number;
+  erros: number;
+  ignorados: number;
+  rate_limited: number;
+  timed_out: number;
+  duration_ms: number;
+  avg_ms_per_record: number;
+}
+
+type BatchStoppedReason = 'completed' | 'soft_time_budget' | 'rate_limited' | 'hard_timeout_guard';
+
+async function processBatch(
+  supabaseAdmin: AdminClient,
+  records: FinancialRow[],
+  config: BillingConfigRow | null,
+  token: string,
+  folderId: string,
+  todayIso: string,
+  options: {
+    simulate?: boolean;
+    force?: boolean;
+    companyName?: string;
+    concurrency?: number;
+    batchId?: string;
+    startedAt?: number;
+    hardDeadlineMs?: number;
+    softStopAtMs?: number;
+    estimatedMsPerItem?: number;
+    softStopMarginMs?: number;
+    retryContextByRecordId?: Record<string, { previous_log_id: string | null; retry_count: number; retryable: boolean; next_retry_at: string | null }>;
+  } = {},
+): Promise<{ batchId: string; items: BatchItemResult[]; summary: BatchSummary; stoppedReason: BatchStoppedReason }> {
+  const batchId = options.batchId ?? crypto.randomUUID();
+  const total = records.length;
+  const results: (BatchItemResult | null)[] = new Array(total).fill(null);
+  const batchStartAt = options.startedAt ?? Date.now();
+  const hardDeadline = options.hardDeadlineMs ?? (batchStartAt + BATCH_TIMEOUT_GUARD_MS);
+  const softStopAt = options.softStopAtMs ?? hardDeadline;
+  const estimatedMsPerItem = Math.max(500, Number(options.estimatedMsPerItem || 2500));
+  const softStopMarginMs = Math.max(250, Number(options.softStopMarginMs || 1500));
+  const concurrency = Math.min(
+    Math.max(1, options.concurrency ?? BATCH_CONCURRENCY_DEFAULT),
+    BATCH_CONCURRENCY_MAX,
+  );
+
+  let queueIdx = 0;
+  let rateLimitedUntil = 0; // epoch ms when rate-limit pause expires
+  let stoppedReason: BatchStoppedReason = 'completed';
+
+  async function worker() {
+    while (true) {
+      if (stoppedReason === 'rate_limited') break;
+      const nowBeforePick = Date.now();
+      if (nowBeforePick >= hardDeadline) {
+        stoppedReason = 'hard_timeout_guard';
+        break;
+      }
+      const remainingHardMs = hardDeadline - nowBeforePick;
+      const remainingSoftMs = softStopAt - nowBeforePick;
+      if (remainingHardMs < estimatedMsPerItem + softStopMarginMs) {
+        stoppedReason = 'hard_timeout_guard';
+        break;
+      }
+      if (remainingSoftMs < estimatedMsPerItem + softStopMarginMs) {
+        stoppedReason = 'soft_time_budget';
+        break;
+      }
+
+      const idx = queueIdx++;
+      if (idx >= total) break;
+
+      const record = records[idx];
+      const retryContext = options.retryContextByRecordId?.[record.id] || null;
+      const batchCtx = {
+        batchId,
+        batchIndex: idx,
+        batchTotal: total,
+        retryCount: retryContext?.retry_count ?? 0,
+        previousLogId: retryContext?.previous_log_id ?? null,
+      };
+
+      // Timeout guard — mark remaining as skipped and stop
+      if (Date.now() >= hardDeadline) {
+        stoppedReason = 'hard_timeout_guard';
+        break;
+      }
+
+      // Rate-limit pause — wait until cooldown expires
+      const rateLimitWait = rateLimitedUntil - Date.now();
+      if (rateLimitWait > 0) {
+        await new Promise((r) => setTimeout(r, rateLimitWait));
+      }
+
+      const itemStart = Date.now();
+      let outcome: Awaited<ReturnType<typeof processChargeForRecord>>;
+      try {
+        outcome = await processChargeForRecord(
+          supabaseAdmin,
+          record,
+          config,
+          token,
+          folderId,
+          todayIso,
+          options.force ?? false,
+          options.simulate ?? false,
+          options.companyName ?? '',
+          batchCtx,
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await tryInsertLog(supabaseAdmin, {
+          financeiro_id: record.id,
+          company_id: record.company_id,
+          cliente_nome: getClienteEfetivo(record) || record.nome || '',
+          cliente_numero: record.cliente_numero || null,
+          telefone: record.telefone || null,
+          documento: record.documento || null,
+          numero_boleto: getNumeroBoletoEfetivo(record) || null,
+          numero_nf: record.numero_nf || null,
+          valor: record.valor,
+          vencimento: record.data_vencimento,
+          tipo_cobranca: 'atraso',
+          dias_atraso: 0,
+          arquivo_encontrado: Boolean(record.drive_file_id),
+          drive_file_id: record.drive_file_id || null,
+          status_envio: 'erro',
+          erro: 'unexpected_exception',
+          envio_hash: null,
+          payload: {
+            company_id: record.company_id,
+            record_id: record.id,
+            batch_id: batchId,
+            batch_index: idx,
+            batch_total: total,
+            previous_log_id: retryContext?.previous_log_id ?? null,
+            ...buildRetryMeta('unexpected_exception', retryContext?.retry_count ?? 0, msg),
+          },
+        });
+        results[idx] = {
+          record_id: record.id,
+          cliente_nome: getClienteEfetivo(record) || record.nome || '',
+          documento: record.documento || null,
+          numero_boleto: getNumeroBoletoEfetivo(record) || null,
+          telefone: record.telefone || null,
+          previous_log_id: retryContext?.previous_log_id ?? null,
+          retry_count: retryContext?.retry_count ?? 0,
+          retryable: retryContext?.retryable ?? false,
+          next_retry_at: retryContext?.next_retry_at ?? null,
+          status: 'erro',
+          tipo: null,
+          boleto_file_name: null,
+          boleto_exact_match: false,
+          whatsapp_attachment_sent: false,
+          provider_message_id: null,
+          error_code: 'unexpected_exception',
+          error_message: msg,
+          duration_ms: Date.now() - itemStart,
+        };
+        continue;
+      }
+
+      // Detect rate limit → pause remaining workers
+      if (outcome.reason === 'zapi_rate_limited') {
+        rateLimitedUntil = Date.now() + BATCH_RATE_LIMIT_PAUSE_MS;
+        stoppedReason = 'rate_limited';
+        console.log(JSON.stringify({
+          event: 'batch_rate_limit_pause',
+          batch_id: batchId,
+          batch_index: idx,
+          pause_ms: BATCH_RATE_LIMIT_PAUSE_MS,
+        }));
+      }
+
+      const statusMap: Record<string, BatchItemResult['status']> = {
+        sucesso: outcome.simulated ? 'simulado' : 'enviado',
+        erro: 'erro',
+        ignorado: 'ignorado',
+      };
+
+      results[idx] = {
+        record_id: record.id,
+        cliente_nome: getClienteEfetivo(record) || record.nome || '',
+        documento: record.documento || null,
+        numero_boleto: getNumeroBoletoEfetivo(record) || null,
+        telefone: record.telefone || null,
+        previous_log_id: retryContext?.previous_log_id ?? null,
+        retry_count: retryContext?.retry_count ?? 0,
+        retryable: retryContext?.retryable ?? false,
+        next_retry_at: retryContext?.next_retry_at ?? null,
+        status: statusMap[outcome.status] ?? 'erro',
+        tipo: outcome.tipo || null,
+        boleto_file_name: (outcome as Record<string, unknown>).fileName as string ?? null,
+        boleto_exact_match: Boolean((outcome as Record<string, unknown>).boletoExactMatch ?? (outcome as Record<string, unknown>).boleto_exact_match),
+        whatsapp_attachment_sent: Boolean(
+          (outcome as Record<string, unknown>).pdfAttached
+          ?? (outcome as Record<string, unknown>).attachment_ready
+          ?? false,
+        ),
+        provider_message_id: (outcome as Record<string, unknown>).providerMessageId as string ?? null,
+        error_code: outcome.reason || null,
+        error_message: outcome.reason || null,
+        duration_ms: Date.now() - itemStart,
+      };
+
+      // Add inter-send delay (skip for purely ignored records to not slow down the queue)
+      if (outcome.status !== 'ignorado') {
+        const jitter = BATCH_DELAY_MIN_MS + Math.floor(Math.random() * (BATCH_DELAY_MAX_MS - BATCH_DELAY_MIN_MS));
+        await new Promise((r) => setTimeout(r, jitter));
+      }
+    }
+  }
+
+  // Launch N concurrent workers — each pulls from the shared queueIdx
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+  const durationMs = Date.now() - batchStartAt;
+  const safeItems = results.filter(Boolean) as BatchItemResult[];
+  const startedCount = safeItems.length;
+  const enviados  = safeItems.filter((i) => i.status === 'enviado').length;
+  const simulados = safeItems.filter((i) => i.status === 'simulado').length;
+  const erros     = safeItems.filter((i) => i.status === 'erro').length;
+  const ignorados = safeItems.filter((i) => i.status === 'ignorado').length;
+  const comAnexo  = safeItems.filter((i) => i.whatsapp_attachment_sent).length;
+  const textOnly  = (enviados + simulados) - comAnexo;
+  const rateLimitedCount = safeItems.filter((i) => i.error_code === 'zapi_rate_limited').length;
+  const timedOut  = safeItems.filter((i) => i.error_code === 'batch_timeout').length;
+
+  const summary: BatchSummary = {
+    total,
+    enviados,
+    simulados,
+    com_anexo: comAnexo,
+    texto_only: Math.max(0, textOnly),
+    erros,
+    ignorados,
+    rate_limited: rateLimitedCount,
+    timed_out: timedOut,
+    duration_ms: durationMs,
+    avg_ms_per_record: startedCount > 0 ? Math.round(durationMs / startedCount) : 0,
+  };
+
+  console.log(JSON.stringify({
+    event: 'batch_complete',
+    batch_id: batchId,
+    stopped_reason: stoppedReason,
+    started_count: startedCount,
+    ...summary,
+  }));
+  return { batchId, items: safeItems, summary, stoppedReason };
+}
+
+interface RetryCandidate {
+  previous_log_id: string;
+  record_id: string;
+  envio_hash: string | null;
+  retry_count: number;
+  max_retries: number;
+  retryable: boolean;
+  next_retry_at: string | null;
+  last_error_code: string | null;
+  last_error_message: string | null;
+  tipo_cobranca: string | null;
+}
+
+function extractRetryCandidate(row: Record<string, unknown>): RetryCandidate {
+  const payload = readPayloadObject(row.payload);
+  const retryCount = Number(payload.retry_count ?? 0);
+  const maxRetries = Number(payload.max_retries ?? RETRY_MAX_ATTEMPTS) || RETRY_MAX_ATTEMPTS;
+  const lastErrorMessage = String(payload.last_error_message || row.erro || '').trim() || null;
+  const classified = classifyError(String(payload.last_error_code || row.erro || ''), lastErrorMessage);
+
+  return {
+    previous_log_id: String(row.id || ''),
+    record_id: String(row.financeiro_id || ''),
+    envio_hash: String(row.envio_hash || '').trim() || null,
+    retry_count: retryCount,
+    max_retries: maxRetries,
+    retryable: typeof payload.retryable === 'boolean' ? Boolean(payload.retryable) : classified.retryable,
+    next_retry_at: String(payload.next_retry_at || '').trim() || null,
+    last_error_code: String(payload.last_error_code || classified.errorCode || '').trim() || null,
+    last_error_message: lastErrorMessage,
+    tipo_cobranca: String(row.tipo_cobranca || '').trim() || null,
+  };
+}
+
+async function reprocessFailuresForCompany(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  config: BillingConfigRow | null,
+  token: string,
+  folderId: string,
+  todayIso: string,
+  companyName: string,
+) {
+  const nowIso = new Date().toISOString();
+  const { data: failedLogs, error: failedLogsError } = await supabaseAdmin
+    .from('logs_cobranca')
+    .select('id, financeiro_id, company_id, tipo_cobranca, status_envio, erro, payload, envio_hash, created_at')
+    .eq('company_id', companyId)
+    .eq('status_envio', 'erro')
+    .order('created_at', { ascending: false })
+    .limit(BATCH_MAX_RECORDS * 4);
+
+  if (failedLogsError) throw new Error(failedLogsError.message);
+
+  const latestByKey = new Map<string, RetryCandidate>();
+  for (const row of (failedLogs || []) as Array<Record<string, unknown>>) {
+    const candidate = extractRetryCandidate(row);
+    if (!candidate.record_id) continue;
+    const key = candidate.envio_hash || `${candidate.record_id}:${candidate.tipo_cobranca || 'atraso'}`;
+    if (!latestByKey.has(key)) {
+      latestByKey.set(key, candidate);
+    }
+  }
+
+  const rawCandidates = Array.from(latestByKey.values());
+  const result = {
+    batch_id: crypto.randomUUID(),
+    total_candidates: rawCandidates.length,
+    reprocessed: 0,
+    skipped_success_exists: 0,
+    skipped_not_due: 0,
+    skipped_max_retries: 0,
+    success: 0,
+    failed: 0,
+    items: [] as Array<Record<string, unknown>>,
+  };
+
+  if (!rawCandidates.length) {
+    return result;
+  }
+
+  const dueCandidates: RetryCandidate[] = [];
+  const retryContextByRecordId: Record<string, { previous_log_id: string | null; retry_count: number; retryable: boolean; next_retry_at: string | null }> = {};
+
+  for (const candidate of rawCandidates) {
+    if (!candidate.retryable) continue;
+    if (candidate.retry_count >= candidate.max_retries) {
+      result.skipped_max_retries += 1;
+      result.items.push({
+        previous_log_id: candidate.previous_log_id,
+        record_id: candidate.record_id,
+        retry_count: candidate.retry_count,
+        retryable: candidate.retryable,
+        next_retry_at: candidate.next_retry_at,
+        status: 'skipped_max_retries',
+        last_error_code: candidate.last_error_code,
+      });
+      continue;
+    }
+    if (candidate.next_retry_at && candidate.next_retry_at > nowIso) {
+      result.skipped_not_due += 1;
+      result.items.push({
+        previous_log_id: candidate.previous_log_id,
+        record_id: candidate.record_id,
+        retry_count: candidate.retry_count,
+        retryable: candidate.retryable,
+        next_retry_at: candidate.next_retry_at,
+        status: 'skipped_not_due',
+        last_error_code: candidate.last_error_code,
+      });
+      continue;
+    }
+    dueCandidates.push(candidate);
+    retryContextByRecordId[candidate.record_id] = {
+      previous_log_id: candidate.previous_log_id,
+      retry_count: candidate.retry_count + 1,
+      retryable: candidate.retryable,
+      next_retry_at: candidate.next_retry_at,
+    };
+  }
+
+  if (!dueCandidates.length) {
+    return result;
+  }
+
+  const dueHashes = dueCandidates.map((item) => item.envio_hash).filter(Boolean) as string[];
+  const successHashes = new Set<string>();
+  if (dueHashes.length) {
+    const { data: successLogs, error: successLogsError } = await supabaseAdmin
+      .from('logs_cobranca')
+      .select('id, envio_hash, status_envio')
+      .eq('company_id', companyId)
+      .in('envio_hash', dueHashes)
+      .in('status_envio', Array.from(SUCCESS_LOG_STATUSES));
+
+    if (successLogsError) throw new Error(successLogsError.message);
+    for (const row of successLogs || []) {
+      if (row?.envio_hash && isSuccessfulLogStatus(row.status_envio)) {
+        successHashes.add(String(row.envio_hash));
+      }
+    }
+  }
+
+  const finalCandidates: RetryCandidate[] = [];
+  for (const candidate of dueCandidates) {
+    if (candidate.envio_hash && successHashes.has(candidate.envio_hash)) {
+      result.skipped_success_exists += 1;
+      result.items.push({
+        previous_log_id: candidate.previous_log_id,
+        record_id: candidate.record_id,
+        retry_count: candidate.retry_count,
+        retryable: candidate.retryable,
+        next_retry_at: candidate.next_retry_at,
+        status: 'ignored_success_exists',
+        last_error_code: candidate.last_error_code,
+      });
+      await tryInsertLog(supabaseAdmin, {
+        financeiro_id: candidate.record_id,
+        company_id: companyId,
+        tipo_cobranca: candidate.tipo_cobranca || 'atraso',
+        status_envio: 'ignorado',
+        erro: 'ignorado_success_exists',
+        envio_hash: candidate.envio_hash,
+        payload: {
+          previous_log_id: candidate.previous_log_id,
+          duplicate_guard: 'success_exists_for_envio_hash',
+          retry_count: candidate.retry_count,
+          next_retry_at: candidate.next_retry_at,
+          retryable: false,
+          last_error_code: candidate.last_error_code,
+          last_error_message: candidate.last_error_message,
+        },
+      });
+      delete retryContextByRecordId[candidate.record_id];
+      continue;
+    }
+    finalCandidates.push(candidate);
+  }
+
+  if (!finalCandidates.length) {
+    return result;
+  }
+
+  const recordIds = Array.from(new Set(finalCandidates.map((item) => item.record_id)));
+  const { data: records, error: recordsError } = await supabaseAdmin
+    .from('registros_financeiros')
+    .select('id, company_id, user_id, representante_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, observacao, status, drive_file_id, preventiva_enviada, data_envio_preventiva, cobranca_vencimento_enviada, data_envio_vencimento, ultima_cobranca, tentativas_cobranca, created_at, updated_at')
+    .eq('company_id', companyId)
+    .in('id', recordIds);
+
+  if (recordsError) throw new Error(recordsError.message);
+
+  const batchRecords = (records || [])
+    .filter((row) => Boolean(retryContextByRecordId[row.id]))
+    .slice(0, BATCH_MAX_RECORDS) as FinancialRow[];
+
+  if (!batchRecords.length) {
+    return result;
+  }
+
+  const batchResult = await processBatch(
+    supabaseAdmin,
+    batchRecords,
+    config,
+    token,
+    folderId,
+    todayIso,
+    {
+      simulate: false,
+      force: true,
+      companyName,
+      batchId: result.batch_id,
+      startedAt: Date.now(),
+      retryContextByRecordId,
+    },
+  );
+
+  result.reprocessed = batchResult.items.length;
+  result.success = batchResult.summary.enviados;
+  result.failed = batchResult.summary.erros;
+  result.items.push(...batchResult.items.map((item) => ({
+    previous_log_id: item.previous_log_id,
+    record_id: item.record_id,
+    retry_count: item.retry_count,
+    retryable: item.retryable,
+    next_retry_at: item.next_retry_at,
+    status: item.status,
+    error_code: item.error_code,
+    error_message: item.error_message,
+    provider_message_id: item.provider_message_id,
+    boleto_file_name: item.boleto_file_name,
+  })));
+
+  return result;
+}
+
+const DISPATCH_JOB_BATCH_DEFAULT = 20;
+const DISPATCH_JOB_BATCH_LIMIT = 50;
+const DISPATCH_JOB_LOCK_TIMEOUT_MS = 5 * 60_000;
+const DISPATCH_JOB_HARD_LIMIT_MS = 52_000;
+const DISPATCH_JOB_SOFT_LIMIT_MS = 45_000;
+const DISPATCH_JOB_SOFT_MARGIN_MS = 2_500;
+
+// ── Scheduler constants ───────────────────────────────────────────────────────
+const SCHEDULER_WORKER_VERSION = 'etapa9-v1';
+const SCHEDULER_MAX_CONCURRENT_JOBS = 3;
+const SCHEDULER_STALE_JOB_TIMEOUT_MS = 2 * 60_000; // 2 minutes without heartbeat
+const SCHEDULER_LOG_RETENTION_DAYS = 7;
+
+// ── Multi-tenant quota constants (ETAPA 9) ────────────────────────────────────
+const TENANT_DEFAULT_MAX_ACTIVE_JOBS = 3;
+const TENANT_DEFAULT_MAX_BATCH_SIZE = 50;
+const TENANT_DEFAULT_MAX_DAILY_MESSAGES = 500;
+const TENANT_DEFAULT_MAX_CONCURRENT_BATCHES = 2;
+const TENANT_DEFAULT_MAX_RETRIES_PER_HOUR = 30;
+const CIRCUIT_BREAKER_MIN_SAMPLES = 5;
+const CIRCUIT_BREAKER_ERROR_RATE_THRESHOLD = 0.80; // 80%
+const CIRCUIT_BREAKER_MAX_CONSECUTIVE_RATE_LIMITS = 3;
+const CIRCUIT_BREAKER_MAX_CONSECUTIVE_FAILURES = 5;
+
+interface SchedulerProcessedJob {
+  job_id: string;
+  company_id: string;
+  stopped_reason: string;
+  items_processed: number;
+  status: string;
+  error?: string;
+}
+
+interface SchedulerTickResult {
+  jobs_found: number;
+  jobs_processed: number;
+  batches_run: number;
+  stale_recovered: number;
+  auto_completed: number;
+  total_success: number;
+  total_error: number;
+  total_ignored: number;
+  duration_ms: number;
+  processed_jobs: SchedulerProcessedJob[];
+}
+
+interface DispatchJobRow {
+  id: string;
+  company_id: string;
+  created_by: string | null;
+  status: string;
+  total_items: number;
+  processed_items: number;
+  success_count: number;
+  error_count: number;
+  ignored_count: number;
+  current_batch_id: string | null;
+  avg_ms_per_item: number | null;
+  last_batch_duration_ms: number | null;
+  recommended_batch_size: number | null;
+  heartbeat_at: string | null;
+  last_batch_at: string | null;
+  worker_version: string | null;
+  stopped_reason: string | null;
+  scheduler_runs: number;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface DispatchJobItemRow {
+  id: string;
+  job_id: string;
+  company_id: string;
+  record_id: string;
+  payload: Record<string, unknown> | null;
+  status: string;
+  attempt_count: number;
+  max_attempts: number;
+  next_attempt_at: string | null;
+  last_error_code: string | null;
+  last_error_message: string | null;
+  log_cobranca_id: string | null;
+  locked_at: string | null;
+  locked_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface TenantLimitsRow {
+  id: string;
+  company_id: string;
+  max_active_jobs: number;
+  max_batch_size: number;
+  max_daily_messages: number;
+  max_concurrent_batches: number;
+  max_retries_per_hour: number;
+  enabled: boolean;
+  pause_reason: string | null;
+  paused_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface TenantQuotaUsage {
+  active_jobs: number;
+  daily_messages: number;
+  concurrent_batches: number;
+  retries_last_hour: number;
+}
+
+// ── Scheduler tick ────────────────────────────────────────────────────────────
+
+async function runSchedulerTick(
+  admin: AdminClient,
+  googleToken: string,
+  todayIso: string,
+): Promise<SchedulerTickResult> {
+  const tickStart = Date.now();
+  const nowIso = new Date().toISOString();
+  const staleThreshold = new Date(Date.now() - SCHEDULER_STALE_JOB_TIMEOUT_MS).toISOString();
+
+  // ── 1. Recover stale running jobs ──────────────────────────────────────────
+  const { data: staleJobs } = await admin
+    .from('dispatch_jobs')
+    .select('id, company_id')
+    .eq('status', 'running')
+    .or(`heartbeat_at.is.null,heartbeat_at.lt.${staleThreshold}`)
+    .limit(10);
+
+  let staleRecovered = 0;
+  for (const staleJob of (staleJobs || []) as Array<{ id: string; company_id: string }>) {
+    await admin.from('dispatch_jobs').update({
+      status: 'paused',
+      stopped_reason: 'stale_worker',
+      updated_at: nowIso,
+    }).eq('id', staleJob.id);
+    // Unlock any stuck items
+    await admin.from('dispatch_job_items').update({
+      status: 'pending',
+      locked_at: null,
+      locked_by: null,
+      updated_at: nowIso,
+    }).eq('job_id', staleJob.id).eq('status', 'processing');
+    // Audit event (non-fatal)
+    try {
+      await admin.from('dispatch_audit_events').insert({
+        company_id: staleJob.company_id,
+        job_id: staleJob.id,
+        event_type: 'stale_worker',
+        payload: { recovered_at: nowIso },
+        created_at: nowIso,
+      });
+    } catch { /* non-fatal */ }
+    staleRecovered++;
+  }
+
+  // ── 2. Find eligible jobs (running > paused > pending) ────────────────────
+  const { data: allEligible } = await admin
+    .from('dispatch_jobs')
+    .select('id, company_id, status, recommended_batch_size, total_items, processed_items, scheduler_runs, heartbeat_at')
+    .in('status', ['running', 'paused', 'pending'])
+    .order('updated_at', { ascending: true })
+    .limit(SCHEDULER_MAX_CONCURRENT_JOBS * 6); // fetch more for round-robin selection
+
+  // Load all tenant limits to skip disabled companies
+  const eligibleRaw = (allEligible || []) as Array<{
+    id: string; company_id: string; status: string;
+    recommended_batch_size: number | null; total_items: number;
+    processed_items: number; scheduler_runs: number; heartbeat_at: string | null;
+  }>;
+
+  const uniqueCompanyIds = [...new Set(eligibleRaw.map((j) => j.company_id))];
+  let disabledCompanies = new Set<string>();
+  if (uniqueCompanyIds.length > 0) {
+    const { data: limits } = await admin
+      .from('dispatch_company_limits')
+      .select('company_id, enabled')
+      .in('company_id', uniqueCompanyIds);
+    for (const l of (limits || []) as Array<{ company_id: string; enabled: boolean }>) {
+      if (!l.enabled) disabledCompanies.add(l.company_id);
+    }
+  }
+
+  // Sort by priority: running=0, paused=1, pending=2
+  const priorityMap: Record<string, number> = { running: 0, paused: 1, pending: 2 };
+  const sorted = eligibleRaw
+    .filter((j) => !disabledCompanies.has(j.company_id))
+    .sort((a, b) => (priorityMap[a.status] ?? 3) - (priorityMap[b.status] ?? 3));
+
+  // Fair round-robin: max 1 job per company per tick, up to SCHEDULER_MAX_CONCURRENT_JOBS total
+  const seenCompanies = new Set<string>();
+  const prioritized: typeof sorted = [];
+  for (const job of sorted) {
+    if (prioritized.length >= SCHEDULER_MAX_CONCURRENT_JOBS) break;
+    if (seenCompanies.has(job.company_id)) continue;
+    seenCompanies.add(job.company_id);
+    prioritized.push(job);
+  }
+
+  // ── 3. Process each eligible job ──────────────────────────────────────────
+  let batchesRun = 0;
+  let autoCompleted = 0;
+  let totalSuccess = 0;
+  let totalError = 0;
+  let totalIgnored = 0;
+  const processedJobs: SchedulerProcessedJob[] = [];
+
+  for (const job of prioritized) {
+    // Update heartbeat before processing
+    await admin.from('dispatch_jobs').update({
+      heartbeat_at: nowIso,
+      worker_version: SCHEDULER_WORKER_VERSION,
+      last_batch_at: nowIso,
+      scheduler_runs: (Number(job.scheduler_runs) || 0) + 1,
+      updated_at: nowIso,
+    }).eq('id', job.id);
+
+    let jobError: string | undefined;
+    let stoppedReason = 'completed';
+    let itemsProcessed = 0;
+    let jobStatus = job.status;
+
+    try {
+      const companyName = await getCompanyName(admin, job.company_id);
+      const batchResult = await runDispatchJobBatchData(
+        admin,
+        job.company_id,
+        job.id,
+        googleToken,
+        todayIso,
+        companyName,
+        {},
+      );
+
+      batchesRun++;
+      stoppedReason = batchResult.stopped_reason || 'completed';
+      itemsProcessed = Number(batchResult.processed_items) || 0;
+
+      const summary = batchResult.summary as Record<string, number> | null;
+      totalSuccess += Number(summary?.enviados ?? summary?.sucesso ?? 0);
+      totalError += Number(summary?.erros ?? 0);
+      totalIgnored += Number(summary?.ignorados ?? 0);
+
+      const updatedJob = (batchResult.status as { job?: { status?: string } })?.job;
+      jobStatus = updatedJob?.status || 'unknown';
+
+      if (jobStatus === 'completed' || jobStatus === 'failed') {
+        autoCompleted++;
+      }
+    } catch (err) {
+      jobError = err instanceof Error ? err.message : String(err);
+      jobStatus = 'error';
+      stoppedReason = 'scheduler_error';
+      console.error('[scheduler] erro ao processar job', { job_id: job.id, error: jobError });
+    }
+
+    // Update heartbeat after processing
+    await admin.from('dispatch_jobs').update({
+      heartbeat_at: new Date().toISOString(),
+      stopped_reason: stoppedReason !== 'completed' ? stoppedReason : null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', job.id);
+
+    processedJobs.push({
+      job_id: job.id,
+      company_id: job.company_id,
+      stopped_reason: stoppedReason,
+      items_processed: itemsProcessed,
+      status: jobStatus,
+      ...(jobError ? { error: jobError } : {}),
+    });
+  }
+
+  const durationMs = Date.now() - tickStart;
+
+  // ── 4. Log scheduler tick ─────────────────────────────────────────────────
+  try {
+    await admin.from('dispatch_scheduler_logs').insert({
+      tick_at: nowIso,
+      scheduler_version: SCHEDULER_WORKER_VERSION,
+      jobs_found: (allEligible || []).length,
+      jobs_processed: prioritized.length,
+      batches_run: batchesRun,
+      stale_recovered: staleRecovered,
+      auto_completed: autoCompleted,
+      total_success: totalSuccess,
+      total_error: totalError,
+      total_ignored: totalIgnored,
+      duration_ms: durationMs,
+      created_at: nowIso,
+    });
+
+    // Housekeeping: remove logs older than retention window
+    const retentionCutoff = new Date(Date.now() - SCHEDULER_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    await admin.from('dispatch_scheduler_logs').delete().lt('tick_at', retentionCutoff);
+  } catch {
+    // Non-fatal — logging failure should not break the tick
+  }
+
+  return {
+    jobs_found: (allEligible || []).length,
+    jobs_processed: prioritized.length,
+    batches_run: batchesRun,
+    stale_recovered: staleRecovered,
+    auto_completed: autoCompleted,
+    total_success: totalSuccess,
+    total_error: totalError,
+    total_ignored: totalIgnored,
+    duration_ms: durationMs,
+    processed_jobs: processedJobs,
+  };
+}
+
+async function getSchedulerStatusData(admin: AdminClient) {
+  const [latestLogsRes, activeJobsRes, staleJobsRes] = await Promise.all([
+    admin
+      .from('dispatch_scheduler_logs')
+      .select('*')
+      .order('tick_at', { ascending: false })
+      .limit(10),
+    admin
+      .from('dispatch_jobs')
+      .select('id, company_id, status, heartbeat_at, scheduler_runs, total_items, processed_items')
+      .in('status', ['running', 'paused', 'pending'])
+      .order('updated_at', { ascending: false })
+      .limit(20),
+    admin
+      .from('dispatch_jobs')
+      .select('id, company_id, heartbeat_at, stopped_reason, updated_at')
+      .eq('status', 'running')
+      .lt('heartbeat_at', new Date(Date.now() - SCHEDULER_STALE_JOB_TIMEOUT_MS).toISOString())
+      .limit(10),
+  ]);
+
+  const latestLog = (latestLogsRes.data || [])[0] || null;
+  const lastTickAt = latestLog?.tick_at || null;
+  const workerOnline = lastTickAt
+    ? (Date.now() - new Date(lastTickAt).getTime()) < 90_000 // online if last tick < 90s ago
+    : false;
+
+  return {
+    worker_online: workerOnline,
+    scheduler_version: SCHEDULER_WORKER_VERSION,
+    last_tick_at: lastTickAt,
+    active_jobs: (activeJobsRes.data || []).length,
+    stale_jobs: (staleJobsRes.data || []).length,
+    latest_logs: latestLogsRes.data || [],
+    active_job_list: activeJobsRes.data || [],
+  };
+}
+
+// ── End scheduler ─────────────────────────────────────────────────────────────
+
+// ── ETAPA 9: Multi-tenant quota helpers ───────────────────────────────────────
+
+async function getCompanyLimits(
+  admin: AdminClient,
+  companyId: string,
+): Promise<TenantLimitsRow> {
+  const { data, error } = await admin
+    .from('dispatch_company_limits')
+    .select('*')
+    .eq('company_id', companyId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (data) return data as TenantLimitsRow;
+
+  // Auto-create with safe defaults
+  const nowIso = new Date().toISOString();
+  const { data: created, error: createError } = await admin
+    .from('dispatch_company_limits')
+    .insert({
+      company_id: companyId,
+      max_active_jobs: TENANT_DEFAULT_MAX_ACTIVE_JOBS,
+      max_batch_size: TENANT_DEFAULT_MAX_BATCH_SIZE,
+      max_daily_messages: TENANT_DEFAULT_MAX_DAILY_MESSAGES,
+      max_concurrent_batches: TENANT_DEFAULT_MAX_CONCURRENT_BATCHES,
+      max_retries_per_hour: TENANT_DEFAULT_MAX_RETRIES_PER_HOUR,
+      enabled: true,
+      pause_reason: null,
+      paused_at: null,
+      created_at: nowIso,
+      updated_at: nowIso,
+    })
+    .select('*')
+    .single();
+
+  if (createError) throw new Error(createError.message);
+  return created as TenantLimitsRow;
+}
+
+async function getTenantQuotaUsage(
+  admin: AdminClient,
+  companyId: string,
+  todayIso: string,
+): Promise<TenantQuotaUsage> {
+  const todayStart = `${todayIso}T00:00:00-03:00`;
+  const todayEnd = `${todayIso}T23:59:59-03:00`;
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+  const [activeJobsRes, dailyMsgsRes, batchesRes, retriesRes] = await Promise.all([
+    admin
+      .from('dispatch_jobs')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .in('status', ['running', 'paused', 'pending']),
+    admin
+      .from('dispatch_job_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .eq('status', 'success')
+      .gte('updated_at', todayStart)
+      .lte('updated_at', todayEnd),
+    admin
+      .from('dispatch_jobs')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .eq('status', 'running'),
+    admin
+      .from('dispatch_job_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .eq('status', 'error')
+      .gt('attempt_count', 1)
+      .gte('updated_at', oneHourAgo),
+  ]);
+
+  return {
+    active_jobs: activeJobsRes.count || 0,
+    daily_messages: dailyMsgsRes.count || 0,
+    concurrent_batches: batchesRes.count || 0,
+    retries_last_hour: retriesRes.count || 0,
+  };
+}
+
+async function logDispatchAuditEvent(
+  admin: AdminClient,
+  companyId: string | null,
+  jobId: string | null,
+  eventType: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await admin.from('dispatch_audit_events').insert({
+      company_id: companyId || null,
+      job_id: jobId || null,
+      event_type: eventType,
+      payload,
+      created_at: new Date().toISOString(),
+    });
+  } catch {
+    // Non-fatal: audit failures must never block operations
+  }
+}
+
+async function enforceCreateJobQuota(
+  admin: AdminClient,
+  companyId: string,
+  todayIso: string,
+): Promise<void> {
+  const limits = await getCompanyLimits(admin, companyId);
+
+  if (!limits.enabled) {
+    await logDispatchAuditEvent(admin, companyId, null, 'tenant_disabled', {
+      reason: limits.pause_reason || 'tenant disabled',
+    });
+    throw new Error('Dispatch desabilitado para esta empresa. Contate o suporte.');
+  }
+
+  const usage = await getTenantQuotaUsage(admin, companyId, todayIso);
+
+  if (usage.active_jobs >= limits.max_active_jobs) {
+    await logDispatchAuditEvent(admin, companyId, null, 'quota_exceeded', {
+      quota: 'max_active_jobs',
+      limit: limits.max_active_jobs,
+      current: usage.active_jobs,
+    });
+    throw new Error(
+      `Limite de jobs ativos atingido (${usage.active_jobs}/${limits.max_active_jobs}). Aguarde jobs existentes concluirem.`,
+    );
+  }
+
+  if (usage.daily_messages >= limits.max_daily_messages) {
+    await logDispatchAuditEvent(admin, companyId, null, 'quota_exceeded', {
+      quota: 'max_daily_messages',
+      limit: limits.max_daily_messages,
+      current: usage.daily_messages,
+    });
+    throw new Error(
+      `Limite diario de mensagens atingido (${usage.daily_messages}/${limits.max_daily_messages}). Aguarde o proximo dia.`,
+    );
+  }
+}
+
+async function enforceBatchQuota(
+  admin: AdminClient,
+  companyId: string,
+  jobId: string,
+  todayIso: string,
+): Promise<{ limits: TenantLimitsRow; usage: TenantQuotaUsage }> {
+  const limits = await getCompanyLimits(admin, companyId);
+
+  if (!limits.enabled) {
+    await logDispatchAuditEvent(admin, companyId, jobId, 'tenant_disabled', {
+      reason: limits.pause_reason || 'tenant disabled',
+      job_id: jobId,
+    });
+    await admin.from('dispatch_jobs').update({
+      status: 'paused',
+      stopped_reason: 'tenant_disabled',
+      updated_at: new Date().toISOString(),
+    }).eq('id', jobId).eq('company_id', companyId);
+    throw new Error('Dispatch desabilitado para esta empresa.');
+  }
+
+  const usage = await getTenantQuotaUsage(admin, companyId, todayIso);
+
+  if (usage.daily_messages >= limits.max_daily_messages) {
+    await logDispatchAuditEvent(admin, companyId, jobId, 'quota_exceeded', {
+      quota: 'max_daily_messages',
+      limit: limits.max_daily_messages,
+      current: usage.daily_messages,
+    });
+    await admin.from('dispatch_jobs').update({
+      status: 'paused',
+      stopped_reason: 'daily_quota_exceeded',
+      updated_at: new Date().toISOString(),
+    }).eq('id', jobId).eq('company_id', companyId);
+    throw new Error(
+      `Limite diario de mensagens atingido (${usage.daily_messages}/${limits.max_daily_messages}).`,
+    );
+  }
+
+  if (usage.retries_last_hour >= limits.max_retries_per_hour) {
+    await logDispatchAuditEvent(admin, companyId, jobId, 'rate_limit_pause', {
+      quota: 'max_retries_per_hour',
+      limit: limits.max_retries_per_hour,
+      current: usage.retries_last_hour,
+    });
+    await admin.from('dispatch_jobs').update({
+      status: 'paused',
+      stopped_reason: 'rate_limit_pause',
+      updated_at: new Date().toISOString(),
+    }).eq('id', jobId).eq('company_id', companyId);
+    throw new Error(
+      `Limite de retentativas por hora atingido (${usage.retries_last_hour}/${limits.max_retries_per_hour}).`,
+    );
+  }
+
+  return { limits, usage };
+}
+
+async function updateProviderHealth(
+  admin: AdminClient,
+  companyId: string,
+  success: boolean,
+  latencyMs: number,
+): Promise<{ state: string; consecutive_failures: number; is_rate_limit: boolean }> {
+  const nowIso = new Date().toISOString();
+  const isRateLimit = !success && latencyMs < 0; // convention: latencyMs = -1 signals rate limit
+
+  const { data: current } = await admin
+    .from('dispatch_provider_health')
+    .select('*')
+    .eq('company_id', companyId)
+    .maybeSingle();
+
+  const prev = current as Record<string, unknown> | null;
+  const prevConsecFailures = Number(prev?.consecutive_failures || 0);
+  const prevConsecRateLimits = Number(prev?.consecutive_rate_limits || 0);
+  const prevSuccess24h = Number(prev?.total_success_24h || 0);
+  const prevError24h = Number(prev?.total_error_24h || 0);
+  const prevAvg = Number(prev?.avg_response_ms || 0);
+
+  const consecutiveFailures = success ? 0 : prevConsecFailures + 1;
+  const consecutiveRateLimits = isRateLimit
+    ? prevConsecRateLimits + 1
+    : success
+      ? 0
+      : prevConsecRateLimits;
+  const total_success_24h = prevSuccess24h + (success ? 1 : 0);
+  const total_error_24h = prevError24h + (success ? 0 : 1);
+  const effectiveLatency = success && latencyMs > 0 ? latencyMs : null;
+  const newAvg = effectiveLatency
+    ? (prevAvg > 0 ? Math.round((prevAvg * 0.7) + (effectiveLatency * 0.3)) : effectiveLatency)
+    : prevAvg;
+
+  const total = total_success_24h + total_error_24h;
+  const errorRate = total > 0 ? total_error_24h / total : 0;
+
+  let state: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+  if (
+    consecutiveFailures >= CIRCUIT_BREAKER_MAX_CONSECUTIVE_FAILURES ||
+    (total >= CIRCUIT_BREAKER_MIN_SAMPLES && errorRate >= CIRCUIT_BREAKER_ERROR_RATE_THRESHOLD)
+  ) {
+    state = 'unhealthy';
+  } else if (
+    consecutiveFailures >= 2 ||
+    consecutiveRateLimits >= CIRCUIT_BREAKER_MAX_CONSECUTIVE_RATE_LIMITS ||
+    (total >= CIRCUIT_BREAKER_MIN_SAMPLES && errorRate >= 0.5)
+  ) {
+    state = 'degraded';
+  }
+
+  const prevState = String(prev?.state || 'healthy');
+  const upsertData: Record<string, unknown> = {
+    company_id: companyId,
+    last_success_at: success ? nowIso : (prev?.last_success_at || null),
+    last_failure_at: success ? (prev?.last_failure_at || null) : nowIso,
+    last_response_ms: effectiveLatency,
+    avg_response_ms: newAvg,
+    consecutive_failures: consecutiveFailures,
+    consecutive_rate_limits: consecutiveRateLimits,
+    total_success_24h,
+    total_error_24h,
+    state,
+    unhealthy_since: state === 'unhealthy' && prevState !== 'unhealthy'
+      ? nowIso
+      : (prev?.unhealthy_since || null),
+    updated_at: nowIso,
+  };
+
+  await admin
+    .from('dispatch_provider_health')
+    .upsert(upsertData, { onConflict: 'company_id' });
+
+  return { state, consecutive_failures: consecutiveFailures, is_rate_limit: isRateLimit };
+}
+
+// ── End ETAPA 9 helpers ───────────────────────────────────────────────────────
+
+function normalizeDispatchSelectionItems(body: Record<string, unknown>) {
+  const rawList = Array.isArray(body?.items)
+    ? body.items
+    : Array.isArray(body?.selected_records)
+      ? body.selected_records
+      : Array.isArray(body?.record_ids)
+        ? body.record_ids
+        : Array.isArray(body?.records)
+          ? body.records
+          : [];
+
+  return rawList
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        return { record_id: entry, payload: { record_id: entry } };
+      }
+      if (entry && typeof entry === 'object') {
+        const recordId = String(
+          (entry as Record<string, unknown>).record_id
+          || (entry as Record<string, unknown>).registro_id
+          || (entry as Record<string, unknown>).id
+          || '',
+        ).trim();
+        if (!recordId) return null;
+        return { record_id: recordId, payload: entry as Record<string, unknown> };
+      }
+      return null;
+    })
+    .filter(Boolean) as Array<{ record_id: string; payload: Record<string, unknown> }>;
+}
+
+function clampDispatchBatchSize(value: unknown, fallback = DISPATCH_JOB_BATCH_DEFAULT) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(DISPATCH_JOB_BATCH_LIMIT, Math.max(1, Math.floor(numeric)));
+}
+
+function computeAdaptiveBatchSize(
+  requestedBatchSize: number,
+  recommendedBatchSize: number,
+  avgMsPerItem: number | null,
+) {
+  const safeAverage = Math.max(500, Number(avgMsPerItem || 2500));
+  const budgetLimitedSize = Math.max(
+    1,
+    Math.floor((DISPATCH_JOB_SOFT_LIMIT_MS - DISPATCH_JOB_SOFT_MARGIN_MS) / safeAverage),
+  );
+  return Math.min(
+    DISPATCH_JOB_BATCH_LIMIT,
+    requestedBatchSize,
+    recommendedBatchSize,
+    budgetLimitedSize,
+  );
+}
+
+function computeNextRecommendedBatchSize(
+  currentRecommended: number,
+  batchDurationMs: number,
+  stoppedReason: BatchStoppedReason,
+) {
+  const current = clampDispatchBatchSize(currentRecommended, DISPATCH_JOB_BATCH_DEFAULT);
+  if (stoppedReason === 'hard_timeout_guard') {
+    return clampDispatchBatchSize(Math.floor(current * 0.5), 1);
+  }
+  if (batchDurationMs > 40_000 || stoppedReason === 'rate_limited') {
+    return clampDispatchBatchSize(Math.floor(current * 0.7), 1);
+  }
+  if (batchDurationMs < 25_000 && stoppedReason === 'completed') {
+    return clampDispatchBatchSize(current + 5, DISPATCH_JOB_BATCH_DEFAULT);
+  }
+  return current;
+}
+
+async function syncDispatchJobCounters(
+  supabaseAdmin: AdminClient,
+  jobId: string,
+  companyId: string,
+): Promise<DispatchJobRow> {
+  const { data: currentJob, error: currentJobError } = await supabaseAdmin
+    .from('dispatch_jobs')
+    .select('*')
+    .eq('id', jobId)
+    .eq('company_id', companyId)
+    .single();
+
+  if (currentJobError) throw new Error(currentJobError.message);
+
+  const { data: items, error: itemsError } = await supabaseAdmin
+    .from('dispatch_job_items')
+    .select('status, next_attempt_at, attempt_count, max_attempts')
+    .eq('job_id', jobId)
+    .eq('company_id', companyId);
+
+  if (itemsError) throw new Error(itemsError.message);
+
+  const rows = (items || []) as Array<Record<string, unknown>>;
+  const successCount = rows.filter((row) => String(row.status || '') === 'success').length;
+  const errorCount = rows.filter((row) => String(row.status || '') === 'error').length;
+  const ignoredCount = rows.filter((row) => String(row.status || '') === 'ignored').length;
+  const processingCount = rows.filter((row) => String(row.status || '') === 'processing').length;
+  const pendingCount = rows.filter((row) => String(row.status || '') === 'pending').length;
+  const processedItems = successCount + errorCount + ignoredCount;
+  const totalItems = rows.length;
+  const nowIso = new Date().toISOString();
+
+  let nextStatus = 'running';
+  let finishedAt: string | null = null;
+
+  if (String(currentJob.status || '') === 'cancelled') {
+    nextStatus = 'cancelled';
+    finishedAt = currentJob.finished_at || nowIso;
+  } else if (pendingCount + processingCount > 0) {
+    if (String(currentJob.status || '') === 'paused' && processingCount === 0) {
+      nextStatus = 'paused';
+    } else {
+      nextStatus = processingCount > 0 || processedItems > 0 ? 'running' : 'pending';
+    }
+  } else if (errorCount > 0) {
+    const retryPending = rows.some((row) => {
+      if (String(row.status || '') !== 'error') return false;
+      const attempts = Number(row.attempt_count || 0);
+      const maxAttempts = Number(row.max_attempts || RETRY_MAX_ATTEMPTS);
+      const nextAttemptAt = String(row.next_attempt_at || '').trim();
+      return attempts < maxAttempts && Boolean(nextAttemptAt) && nextAttemptAt > nowIso;
+    });
+    nextStatus = retryPending ? 'paused' : 'failed';
+    if (!retryPending) finishedAt = nowIso;
+  } else {
+    nextStatus = 'completed';
+    finishedAt = nowIso;
+  }
+
+  const { data: updatedJob, error: updateError } = await supabaseAdmin
+    .from('dispatch_jobs')
+    .update({
+      status: nextStatus,
+      total_items: totalItems,
+      processed_items: processedItems,
+      success_count: successCount,
+      error_count: errorCount,
+      ignored_count: ignoredCount,
+      finished_at: finishedAt,
+      updated_at: nowIso,
+    })
+    .eq('id', jobId)
+    .eq('company_id', companyId)
+    .select('*')
+    .single();
+
+  if (updateError) throw new Error(updateError.message);
+  return updatedJob as DispatchJobRow;
+}
+
+async function getDispatchJobStatusData(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  jobId: string,
+) {
+  const { data: job, error: jobError } = await supabaseAdmin
+    .from('dispatch_jobs')
+    .select('*')
+    .eq('id', jobId)
+    .eq('company_id', companyId)
+    .maybeSingle();
+
+  if (jobError) throw new Error(jobError.message);
+  if (!job) throw new Error('Dispatch job nao encontrado.');
+
+  const syncedJob = await syncDispatchJobCounters(supabaseAdmin, jobId, companyId);
+
+  const [latestErrorsRes, latestSuccessRes, pendingItemsRes] = await Promise.all([
+    supabaseAdmin
+      .from('dispatch_job_items')
+      .select('id, record_id, status, attempt_count, max_attempts, next_attempt_at, last_error_code, last_error_message, log_cobranca_id, updated_at')
+      .eq('job_id', jobId)
+      .eq('company_id', companyId)
+      .eq('status', 'error')
+      .order('updated_at', { ascending: false })
+      .limit(10),
+    supabaseAdmin
+      .from('dispatch_job_items')
+      .select('id, record_id, status, attempt_count, log_cobranca_id, updated_at')
+      .eq('job_id', jobId)
+      .eq('company_id', companyId)
+      .eq('status', 'success')
+      .order('updated_at', { ascending: false })
+      .limit(10),
+    supabaseAdmin
+      .from('dispatch_job_items')
+      .select('id, record_id, status, attempt_count, max_attempts, next_attempt_at, locked_at, locked_by, updated_at')
+      .eq('job_id', jobId)
+      .eq('company_id', companyId)
+      .in('status', ['pending', 'processing'])
+      .order('created_at', { ascending: true })
+      .limit(20),
+  ]);
+
+  if (latestErrorsRes.error) throw new Error(latestErrorsRes.error.message);
+  if (latestSuccessRes.error) throw new Error(latestSuccessRes.error.message);
+  if (pendingItemsRes.error) throw new Error(pendingItemsRes.error.message);
+
+  const progress = syncedJob.total_items > 0
+    ? Math.min(100, Math.round((syncedJob.processed_items / syncedJob.total_items) * 100))
+    : 0;
+
+  return {
+    job: syncedJob,
+    progress,
+    latest_errors: latestErrorsRes.data || [],
+    latest_successes: latestSuccessRes.data || [],
+    pending_items: pendingItemsRes.data || [],
+  };
+}
+
+async function createDispatchJobData(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  createdBy: string | null,
+  body: Record<string, unknown>,
+) {
+  // ETAPA 9: Enforce tenant quota before creating a job
+  const todayIso = todayInSaoPaulo();
+  await enforceCreateJobQuota(supabaseAdmin, companyId, todayIso);
+
+  const simulate = body?.simulate === true;
+  const normalizedItems = normalizeDispatchSelectionItems(body);
+  const uniqueItems = Array.from(new Map(normalizedItems.map((item) => [item.record_id, item])).values());
+  if (!uniqueItems.length) {
+    throw new Error('Nenhum registro selecionado para criar o job.');
+  }
+
+  const recordIds = uniqueItems.map((item) => item.record_id);
+  const { data: existingRecords, error: recordsError } = await supabaseAdmin
+    .from('registros_financeiros')
+    .select('id')
+    .eq('company_id', companyId)
+    .in('id', recordIds);
+
+  if (recordsError) throw new Error(recordsError.message);
+
+  const validIds = new Set((existingRecords || []).map((row) => String(row.id)));
+  const itemsToCreate = uniqueItems.filter((item) => validIds.has(item.record_id));
+  if (!itemsToCreate.length) {
+    throw new Error('Nenhum registro valido da empresa foi encontrado para criar o job.');
+  }
+
+  const nowIso = new Date().toISOString();
+  const { data: job, error: jobError } = await supabaseAdmin
+    .from('dispatch_jobs')
+    .insert({
+      company_id: companyId,
+      created_by: createdBy,
+      status: 'pending',
+      total_items: itemsToCreate.length,
+      processed_items: 0,
+      success_count: 0,
+      error_count: 0,
+      ignored_count: 0,
+      current_batch_id: null,
+      avg_ms_per_item: null,
+      last_batch_duration_ms: null,
+      recommended_batch_size: DISPATCH_JOB_BATCH_DEFAULT,
+      started_at: null,
+      finished_at: null,
+      created_at: nowIso,
+      updated_at: nowIso,
+    })
+    .select('*')
+    .single();
+
+  if (jobError) throw new Error(jobError.message);
+
+  const { error: itemsError } = await supabaseAdmin
+    .from('dispatch_job_items')
+    .insert(itemsToCreate.map((item) => ({
+      job_id: job.id,
+      company_id: companyId,
+      record_id: item.record_id,
+      payload: {
+        ...(item.payload || { record_id: item.record_id }),
+        simulate,
+      },
+      status: 'pending',
+      attempt_count: 0,
+      max_attempts: RETRY_MAX_ATTEMPTS,
+      next_attempt_at: null,
+      last_error_code: null,
+      last_error_message: null,
+      log_cobranca_id: null,
+      locked_at: null,
+      locked_by: null,
+      created_at: nowIso,
+      updated_at: nowIso,
+    })));
+
+  if (itemsError) throw new Error(itemsError.message);
+
+  return {
+    job,
+    created_items: itemsToCreate.length,
+    ignored_invalid_records: uniqueItems.length - itemsToCreate.length,
+  };
+}
+
+async function cancelDispatchJobData(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  jobId: string,
+) {
+  const nowIso = new Date().toISOString();
+  const { data: job, error: jobError } = await supabaseAdmin
+    .from('dispatch_jobs')
+    .update({
+      status: 'cancelled',
+      finished_at: nowIso,
+      updated_at: nowIso,
+    })
+    .eq('id', jobId)
+    .eq('company_id', companyId)
+    .neq('status', 'completed')
+    .select('*')
+    .maybeSingle();
+
+  if (jobError) throw new Error(jobError.message);
+  if (!job) throw new Error('Dispatch job nao encontrado ou ja concluido.');
+
+  await supabaseAdmin
+    .from('dispatch_job_items')
+    .update({
+      locked_at: null,
+      locked_by: null,
+      updated_at: nowIso,
+      status: 'ignored',
+      last_error_code: 'job_cancelled',
+      last_error_message: 'Job cancelado manualmente antes do processamento.',
+    })
+    .eq('job_id', jobId)
+    .eq('company_id', companyId)
+    .in('status', ['pending', 'processing']);
+
+  return getDispatchJobStatusData(supabaseAdmin, companyId, jobId);
+}
+
+async function runDispatchJobBatchData(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  jobId: string,
+  googleToken: string,
+  todayIso: string,
+  companyName: string,
+  body: Record<string, unknown> = {},
+) {
+  const { data: rawJob, error: jobError } = await supabaseAdmin
+    .from('dispatch_jobs')
+    .select('*')
+    .eq('id', jobId)
+    .eq('company_id', companyId)
+    .maybeSingle();
+
+  if (jobError) throw new Error(jobError.message);
+  if (!rawJob) throw new Error('Dispatch job nao encontrado.');
+  if (['cancelled', 'completed'].includes(String(rawJob.status || ''))) {
+    return {
+      batch_id: rawJob.current_batch_id || null,
+      requested_batch_size: clampDispatchBatchSize(body.requested_batch_size, DISPATCH_JOB_BATCH_DEFAULT),
+      effective_batch_size: 0,
+      recommended_next_batch_size: clampDispatchBatchSize(rawJob.recommended_batch_size, DISPATCH_JOB_BATCH_DEFAULT),
+      stopped_reason: String(rawJob.status || '') === 'cancelled' ? 'cancelled' : 'completed',
+      picked_items: 0,
+      processed_items: 0,
+      status: await getDispatchJobStatusData(supabaseAdmin, companyId, jobId),
+    };
+  }
+
+  // ETAPA 9: Enforce batch quota (daily messages, rate limit, tenant enabled)
+  await enforceBatchQuota(supabaseAdmin, companyId, jobId, todayIso);
+
+  const requestedBatchSize = clampDispatchBatchSize(body.requested_batch_size, DISPATCH_JOB_BATCH_DEFAULT);
+  const currentRecommendedBatchSize = clampDispatchBatchSize(rawJob.recommended_batch_size, DISPATCH_JOB_BATCH_DEFAULT);
+  const currentAvgMsPerItem = Number(rawJob.avg_ms_per_item || 0) > 0 ? Number(rawJob.avg_ms_per_item) : null;
+  const effectiveBatchSize = computeAdaptiveBatchSize(
+    requestedBatchSize,
+    currentRecommendedBatchSize,
+    currentAvgMsPerItem,
+  );
+
+  const config = await getBillingConfigForCompany(supabaseAdmin, companyId);
+  const driveConfig = await getSheetsDriveConfig(supabaseAdmin, companyId);
+  const folderId = requireDriveFolderId(driveConfig?.drive_root_folder_id);
+  const workerId = crypto.randomUUID();
+  const batchId = crypto.randomUUID();
+  const nowIso = new Date().toISOString();
+  const staleIso = new Date(Date.now() - DISPATCH_JOB_LOCK_TIMEOUT_MS).toISOString();
+
+  await supabaseAdmin
+    .from('dispatch_job_items')
+    .update({
+      status: 'pending',
+      locked_at: null,
+      locked_by: null,
+      updated_at: nowIso,
+    })
+    .eq('job_id', jobId)
+    .eq('company_id', companyId)
+    .eq('status', 'processing')
+    .lt('locked_at', staleIso);
+
+  await supabaseAdmin
+    .from('dispatch_jobs')
+    .update({
+      status: 'running',
+      current_batch_id: batchId,
+      started_at: rawJob.started_at || nowIso,
+      finished_at: null,
+      updated_at: nowIso,
+    })
+    .eq('id', jobId)
+    .eq('company_id', companyId);
+
+  const { data: candidates, error: candidatesError } = await supabaseAdmin
+    .from('dispatch_job_items')
+    .select('*')
+    .eq('job_id', jobId)
+    .eq('company_id', companyId)
+    .in('status', ['pending', 'error'])
+    .or(`next_attempt_at.is.null,next_attempt_at.lte.${nowIso}`)
+    .order('created_at', { ascending: true })
+    .limit(Math.max(effectiveBatchSize * 3, effectiveBatchSize));
+
+  if (candidatesError) throw new Error(candidatesError.message);
+
+  const lockedItems: DispatchJobItemRow[] = [];
+  for (const row of (candidates || []) as DispatchJobItemRow[]) {
+    if (lockedItems.length >= effectiveBatchSize) break;
+    if (row.attempt_count >= row.max_attempts) continue;
+    if (row.status === 'error') {
+      const retryable = isRetryableLogCode(row.last_error_code);
+      const nextAttemptAt = String(row.next_attempt_at || '').trim();
+      if (!retryable) continue;
+      if (!nextAttemptAt || nextAttemptAt > nowIso) continue;
+    }
+
+    const { data: locked, error: lockError } = await supabaseAdmin
+      .from('dispatch_job_items')
+      .update({
+        status: 'processing',
+        attempt_count: Number(row.attempt_count || 0) + 1,
+        locked_at: nowIso,
+        locked_by: workerId,
+        updated_at: nowIso,
+      })
+      .eq('id', row.id)
+      .eq('job_id', jobId)
+      .eq('company_id', companyId)
+      .in('status', ['pending', 'error'])
+      .or(`locked_at.is.null,locked_at.lt.${staleIso}`)
+      .select('*')
+      .maybeSingle();
+
+    if (lockError) throw new Error(lockError.message);
+    if (locked) lockedItems.push(locked as DispatchJobItemRow);
+  }
+
+  if (!lockedItems.length) {
+    const statusData = await getDispatchJobStatusData(supabaseAdmin, companyId, jobId);
+    return {
+      batch_id: batchId,
+      requested_batch_size: requestedBatchSize,
+      effective_batch_size: effectiveBatchSize,
+      recommended_next_batch_size: currentRecommendedBatchSize,
+      stopped_reason: 'no_items',
+      picked_items: 0,
+      processed_items: 0,
+      status: statusData,
+    };
+  }
+
+  const duplicateIgnoredItems: Array<Record<string, unknown>> = [];
+  const executableItems: DispatchJobItemRow[] = [];
+  let simulateMode = false;
+  let batchItems: BatchItemResult[] = [];
+  let batchSummary: BatchSummary | null = null;
+  let batchStoppedReason: BatchStoppedReason = 'completed';
+
+  if (lockedItems.length) {
+    const recordIds = lockedItems.map((item) => item.record_id);
+    const { data: records, error: recordsError } = await supabaseAdmin
+      .from('registros_financeiros')
+      .select('id, company_id, user_id, representante_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, observacao, status, drive_file_id, preventiva_enviada, data_envio_preventiva, cobranca_vencimento_enviada, data_envio_vencimento, ultima_cobranca, tentativas_cobranca, created_at, updated_at')
+      .eq('company_id', companyId)
+      .in('id', recordIds);
+
+    if (recordsError) throw new Error(recordsError.message);
+
+    const recordsById = new Map(((records || []) as FinancialRow[]).map((row) => [row.id, row]));
+    const candidateHashes = await Promise.all(lockedItems.map(async (item) => {
+      const payload = readPayloadObject(item.payload);
+      const payloadHash = String(payload.envio_hash || '').trim();
+      if (payloadHash) return payloadHash;
+      const record = recordsById.get(item.record_id);
+      if (!record) return '';
+      return await computeEnvioHashForRecord(record, config as BillingConfigRow | null, todayIso) || '';
+    }));
+
+    const successHashes = new Set<string>();
+    const nonEmptyHashes = candidateHashes.filter(Boolean);
+    if (nonEmptyHashes.length) {
+      const { data: successLogs, error: successLogsError } = await supabaseAdmin
+        .from('logs_cobranca')
+        .select('envio_hash, status_envio')
+        .eq('company_id', companyId)
+        .in('envio_hash', nonEmptyHashes)
+        .in('status_envio', Array.from(SUCCESS_LOG_STATUSES));
+
+      if (successLogsError) throw new Error(successLogsError.message);
+      for (const row of successLogs || []) {
+        if (row?.envio_hash && isSuccessfulLogStatus(row.status_envio)) {
+          successHashes.add(String(row.envio_hash));
+        }
+      }
+    }
+
+    lockedItems.forEach((item, index) => {
+      const envioHash = candidateHashes[index] || '';
+      const payload = readPayloadObject(item.payload);
+      if (payload.simulate === true) simulateMode = true;
+      if (envioHash && successHashes.has(envioHash)) {
+        duplicateIgnoredItems.push({
+          item_id: item.id,
+          record_id: item.record_id,
+          previous_log_id: item.log_cobranca_id,
+          retry_count: Math.max(0, Number(item.attempt_count || 1) - 1),
+          retryable: false,
+          next_retry_at: null,
+          status: 'ignored_duplicate_success',
+          envio_hash: envioHash,
+        });
+      } else if (recordsById.has(item.record_id)) {
+        executableItems.push({
+          ...item,
+          payload: {
+            ...readPayloadObject(item.payload),
+            envio_hash: envioHash || null,
+          },
+        });
+      }
+    });
+
+    for (const ignored of duplicateIgnoredItems) {
+      await supabaseAdmin
+        .from('dispatch_job_items')
+        .update({
+          status: 'ignored',
+          payload: {
+            ...readPayloadObject(lockedItems.find((item) => item.id === ignored.item_id)?.payload),
+            envio_hash: ignored.envio_hash || null,
+          },
+          locked_at: null,
+          locked_by: null,
+          last_error_code: 'ignored_duplicate_success',
+          last_error_message: 'Item ignorado porque ja existe sucesso previo para o mesmo envio_hash.',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', String(ignored.item_id))
+        .eq('job_id', jobId)
+        .eq('company_id', companyId);
+    }
+  }
+
+  if (executableItems.length) {
+    const recordIds = executableItems.map((item) => item.record_id);
+    const { data: records, error: recordsError } = await supabaseAdmin
+      .from('registros_financeiros')
+      .select('id, company_id, user_id, representante_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, observacao, status, drive_file_id, preventiva_enviada, data_envio_preventiva, cobranca_vencimento_enviada, data_envio_vencimento, ultima_cobranca, tentativas_cobranca, created_at, updated_at')
+      .eq('company_id', companyId)
+      .in('id', recordIds);
+
+    if (recordsError) throw new Error(recordsError.message);
+
+    const retryContextByRecordId = Object.fromEntries(executableItems.map((item) => ([
+      item.record_id,
+      {
+        previous_log_id: item.log_cobranca_id,
+        retry_count: Math.max(0, Number(item.attempt_count || 1) - 1),
+        retryable: true,
+        next_retry_at: item.next_attempt_at,
+      },
+    ])));
+
+    const processResult = await processBatch(
+      supabaseAdmin,
+      (records || []) as FinancialRow[],
+      config as BillingConfigRow | null,
+      googleToken,
+      folderId,
+      todayIso,
+      {
+        simulate: simulateMode,
+        force: true,
+        companyName,
+        batchId,
+        startedAt: Date.now(),
+        hardDeadlineMs: Date.now() + DISPATCH_JOB_HARD_LIMIT_MS,
+        softStopAtMs: Date.now() + DISPATCH_JOB_SOFT_LIMIT_MS,
+        estimatedMsPerItem: currentAvgMsPerItem || 2500,
+        softStopMarginMs: DISPATCH_JOB_SOFT_MARGIN_MS,
+        retryContextByRecordId,
+      },
+    );
+
+    batchItems = processResult.items;
+    batchSummary = processResult.summary;
+    batchStoppedReason = processResult.stoppedReason;
+    const startedRecordIds = new Set(batchItems.map((item) => item.record_id));
+    const unstartedItems = executableItems.filter((item) => !startedRecordIds.has(item.record_id));
+
+    for (const unstarted of unstartedItems) {
+      await supabaseAdmin
+        .from('dispatch_job_items')
+        .update({
+          status: 'pending',
+          attempt_count: Math.max(0, Number(unstarted.attempt_count || 1) - 1),
+          locked_at: null,
+          locked_by: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', unstarted.id)
+        .eq('job_id', jobId)
+        .eq('company_id', companyId);
+    }
+
+    const { data: latestLogs, error: latestLogsError } = await supabaseAdmin
+      .from('logs_cobranca')
+      .select('id, financeiro_id, status_envio, erro, payload, envio_hash, created_at')
+      .eq('company_id', companyId)
+      .in('financeiro_id', recordIds)
+      .order('created_at', { ascending: false });
+
+    if (latestLogsError) throw new Error(latestLogsError.message);
+
+    const latestLogByRecordId = new Map<string, Record<string, unknown>>();
+    for (const row of (latestLogs || []) as Array<Record<string, unknown>>) {
+      const recordId = String(row.financeiro_id || '');
+      if (recordId && !latestLogByRecordId.has(recordId)) {
+        latestLogByRecordId.set(recordId, row);
+      }
+    }
+
+    for (const itemResult of batchItems) {
+      const jobItem = executableItems.find((row) => row.record_id === itemResult.record_id);
+      if (!jobItem) continue;
+      const latestLog = latestLogByRecordId.get(itemResult.record_id) || null;
+      const logPayload = readPayloadObject(latestLog?.payload);
+      const resolvedErrorCode = String(logPayload.last_error_code || itemResult.error_code || latestLog?.erro || '').trim();
+      const resolvedRetryable = Boolean(logPayload.retryable) || isRetryableLogCode(resolvedErrorCode);
+      const itemStatus =
+        itemResult.status === 'enviado' || itemResult.status === 'simulado'
+          ? 'success'
+          : resolvedRetryable
+            ? 'error'
+            : itemResult.status === 'ignorado'
+              ? 'ignored'
+              : 'error';
+
+      const mergedPayload = {
+        ...readPayloadObject(jobItem.payload),
+        envio_hash: String(latestLog?.envio_hash || readPayloadObject(jobItem.payload).envio_hash || '').trim() || null,
+        last_batch_id: batchId,
+        last_status: itemResult.status,
+      };
+
+      await supabaseAdmin
+        .from('dispatch_job_items')
+        .update({
+          payload: mergedPayload,
+          status: itemStatus,
+          next_attempt_at: itemStatus === 'error' ? (String(logPayload.next_retry_at || '').trim() || null) : null,
+          last_error_code: itemStatus === 'error'
+            ? resolvedErrorCode || null
+            : null,
+          last_error_message: itemStatus === 'error'
+            ? String(logPayload.last_error_message || itemResult.error_message || '').trim() || null
+            : null,
+          log_cobranca_id: String(latestLog?.id || '').trim() || jobItem.log_cobranca_id || null,
+          locked_at: null,
+          locked_by: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', jobItem.id)
+        .eq('job_id', jobId)
+        .eq('company_id', companyId);
+    }
+  }
+
+  const batchDurationMs = Number(batchSummary?.duration_ms || 0);
+  const observedAvgMsPerItem = Number(batchSummary?.avg_ms_per_record || 0);
+  const nextAverageMsPerItem = observedAvgMsPerItem > 0
+    ? (
+      currentAvgMsPerItem
+        ? Math.round((currentAvgMsPerItem * 0.6) + (observedAvgMsPerItem * 0.4))
+        : observedAvgMsPerItem
+    )
+    : currentAvgMsPerItem;
+  const recommendedNextBatchSize = batchSummary
+    ? computeNextRecommendedBatchSize(currentRecommendedBatchSize, batchDurationMs, batchStoppedReason)
+    : currentRecommendedBatchSize;
+
+  const jobMetricsUpdate: Record<string, unknown> = {
+    avg_ms_per_item: nextAverageMsPerItem,
+    last_batch_duration_ms: batchDurationMs || null,
+    recommended_batch_size: recommendedNextBatchSize,
+    updated_at: new Date().toISOString(),
+  };
+  if (['soft_time_budget', 'rate_limited', 'hard_timeout_guard'].includes(batchStoppedReason)) {
+    jobMetricsUpdate.status = 'paused';
+  }
+
+  await supabaseAdmin
+    .from('dispatch_jobs')
+    .update(jobMetricsUpdate)
+    .eq('id', jobId)
+    .eq('company_id', companyId);
+
+  // ETAPA 9: Circuit breaker — update provider health and check thresholds
+  if (batchSummary && batchItems.length > 0) {
+    const batchSuccess = Number(batchSummary.enviados ?? (batchSummary as Record<string, unknown>).sucesso ?? 0);
+    const batchErrors = Number(batchSummary.erros ?? 0);
+    const batchTotal = batchSuccess + batchErrors;
+    const isRateLimit = String(batchStoppedReason).includes('rate_limit');
+    const latencyMs = isRateLimit ? -1 : (batchSummary.avg_ms_per_record ?? 0);
+
+    // Update health for the majority outcome
+    const overallSuccess = batchSuccess >= batchErrors;
+    const health = await updateProviderHealth(
+      supabaseAdmin, companyId, overallSuccess, latencyMs as number,
+    );
+
+    // Circuit breaker: pause job if provider is unhealthy
+    if (
+      health.state === 'unhealthy' ||
+      health.consecutive_failures >= CIRCUIT_BREAKER_MAX_CONSECUTIVE_FAILURES ||
+      (health.is_rate_limit && batchTotal >= CIRCUIT_BREAKER_MIN_SAMPLES)
+    ) {
+      await supabaseAdmin.from('dispatch_jobs').update({
+        status: 'paused',
+        stopped_reason: 'batch_circuit_break',
+        updated_at: new Date().toISOString(),
+      }).eq('id', jobId).eq('company_id', companyId);
+
+      await logDispatchAuditEvent(supabaseAdmin, companyId, jobId, 'batch_circuit_break', {
+        state: health.state,
+        consecutive_failures: health.consecutive_failures,
+        is_rate_limit: health.is_rate_limit,
+        batch_success: batchSuccess,
+        batch_errors: batchErrors,
+        stopped_reason: batchStoppedReason,
+      });
+
+      batchStoppedReason = 'batch_circuit_break' as typeof batchStoppedReason;
+    } else if (health.state === 'degraded') {
+      await logDispatchAuditEvent(supabaseAdmin, companyId, jobId, 'provider_unhealthy', {
+        state: health.state,
+        consecutive_failures: health.consecutive_failures,
+      });
+    }
+  }
+
+  const statusData = await getDispatchJobStatusData(supabaseAdmin, companyId, jobId);
+
+  return {
+    batch_id: batchId,
+    requested_batch_size: requestedBatchSize,
+    effective_batch_size: effectiveBatchSize,
+    recommended_next_batch_size: recommendedNextBatchSize,
+    stopped_reason: batchStoppedReason || (lockedItems.length ? 'completed' : 'no_items'),
+    picked_items: lockedItems.length,
+    processed_items: batchItems.length + duplicateIgnoredItems.length,
+    summary: batchSummary,
+    duplicate_success_items: duplicateIgnoredItems,
+    items: [...duplicateIgnoredItems, ...batchItems],
+    status: statusData,
+  };
+}
+
 async function simulateChargeBatchData(
   supabaseAdmin: AdminClient,
   companyId: string,
@@ -5910,45 +8790,25 @@ async function simulateChargeBatchData(
     .eq('company_id', companyId)
     .in('status', ['pendente', 'aberto', 'vencido'])
     .order('data_vencimento', { ascending: true })
-    .limit(limit);
+    .limit(Math.min(limit, BATCH_MAX_RECORDS));
   if (error) throw new Error(error.message);
 
-  let simulated = 0;
-  let errors = 0;
-  const items: Array<Record<string, unknown>> = [];
-
-  for (const record of records || []) {
-    const outcome = await processChargeForRecord(
-      supabaseAdmin,
-      record as FinancialRow,
-      config as BillingConfigRow | null,
-      token,
-      folderId,
-      todayIso,
-      true,
-      true,
-      companyName,
-    );
-
-    if (outcome.status === 'sucesso') simulated += 1;
-    if (outcome.status === 'erro') errors += 1;
-
-    items.push({
-      id: record.id,
-      nome: getClienteEfetivo(record) || record.nome || 'Cliente',
-      numero_boleto: getNumeroBoletoEfetivo(record) || null,
-      status: outcome.status,
-      tipo: outcome.tipo || null,
-      arquivo_encontrado: temBoletoEncontrado(record),
-      motivo: outcome.reason || null,
-      simulated: Boolean(outcome.simulated),
-    });
-  }
+  const { batchId, items, summary } = await processBatch(
+    supabaseAdmin,
+    (records || []) as FinancialRow[],
+    config as BillingConfigRow | null,
+    token,
+    folderId,
+    todayIso,
+    { simulate: true, force: true, companyName },
+  );
 
   return {
-    simulated,
-    errors,
+    batch_id: batchId,
+    simulated: summary.simulados,
+    errors: summary.erros,
     items,
+    summary,
     limit,
   };
 }
@@ -6150,9 +9010,11 @@ Deno.serve(async (req: Request) => {
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
     }
 
-    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission' || action === 'get_boleto_sync_report' || action === 'preview_charge_payload' || action === 'prepare_manual_charge' || action === 'send_real' || action === 'send_single_charge' || action === 'validate_company_integration' || action === 'validate_connection' || action === 'get_qr_code' || action === 'get_connection_status' || action === 'test_zapi_health' || action === 'test_drive_health') {
+    if (action === 'get_billing_config' || action === 'save_billing_config' || action === 'get_billing_rules' || action === 'save_billing_rules' || action === 'get_billing_center' || action === 'get_billing_history' || action === 'get_billing_inconsistencies' || action === 'get_real_send_checklist' || action === 'simulate_charge_batch' || action === 'simulate_charge_item' || action === 'update_charge_status' || action === 'update_financial_phone' || action === 'preview_template' || action === 'get_plan_capabilities' || action === 'get_usage_summary' || action === 'check_send_permission' || action === 'get_boleto_sync_report' || action === 'preview_charge_payload' || action === 'prepare_manual_charge' || action === 'send_real' || action === 'send_single_charge' || action === 'validate_company_integration' || action === 'validate_connection' || action === 'get_qr_code' || action === 'get_connection_status' || action === 'test_zapi_health' || action === 'test_drive_health' || action === 'create_dispatch_job' || action === 'run_dispatch_job_batch' || action === 'get_dispatch_job_status' || action === 'cancel_dispatch_job' || action === 'get_tenant_limits' || action === 'update_tenant_limits' || action === 'pause_tenant_dispatch' || action === 'resume_tenant_dispatch' || action === 'get_tenant_quota_usage') {
       requireCompanyId(companyId);
     }
+    // Scheduler actions do NOT require company_id — they work across all companies
+    // and are protected by cron secret only
 
     const auth = await assertCompanyAccess(admin, authClient, companyId, authHeader, cronSecret);
     const todayIso = todayInSaoPaulo();
@@ -6172,6 +9034,8 @@ Deno.serve(async (req: Request) => {
       'run_now',
       'reprocess_failures',
       'simulate_charge_item',
+      'run_dispatch_job_batch',
+      'run_scheduler_tick',
     ].includes(action);
     const googleToken = needsGoogleToken ? await getGoogleAccessToken() : '';
 
@@ -6801,6 +9665,334 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    if (action === 'create_dispatch_job') {
+      try {
+        const created = await createDispatchJobData(admin, companyId || '', auth.userId, body || {});
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'create_dispatch_job',
+          company_id: companyId,
+          job_id: created.job.id,
+          created_items: created.created_items,
+          ignored_invalid_records: created.ignored_invalid_records,
+          job: created.job,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'create_dispatch_job',
+          error: String(error instanceof Error ? error.message : error),
+        }, 200);
+      }
+    }
+
+    if (action === 'run_dispatch_job_batch') {
+      try {
+        const jobId = String(body?.job_id || body?.id || '').trim();
+        if (!jobId) {
+          return jsonResponse({ ok: false, success: false, action: 'run_dispatch_job_batch', error: 'job_id e obrigatorio.' }, 200);
+        }
+        const companyName = await getCompanyName(admin, companyId || '');
+        const runResult = await runDispatchJobBatchData(
+          admin,
+          companyId || '',
+          jobId,
+          googleToken,
+          todayIso,
+          companyName,
+          body || {},
+        );
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'run_dispatch_job_batch',
+          company_id: companyId,
+          job_id: jobId,
+          ...runResult,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'run_dispatch_job_batch',
+          error: String(error instanceof Error ? error.message : error),
+          details: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        }, 200);
+      }
+    }
+
+    if (action === 'get_dispatch_job_status') {
+      try {
+        const jobId = String(body?.job_id || body?.id || '').trim();
+        if (!jobId) {
+          return jsonResponse({ ok: false, success: false, action: 'get_dispatch_job_status', error: 'job_id e obrigatorio.' }, 200);
+        }
+        const statusData = await getDispatchJobStatusData(admin, companyId || '', jobId);
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'get_dispatch_job_status',
+          company_id: companyId,
+          job_id: jobId,
+          ...statusData,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'get_dispatch_job_status',
+          error: String(error instanceof Error ? error.message : error),
+        }, 200);
+      }
+    }
+
+    if (action === 'cancel_dispatch_job') {
+      try {
+        const jobId = String(body?.job_id || body?.id || '').trim();
+        if (!jobId) {
+          return jsonResponse({ ok: false, success: false, action: 'cancel_dispatch_job', error: 'job_id e obrigatorio.' }, 200);
+        }
+        const cancelled = await cancelDispatchJobData(admin, companyId || '', jobId);
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'cancel_dispatch_job',
+          company_id: companyId,
+          job_id: jobId,
+          ...cancelled,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'cancel_dispatch_job',
+          error: String(error instanceof Error ? error.message : error),
+        }, 200);
+      }
+    }
+
+    // ── ETAPA 8: Scheduler actions ─────────────────────────────────────────────
+    // These require cron-secret bypass (auth.bypass === true).
+    // They operate across ALL companies without a specific company_id.
+
+    if (action === 'run_scheduler_tick') {
+      if (!auth.bypass) {
+        return jsonResponse({ ok: false, success: false, action: 'run_scheduler_tick', error: 'Acesso negado. Somente scheduler autorizado.' }, 403);
+      }
+      try {
+        const tickResult = await runSchedulerTick(admin, googleToken, todayIso);
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'run_scheduler_tick',
+          scheduler_version: SCHEDULER_WORKER_VERSION,
+          ...tickResult,
+        }, 200);
+      } catch (error) {
+        console.error('[run_scheduler_tick] erro fatal', error);
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'run_scheduler_tick',
+          error: String(error instanceof Error ? error.message : error),
+        }, 200);
+      }
+    }
+
+    if (action === 'get_scheduler_status') {
+      try {
+        // Allow authenticated users OR cron bypass to view scheduler status
+        const statusData = await getSchedulerStatusData(admin);
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'get_scheduler_status',
+          ...statusData,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'get_scheduler_status',
+          error: String(error instanceof Error ? error.message : error),
+        }, 200);
+      }
+    }
+
+    // ── ETAPA 9: Tenant limits / quota actions ─────────────────────────────────
+
+    if (action === 'get_tenant_limits') {
+      try {
+        const [limits, usage] = await Promise.all([
+          getCompanyLimits(admin, companyId || ''),
+          getTenantQuotaUsage(admin, companyId || '', todayIso),
+        ]);
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'get_tenant_limits',
+          company_id: companyId,
+          limits,
+          usage,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'get_tenant_limits',
+          error: String(error instanceof Error ? error.message : error),
+        }, 200);
+      }
+    }
+
+    if (action === 'get_tenant_quota_usage') {
+      try {
+        const usage = await getTenantQuotaUsage(admin, companyId || '', todayIso);
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'get_tenant_quota_usage',
+          company_id: companyId,
+          usage,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'get_tenant_quota_usage',
+          error: String(error instanceof Error ? error.message : error),
+        }, 200);
+      }
+    }
+
+    if (action === 'update_tenant_limits') {
+      // Admin-only: requires system_admins membership (checked via RLS + auth)
+      try {
+        const allowedFields = [
+          'max_active_jobs',
+          'max_batch_size',
+          'max_daily_messages',
+          'max_concurrent_batches',
+          'max_retries_per_hour',
+        ];
+        const updates: Record<string, unknown> = {};
+        for (const field of allowedFields) {
+          if (body?.[field] !== undefined) {
+            const val = Number(body[field]);
+            if (!isNaN(val) && val > 0) updates[field] = val;
+          }
+        }
+        if (!Object.keys(updates).length) {
+          return jsonResponse({
+            ok: false,
+            success: false,
+            action: 'update_tenant_limits',
+            error: 'Nenhum campo valido para atualizar.',
+          }, 200);
+        }
+        updates.updated_at = new Date().toISOString();
+
+        // Ensure limits row exists first
+        const limits = await getCompanyLimits(admin, companyId || '');
+        const { error: updateError } = await admin
+          .from('dispatch_company_limits')
+          .update(updates)
+          .eq('id', limits.id);
+
+        if (updateError) throw new Error(updateError.message);
+
+        const updated = await getCompanyLimits(admin, companyId || '');
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'update_tenant_limits',
+          company_id: companyId,
+          limits: updated,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'update_tenant_limits',
+          error: String(error instanceof Error ? error.message : error),
+        }, 200);
+      }
+    }
+
+    if (action === 'pause_tenant_dispatch') {
+      try {
+        const reason = String(body?.reason || 'Suspenso manualmente.').trim();
+        const nowIso = new Date().toISOString();
+        const limits = await getCompanyLimits(admin, companyId || '');
+        const { error: updateError } = await admin
+          .from('dispatch_company_limits')
+          .update({ enabled: false, pause_reason: reason, paused_at: nowIso, updated_at: nowIso })
+          .eq('id', limits.id);
+        if (updateError) throw new Error(updateError.message);
+
+        // Pause any running jobs for this company
+        await admin.from('dispatch_jobs').update({
+          status: 'paused',
+          stopped_reason: 'tenant_disabled',
+          updated_at: nowIso,
+        }).eq('company_id', companyId || '').eq('status', 'running');
+
+        await logDispatchAuditEvent(admin, companyId || null, null, 'tenant_paused', {
+          reason,
+          paused_at: nowIso,
+          paused_by: auth.userId,
+        });
+
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'pause_tenant_dispatch',
+          company_id: companyId,
+          reason,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'pause_tenant_dispatch',
+          error: String(error instanceof Error ? error.message : error),
+        }, 200);
+      }
+    }
+
+    if (action === 'resume_tenant_dispatch') {
+      try {
+        const nowIso = new Date().toISOString();
+        const limits = await getCompanyLimits(admin, companyId || '');
+        const { error: updateError } = await admin
+          .from('dispatch_company_limits')
+          .update({ enabled: true, pause_reason: null, paused_at: null, updated_at: nowIso })
+          .eq('id', limits.id);
+        if (updateError) throw new Error(updateError.message);
+
+        await logDispatchAuditEvent(admin, companyId || null, null, 'tenant_resumed', {
+          resumed_at: nowIso,
+          resumed_by: auth.userId,
+        });
+
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action: 'resume_tenant_dispatch',
+          company_id: companyId,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action: 'resume_tenant_dispatch',
+          error: String(error instanceof Error ? error.message : error),
+        }, 200);
+      }
+    }
+
     if (action === 'get_billing_center') {
       console.log('get_billing_center iniciou action');
       try {
@@ -6982,23 +10174,25 @@ Deno.serve(async (req: Request) => {
 
     if (action === 'simulate_charge_batch') {
       try {
-        const limit = Math.min(50, Math.max(1, Number(body?.limit || 10) || 10));
+        const limit = Math.min(BATCH_MAX_RECORDS, Math.max(1, Number(body?.limit || 10) || 10));
         const result = await simulateChargeBatchData(admin, companyId || '', todayIso, limit);
         await admin.from('audit_logs').insert({
           company_id: companyId,
           user_id: auth.userId,
           action: 'billing_simulate_batch',
           entity: 'logs_cobranca',
-          metadata: result,
+          metadata: { batch_id: result.batch_id, ...result.summary },
         }).then(() => {}).catch(() => {});
 
         return jsonResponse({
           ok: true,
           success: true,
           action: 'simulate_charge_batch',
+          batch_id: result.batch_id,
           simulated: result.simulated,
           errors: result.errors,
           items: result.items,
+          summary: result.summary,
           limit: result.limit,
         }, 200);
       } catch (error) {
@@ -7200,6 +10394,7 @@ Deno.serve(async (req: Request) => {
       let arquivosAnexados = 0;
       const companyResults: Array<{ company_id: string; sent: number; ignored: number; errors: number }> = [];
       const debugByCompany: Array<Record<string, unknown>> = [];
+      const retryBatches: Array<Record<string, unknown>> = [];
 
       for (const targetCompanyId of companies) {
         const companyName = await getCompanyName(admin, targetCompanyId);
@@ -7368,52 +10563,122 @@ Deno.serve(async (req: Request) => {
           primeiros_registros: explainedRecords.slice(0, 10),
         });
 
-        for (const record of records || []) {
-          const outcome = await processChargeForRecord(
+        if (normalizedRunAction === 'reprocess_failures') {
+          const retryResult = await reprocessFailuresForCompany(
             admin,
-            record as FinancialRow,
+            targetCompanyId,
             config as BillingConfigRow | null,
             googleToken,
             folderId,
             todayIso,
-            normalizedRunAction === 'reprocess_failures',
-            simulate,
             companyName,
           );
-          if (outcome.status === 'sucesso') {
-            companySent += 1;
-            if (outcome.simulated) {
-              companySentSimulated += 1;
-              sentSimulated += 1;
-            }
-            if (outcome.fileId) boletosEncontrados += 1;
-            if (outcome.message) mensagensGeradas += 1;
-            if (outcome.fileName) arquivosAnexados += 1;
-          }
-          else if (outcome.status === 'erro') companyErrors += 1;
-          else companyIgnored += 1;
+
+          companySent = Number(retryResult.success || 0);
+          companyIgnored = Number(retryResult.skipped_success_exists || 0) + Number(retryResult.skipped_not_due || 0) + Number(retryResult.skipped_max_retries || 0);
+          companyErrors = Number(retryResult.failed || 0);
+
+          sent += companySent;
+          ignored += companyIgnored;
+          errors += companyErrors;
+          retryBatches.push({ company_id: targetCompanyId, ...retryResult });
+          companyResults.push({ company_id: targetCompanyId, sent: companySent, ignored: companyIgnored, errors: companyErrors });
+
+          await admin.from('audit_logs').insert({
+            company_id: targetCompanyId,
+            user_id: auth.userId,
+            action: 'billing_automation_reprocess',
+            entity: 'logs_cobranca',
+            metadata: {
+              company_id: targetCompanyId,
+              ...retryResult,
+            },
+          }).then(() => {}).catch(() => {});
+        } else {
+          // Cap at BATCH_MAX_RECORDS per call — if there are more, the cron will process them
+          // in subsequent runs (idempotency ensures no duplicates on the same day).
+          const recordsToProcess = (records || []).slice(0, BATCH_MAX_RECORDS);
+          const batchResult = await processBatch(
+            admin,
+            recordsToProcess as FinancialRow[],
+            config as BillingConfigRow | null,
+            googleToken,
+            folderId,
+            todayIso,
+            {
+              simulate,
+              force: false,
+              companyName,
+              startedAt: Date.now(),
+            },
+          );
+
+          const { summary: batchSummary } = batchResult;
+          companySent = batchSummary.enviados + batchSummary.simulados;
+          companySentSimulated = batchSummary.simulados;
+          companyIgnored = batchSummary.ignorados;
+          companyErrors = batchSummary.erros;
+          boletosEncontrados += batchResult.items.filter((i) => i.boleto_file_name).length;
+          mensagensGeradas += batchSummary.enviados + batchSummary.simulados;
+          arquivosAnexados += batchSummary.com_anexo;
+          sentSimulated += batchSummary.simulados;
+
+          sent += companySent;
+          ignored += companyIgnored;
+          errors += companyErrors;
+          companyResults.push({ company_id: targetCompanyId, sent: companySent, ignored: companyIgnored, errors: companyErrors });
+
+          await admin.from('audit_logs').insert({
+            company_id: targetCompanyId,
+            user_id: auth.userId,
+            action: 'billing_automation_run',
+            entity: 'logs_cobranca',
+            metadata: {
+              batch_id: batchResult.batchId,
+              sent: companySent,
+              sent_simulated: companySentSimulated,
+              ignored: companyIgnored,
+              errors: companyErrors,
+              company_id: targetCompanyId,
+              simulate,
+              ...batchSummary,
+            },
+          }).then(() => {}).catch(() => {});
         }
-
-        sent += companySent;
-        ignored += companyIgnored;
-        errors += companyErrors;
-        companyResults.push({ company_id: targetCompanyId, sent: companySent, ignored: companyIgnored, errors: companyErrors });
-
-        await admin.from('audit_logs').insert({
-          company_id: targetCompanyId,
-          user_id: auth.userId,
-          action: normalizedRunAction === 'run' ? 'billing_automation_run' : 'billing_automation_reprocess',
-          entity: 'logs_cobranca',
-          metadata: { sent: companySent, sent_simulated: companySentSimulated, ignored: companyIgnored, errors: companyErrors, company_id: targetCompanyId, simulate },
-        }).then(() => {}).catch(() => {});
       }
 
       const overview = companyId ? await getOverview(admin, companyId, todayIso) : null;
+      const reprocessResult = normalizedRunAction === 'reprocess_failures'
+        ? {
+            batch_id: retryBatches[0]?.batch_id || null,
+            total_candidates: retryBatches.reduce((sum, item) => sum + Number(item.total_candidates || 0), 0),
+            reprocessed: retryBatches.reduce((sum, item) => sum + Number(item.reprocessed || 0), 0),
+            skipped_success_exists: retryBatches.reduce((sum, item) => sum + Number(item.skipped_success_exists || 0), 0),
+            skipped_not_due: retryBatches.reduce((sum, item) => sum + Number(item.skipped_not_due || 0), 0),
+            skipped_max_retries: retryBatches.reduce((sum, item) => sum + Number(item.skipped_max_retries || 0), 0),
+            success: retryBatches.reduce((sum, item) => sum + Number(item.success || 0), 0),
+            failed: retryBatches.reduce((sum, item) => sum + Number(item.failed || 0), 0),
+            items: retryBatches.flatMap((item) => Array.isArray(item.items) ? item.items : []),
+          }
+        : null;
 
       return jsonResponse({
         ok: true,
         message: normalizedRunAction === 'run' ? 'Régua executada com sucesso.' : 'Falhas reprocessadas com sucesso.',
-        result: { sent, sent_simulated: sentSimulated, boletos_encontrados: boletosEncontrados, mensagens_geradas: mensagensGeradas, arquivos_anexados: arquivosAnexados, ignored, errors, companies: companyResults },
+        result: {
+          sent,
+          sent_simulated: sentSimulated,
+          boletos_encontrados: boletosEncontrados,
+          mensagens_geradas: mensagensGeradas,
+          arquivos_anexados: arquivosAnexados,
+          ignored,
+          errors,
+          companies: companyResults,
+          batch_max_records: BATCH_MAX_RECORDS,
+          batch_concurrency: BATCH_CONCURRENCY_DEFAULT,
+          retry_batches: retryBatches,
+          ...(reprocessResult || {}),
+        },
         debug: companyId
           ? (debugByCompany.find((item) => item.company_id === companyId) || null)
           : debugByCompany[0] || null,
@@ -7647,6 +10912,17 @@ Deno.serve(async (req: Request) => {
           })),
           // Scoring diagnostic — top 20 files that had token substring presence but scored < MIN_SCORE.
           rejected_candidates: meta.rejected_candidates,
+          // Files that passed MIN_SCORE but only via base number — hidden from primary results
+          // when any exact_match result exists. Visible here for debugging.
+          base_only_candidates: Array.isArray(meta.base_only_candidates)
+            ? meta.base_only_candidates.map((c) => ({
+                file_name: String(c.file_name ?? ''),
+                parent_folder: String(c.parent_folder ?? ''),
+                score: Number(c.score ?? 0),
+                matched_tokens: Array.isArray(c.matched_tokens) ? c.matched_tokens.map(String) : [],
+                reasons: Array.isArray(c.reasons) ? c.reasons.map(String) : [],
+              }))
+            : [],
           // Raw substring presence of each query token across all scanned PDFs (no scoring).
           diagnostic_token_matches: meta.diagnostic_token_matches.map((d) => ({
             token: String(d.token ?? ''),
@@ -7674,6 +10950,15 @@ Deno.serve(async (req: Request) => {
           // Targeted lookup diagnostic
           targeted_lookup_used: Boolean(meta.targeted_lookup_used),
           targeted_path_log: Array.isArray(meta.targeted_path_log) ? meta.targeted_path_log : [],
+          // Phase 0 trace — always present even when BFS ran
+          targeted_phase0_ran: Boolean(meta.targeted_phase0_ran),
+          targeted_phase0_null: Boolean(meta.targeted_phase0_null),
+          targeted_phase0_pdfs_collected: Number(meta.targeted_phase0_pdfs_collected ?? 0),
+          targeted_phase0_error: meta.targeted_phase0_error ? String(meta.targeted_phase0_error) : null,
+          targeted_phase0_path_log: Array.isArray(meta.targeted_phase0_path_log) ? meta.targeted_phase0_path_log : [],
+          targeted_phase0_candidates: Array.isArray(meta.targeted_phase0_candidates)
+            ? meta.targeted_phase0_candidates.map((c) => ({ name: String(c.name ?? ''), score: Number(c.score ?? 0), path: String(c.path ?? '') }))
+            : [],
         };
 
         // Log approximate response size so we can catch payload issues in future
@@ -7714,6 +10999,7 @@ Deno.serve(async (req: Request) => {
               webContentLink: r.file.webContentLink || null,
             },
             score: Number(r.score ?? 0),
+            exact_match: Boolean(r.exact_match ?? false),
             reasons: Array.isArray(r.reasons) ? r.reasons.map(String) : [],
             matched_tokens: Array.isArray(r._debug?.matched_tokens) ? r._debug.matched_tokens.map(String) : [],
             match_origin: r.reasons?.[0] ? String(r.reasons[0]) : null,
@@ -7732,6 +11018,10 @@ Deno.serve(async (req: Request) => {
           duration_ms: Date.now() - lookupStart,
           company_id: companyId,
         }));
+        // Return HTTP 200 (not 500) so Supabase client puts the body in `data`
+        // instead of `error`. The frontend reads `data.ok === false` and shows
+        // data.error / data.error_stack. A 5xx causes the client to swallow the
+        // body and surface only "non-2xx status code" — no useful message.
         return jsonResponse({
           ok: false,
           error: errMsg,
@@ -7740,7 +11030,7 @@ Deno.serve(async (req: Request) => {
           action: 'test_boleto_lookup',
           duration_ms: Date.now() - lookupStart,
           hint: 'Veja os logs da edge function para mais detalhes.',
-        }, 500);
+        }, 200);
       }
     }
 

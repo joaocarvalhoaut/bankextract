@@ -1,4 +1,12 @@
 
+# ── dispatch-scheduler ────────────────────────────────────────────────────────
+# Chamado pelo pg_cron a cada minuto via net.http_post.
+# verify_jwt = false porque a autenticação é feita via x-cron-secret.
+[functions.dispatch-scheduler]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/dispatch-scheduler/index.ts"
+
 [functions.process-import-ocr]
 enabled = true
 verify_jwt = true

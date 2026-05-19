@@ -298,8 +298,158 @@ export async function getOnboardingProgress(companyId) {
   };
 }
 
+// ── ETAPA 11: Wizard de onboarding SaaS ──────────────────────────────────────
+
+export const WIZARD_STEPS = [
+  { id: 'welcome',             title: 'Bem-vindo',          icon: 'Rocket' },
+  { id: 'connect_whatsapp',   title: 'WhatsApp Z-API',     icon: 'Smartphone' },
+  { id: 'connect_drive',      title: 'Google Drive',       icon: 'FolderOpen' },
+  { id: 'validate_env',       title: 'Validar Ambiente',   icon: 'ShieldCheck' },
+  { id: 'configure_messages', title: 'Mensagens',          icon: 'MessageSquare' },
+  { id: 'test_dispatch',      title: 'Primeiro Dispatch',  icon: 'SendHorizonal' },
+  { id: 'complete',           title: 'Pronto!',            icon: 'PartyPopper' },
+];
+
+export const TEMPLATE_PRESETS = [
+  {
+    id: 'amigavel',
+    label: 'Amigavel',
+    tone: 'Amigavel e positivo',
+    description: 'Tom leve e colaborativo — ideal para relacoes comerciais de longo prazo.',
+    template_preventiva: 'Ola, {{cliente}}! Passando para lembrar que o boleto de R$ {{valor}} vence em breve ({{vencimento}}). Qualquer duvida, fale com a gente!',
+    template_vencimento: 'Ola, {{cliente}}! Hoje e o dia do vencimento do seu boleto de R$ {{valor}} (doc. {{documento}}). Caso ja tenha pago, desconsidere.',
+    template_atraso: 'Oi, {{cliente}}! Identificamos o boleto ref. {{documento}} com R$ {{valor}} em atraso ha {{dias_atraso}} dia(s). Podemos ajudar a regularizar? Fale com a gente!',
+  },
+  {
+    id: 'neutro',
+    label: 'Neutro',
+    tone: 'Profissional e objetivo',
+    description: 'Tom direto e institucional — adequado para a maioria dos contextos B2B.',
+    template_preventiva: 'Prezado(a) {{cliente}}, informamos que o boleto no valor de R$ {{valor}} vencera em {{vencimento}}. Em caso de duvidas, entre em contato.',
+    template_vencimento: 'Prezado(a) {{cliente}}, o boleto ref. {{documento}} no valor de R$ {{valor}} vence hoje. Pedimos a gentileza de efetuar o pagamento.',
+    template_atraso: 'Prezado(a) {{cliente}}, o boleto ref. {{documento}} (R$ {{valor}}) esta em atraso ha {{dias_atraso}} dia(s). Solicitamos a regularizacao do debito.',
+  },
+  {
+    id: 'firme',
+    label: 'Firme',
+    tone: 'Direto e assertivo',
+    description: 'Tom assertivo sem agressividade — recomendado para atrasos recorrentes.',
+    template_preventiva: '{{cliente}}, boleto de R$ {{valor}} vence em {{vencimento}}. Evite encargos realizando o pagamento ate a data.',
+    template_vencimento: '{{cliente}}, o boleto {{documento}} de R$ {{valor}} vence HOJE. Efetue o pagamento para evitar encargos.',
+    template_atraso: '{{cliente}}, ha {{dias_atraso}} dia(s) identificamos o boleto {{documento}} de R$ {{valor}} em aberto. Regularize o quanto antes para evitar juros e multa.',
+  },
+  {
+    id: 'juridico',
+    label: 'Juridico',
+    tone: 'Formal com implicacoes legais',
+    description: 'Tom formal com mencao a encargos e protesto — para devedores reincidentes.',
+    template_preventiva: 'Comunicamos a V.Sa. {{cliente}} que o titulo {{documento}} no valor de R$ {{valor}} vencera em {{vencimento}}. Solicitamos providencias para evitar encargos contratuais.',
+    template_vencimento: 'Notificamos V.Sa. {{cliente}} sobre o vencimento do titulo {{documento}} no valor de R$ {{valor}} nesta data. O nao pagamento sujeita o devedor a encargos previstos em contrato.',
+    template_atraso: 'Notificamos V.Sa. {{cliente}} que o titulo {{documento}} (R$ {{valor}}) encontra-se em atraso ha {{dias_atraso}} dia(s). Decorrido o prazo legal, o titulo podera ser encaminhado a protesto e negativacao.',
+  },
+];
+
+export async function getWizardProgress(companyId) {
+  if (!companyId) return null;
+
+  if (!hasSupabaseConfig || !supabase) {
+    const store = readMockStore();
+    const wiz = (store[`wizard:${companyId}`]) || null;
+    return wiz;
+  }
+
+  const { data, error } = await supabase
+    .from('onboarding_wizard_progress')
+    .select('current_step, completed_steps, completed_at, metadata')
+    .eq('company_id', companyId)
+    .maybeSingle();
+
+  if (error) {
+    logger.error('get_wizard_progress_failed', error, { company_id: companyId });
+    return null;
+  }
+
+  return data || null;
+}
+
+export async function saveWizardProgress(companyId, currentStep, completedSteps = [], metadata = {}) {
+  if (!companyId || !currentStep) return false;
+
+  logger.info('save_wizard_progress', { company_id: companyId, current_step: currentStep });
+
+  if (!hasSupabaseConfig || !supabase) {
+    const store = readMockStore();
+    store[`wizard:${companyId}`] = { current_step: currentStep, completed_steps: completedSteps, metadata };
+    writeMockStore(store);
+    return true;
+  }
+
+  const { error } = await supabase
+    .from('onboarding_wizard_progress')
+    .upsert(
+      {
+        company_id: companyId,
+        current_step: currentStep,
+        completed_steps: completedSteps,
+        metadata,
+      },
+      { onConflict: 'company_id' }
+    );
+
+  if (error) {
+    logger.error('save_wizard_progress_failed', error, { company_id: companyId });
+    throw new Error(error.message || 'Falha ao salvar progresso do wizard.');
+  }
+
+  return true;
+}
+
+export async function markWizardComplete(companyId, metadata = {}) {
+  if (!companyId) return false;
+
+  logger.info('mark_wizard_complete', { company_id: companyId });
+
+  if (!hasSupabaseConfig || !supabase) {
+    const store = readMockStore();
+    store[`wizard:${companyId}`] = {
+      ...(store[`wizard:${companyId}`] || {}),
+      current_step: 'complete',
+      completed_at: new Date().toISOString(),
+      metadata,
+    };
+    writeMockStore(store);
+    return true;
+  }
+
+  const allStepIds = WIZARD_STEPS.map((s) => s.id);
+  const { error } = await supabase
+    .from('onboarding_wizard_progress')
+    .upsert(
+      {
+        company_id: companyId,
+        current_step: 'complete',
+        completed_steps: allStepIds,
+        completed_at: new Date().toISOString(),
+        metadata,
+      },
+      { onConflict: 'company_id' }
+    );
+
+  if (error) {
+    logger.error('mark_wizard_complete_failed', error, { company_id: companyId });
+    throw new Error(error.message || 'Falha ao concluir o wizard.');
+  }
+
+  return true;
+}
+
 export default {
   getOnboardingStatus,
   markOnboardingStep,
   getOnboardingProgress,
+  getWizardProgress,
+  saveWizardProgress,
+  markWizardComplete,
+  WIZARD_STEPS,
+  TEMPLATE_PRESETS,
 };

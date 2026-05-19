@@ -544,7 +544,6 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
                 <div className="space-y-1.5">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Etapas testadas</p>
                   {diagnoseResult.steps.map((s, i) => {
-                    const isOk = s.ok !== false;
                     const isErr = s.ok === false;
                     return (
                       <div key={i} className={`rounded-lg px-2.5 py-2 text-[11px] ${isErr ? 'border border-red-700/30 bg-red-900/20' : 'border border-slate-700/50 bg-slate-900/50'}`}>
@@ -785,6 +784,32 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
                   ))}
                 </div>
 
+                {/* runtime error panel — shown when ok===false and error field present */}
+                {lookupRawResponse?.ok === false && lookupRawResponse?.error && (
+                  <div className="rounded-lg border border-red-700/40 bg-red-900/20 px-2.5 py-2 space-y-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-red-400">
+                      ⛔ Erro na Edge Function
+                    </p>
+                    <p className="font-mono text-[10px] text-red-200 break-all">
+                      <span className="text-red-400">[{lookupRawResponse.error_name ?? 'Error'}]</span>{' '}
+                      {lookupRawResponse.error}
+                    </p>
+                    {lookupRawResponse.error_stack && (
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-[10px] text-red-400 hover:text-red-300">
+                          stack trace
+                        </summary>
+                        <pre className="mt-1 overflow-x-auto whitespace-pre-wrap font-mono text-[9px] text-red-300/80 break-all">
+                          {lookupRawResponse.error_stack}
+                        </pre>
+                      </details>
+                    )}
+                    {lookupRawResponse.hint && (
+                      <p className="text-[10px] text-red-300/70 italic">{lookupRawResponse.hint}</p>
+                    )}
+                  </div>
+                )}
+
                 {/* tokens */}
                 {lookupRawResponse?.debug?.tokens_all && (
                   <div className="rounded-lg bg-slate-900/60 px-2.5 py-2 space-y-1">
@@ -881,8 +906,8 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
                     {lookupRawResponse.debug.diagnostic_token_matches.map((d, i) => (
                       <details key={i} className="rounded-lg bg-slate-900/50">
                         <summary className="cursor-pointer select-none px-2 py-1.5 text-[10px] hover:bg-slate-800/40">
-                          <span className="font-mono font-bold text-cyan-300">"{d.token}"</span>
-                          <span className="ml-1 text-slate-400">→ norm: <span className="text-cyan-200">"{d.normalized_token}"</span></span>
+                          <span className="font-mono font-bold text-cyan-300">&quot;{d.token}&quot;</span>
+                          <span className="ml-1 text-slate-400">→ norm: <span className="text-cyan-200">&quot;{d.normalized_token}&quot;</span></span>
                           <span className={`ml-2 rounded px-1.5 py-px text-[10px] font-bold ${d.matches_count > 0 ? 'bg-emerald-800/40 text-emerald-300' : 'bg-red-800/40 text-red-300'}`}>
                             {d.matches_count} hit{d.matches_count !== 1 ? 's' : ''}
                           </span>
@@ -940,7 +965,7 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
                   </details>
                 )}
 
-                {/* ── Targeted lookup path log ──────────────────────────────── */}
+                {/* ── Targeted lookup path log (success path) ──────────────── */}
                 {lookupRawResponse?.debug?.targeted_lookup_used && lookupRawResponse.debug.targeted_path_log?.length > 0 && (
                   <div className="rounded-lg border border-emerald-700/30 bg-emerald-950/20 px-2.5 py-2 space-y-1.5">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-400">
@@ -957,6 +982,68 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* ── Phase 0 diagnostic (always shown when phase0 ran, even on BFS fallback) ── */}
+                {lookupRawResponse?.debug?.targeted_phase0_ran && !lookupRawResponse?.debug?.targeted_lookup_used && (
+                  <div className="rounded-lg border border-amber-700/40 bg-amber-950/20 px-2.5 py-2 space-y-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-400">
+                      🔍 Phase 0 — busca direcionada executou mas caiu no BFS
+                    </p>
+                    {/* Status chips */}
+                    <div className="flex flex-wrap gap-1 text-[10px]">
+                      <span className={`rounded px-1.5 py-px font-mono ${lookupRawResponse.debug.targeted_phase0_null ? 'bg-red-800/40 text-red-300' : 'bg-emerald-800/40 text-emerald-300'}`}>
+                        {lookupRawResponse.debug.targeted_phase0_null ? '✗ retornou null (pasta do cliente não encontrada)' : '✓ pasta encontrada'}
+                      </span>
+                      <span className="rounded bg-slate-700/50 px-1.5 py-px font-mono text-slate-300">
+                        {lookupRawResponse.debug.targeted_phase0_pdfs_collected} PDFs coletados
+                      </span>
+                      {lookupRawResponse.debug.targeted_phase0_candidates?.length > 0 && (
+                        <span className="rounded bg-indigo-800/40 px-1.5 py-px font-mono text-indigo-300">
+                          {lookupRawResponse.debug.targeted_phase0_candidates.length} candidatos
+                        </span>
+                      )}
+                    </div>
+                    {/* Error */}
+                    {lookupRawResponse.debug.targeted_phase0_error && (
+                      <p className="font-mono text-[10px] text-red-300 break-all">
+                        ⛔ erro interno: {lookupRawResponse.debug.targeted_phase0_error}
+                      </p>
+                    )}
+                    {/* Client candidates found */}
+                    {lookupRawResponse.debug.targeted_phase0_candidates?.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-amber-300 mb-0.5">Pastas do cliente encontradas:</p>
+                        {lookupRawResponse.debug.targeted_phase0_candidates.map((c, i) => (
+                          <div key={i} className="flex items-center gap-1.5 font-mono text-[10px]">
+                            <span className="shrink-0 rounded bg-indigo-800/40 px-1 text-indigo-300">{c.score}</span>
+                            <span className="text-slate-200">{c.path}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Navigation log */}
+                    {lookupRawResponse.debug.targeted_phase0_path_log?.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-amber-300 mb-0.5">Navegação (Phase 0):</p>
+                        <div className="space-y-0.5">
+                          {lookupRawResponse.debug.targeted_phase0_path_log.map((step, i) => (
+                            <div key={i} className="flex items-start gap-1.5 font-mono text-[10px]">
+                              <span className="shrink-0 text-amber-600">{i + 1}.</span>
+                              <span className="text-amber-200 break-all">{step}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* No log at all */}
+                    {lookupRawResponse.debug.targeted_phase0_path_log?.length === 0 && (
+                      <p className="text-[10px] text-amber-300/60 italic">
+                        path_log vazio — Phase 0 pode ter lançado exceção antes de navegar.
+                        Verifique targeted_phase0_error acima.
+                      </p>
+                    )}
                   </div>
                 )}
 

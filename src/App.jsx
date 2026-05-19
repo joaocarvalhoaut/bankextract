@@ -52,6 +52,8 @@ const NotificationsScreen = lazy(() => import('./screens/NotificationsScreen'));
 const AuditTimelineScreen = lazy(() => import('./screens/AuditTimelineScreen'));
 const HelpCenterScreen = lazy(() => import('./screens/HelpCenterScreen'));
 const ProductionChecklistScreen = lazy(() => import('./screens/ProductionChecklistScreen'));
+const DispatchQueueScreen = lazy(() => import('./screens/DispatchQueueScreen'));
+const OnboardingWizardScreen = lazy(() => import('./screens/OnboardingWizardScreen'));
 
 const makeUuid = () => {
   if (globalThis.crypto?.randomUUID) {
@@ -158,6 +160,10 @@ const headerMap = {
     title: 'Onboarding guiado',
     subtitle: 'Etapas praticas para ativar empresa, integracoes, cobranca automatica e primeira importacao.',
   },
+  'onboarding-wizard': {
+    title: 'Wizard de configuracao',
+    subtitle: 'Configure sua empresa passo a passo — WhatsApp, Drive, mensagens e dispatch sem suporte manual.',
+  },
   importacao: {
     title: 'Importacao OCR',
     subtitle: 'Envie documentos, revise a previa extraida e importe somente as linhas aprovadas para a carteira.',
@@ -242,6 +248,10 @@ const headerMap = {
     title: 'Central Operacional',
     subtitle: 'Monitoramento em tempo real de envios, integracoes, automacoes, alertas e saude do sistema.',
   },
+  'dispatch-queue': {
+    title: 'Fila de Dispatch',
+    subtitle: 'Painel operacional da fila de jobs — progresso, itens, acoes e monitoramento em tempo real.',
+  },
   privacy: {
     title: 'Politica de Privacidade',
     subtitle: 'Conformidade LGPD — tratamento de dados pessoais pelo NC Finance.',
@@ -252,11 +262,12 @@ const headerMap = {
   },
 };
 
-const companyDependentTabs = new Set(['importacao', 'visao-geral', 'historico', 'cobrancas', 'central-cobranca', 'historico-cobranca', 'inconsistencias', 'pronto-envio', 'automacoes', 'integracoes', 'analytics', 'notifications', 'audit', 'production-checklist']);
+const companyDependentTabs = new Set(['importacao', 'visao-geral', 'historico', 'cobrancas', 'central-cobranca', 'historico-cobranca', 'inconsistencias', 'pronto-envio', 'automacoes', 'integracoes', 'analytics', 'notifications', 'audit', 'production-checklist', 'dispatch-queue', 'onboarding-wizard']);
 
 const tabPathMap = {
   dashboard: '/dashboard',
   onboarding: '/onboarding',
+  'onboarding-wizard': '/onboarding-wizard',
   importacao: '/importacao',
   'visao-geral': '/visao-geral',
   historico: '/historico',
@@ -277,6 +288,7 @@ const tabPathMap = {
   planos: '/planos',
   billing: '/billing',
   'admin-saas': '/admin-saas',
+  'dispatch-queue': '/dispatch-queue',
 };
 
 const pathTabMap = Object.fromEntries(Object.entries(tabPathMap).map(([tab, path]) => [path, tab]));
@@ -1535,6 +1547,16 @@ export default function App() {
           />
         );
         break;
+      case 'onboarding-wizard':
+        currentContent = (
+          <OnboardingWizardScreen
+            companyId={currentCompanyId}
+            companyName={currentCompanyName}
+            onToast={showToast}
+            onNavigate={setActiveTab}
+          />
+        );
+        break;
       case 'importacao':
         currentContent = (
           <ImportacaoScreen
@@ -1800,6 +1822,15 @@ export default function App() {
         currentContent = (
           <AdminOpsScreen
             isSystemAdminUser={empresa.isSystemAdmin}
+            onToast={showToast}
+          />
+        );
+        break;
+      case 'dispatch-queue':
+        currentContent = (
+          <DispatchQueueScreen
+            companyId={globalMode ? null : currentCompanyId}
+            globalMode={globalMode}
             onToast={showToast}
           />
         );
