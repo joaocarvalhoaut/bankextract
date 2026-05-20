@@ -223,7 +223,7 @@ async function fetchPendingCharges(supabaseAdmin: AdminClient) {
     .from('cobrancas_whatsapp')
     .select('id, empresa_id, company_id, registro_id, telefone, provider, provider_message_id, status, sent_at, delivered_at, read_at, failed_at, failure_reason, created_at')
     .eq('provider', 'zapi')
-    .in('status', ['sent', 'queued', 'delivered'])
+    .in('status', ['sent', 'sent_pending_provider_id', 'queued', 'delivered'])
     .not('provider_message_id', 'is', null)
     .gte('created_at', since)
     .order('created_at', { ascending: false })

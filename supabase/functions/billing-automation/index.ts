@@ -545,7 +545,48 @@ async function validateZapiConnection(config: {
     'Tempo limite excedido ao validar conexao Z-API.',
   );
 
-  const data = await response.json().catch(() => ({}));
+  const responseText = await response.text().catch(() => '');
+  let data: unknown = {};
+  try {
+    data = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    data = responseText || {};
+  }
+  const responseHeaders = Object.fromEntries(response.headers.entries());
+  const responseRecord = data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
+  const responseData = responseRecord.data && typeof responseRecord.data === 'object'
+    ? responseRecord.data as Record<string, unknown>
+    : {};
+  const responseInner = responseRecord.response && typeof responseRecord.response === 'object'
+    ? responseRecord.response as Record<string, unknown>
+    : {};
+  const responseMessages = Array.isArray(responseRecord.messages)
+    ? responseRecord.messages as Array<Record<string, unknown>>
+    : [];
+  const nestedMessages = Array.isArray(responseData.messages)
+    ? responseData.messages as Array<Record<string, unknown>>
+    : [];
+  const providerIdCandidates = [
+    responseRecord.id,
+    responseRecord.messageId,
+    responseRecord.message_id,
+    responseRecord.zaapId,
+    responseData.id,
+    responseData.messageId,
+    responseInner.id,
+    responseInner.messageId,
+    responseMessages[0]?.id,
+    responseMessages[0]?.messageId,
+    nestedMessages[0]?.id,
+    nestedMessages[0]?.messageId,
+    responseHeaders['x-message-id'] || null,
+    responseHeaders['message-id'] || null,
+    responseHeaders['x-provider-message-id'] || null,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  const providerId = providerIdCandidates[0] || '';
+  const durationMs = Date.now() - requestStartedAt;
   console.log('[ZAPI COMPANY REQUEST]', {
     url: url.replace(/\/token\/[^/]+\//, '/token/****/'),
     ok: response.ok,
@@ -4263,12 +4304,26 @@ async function sendZapiDocument(
   fileName: string,
   base64: string,
 ) {
+  const requestStartedAt = Date.now();
   const instanceId = zapiConfig.instanceId || '';
   const token = zapiConfig.token || '';
   const clientToken = zapiConfig.clientToken || '';
   const documentEndpoint =
     Deno.env.get('ZAPI_DOCUMENT_ENDPOINT') ||
-    (instanceId && token ? `https://api.z-api.io/instances/${instanceId}/token/${token}/send-file-base64` : '');
+    (instanceId && token ? `https://api.z-api.io/instances/${instanceId}/token/${token}/send-document/pdf` : '');
+
+  const requestPayload = {
+    phone,
+    fileName,
+    caption,
+    document_length: base64.length,
+  };
+  const requestBody = {
+    phone,
+    fileName,
+    caption,
+    document: `data:application/pdf;base64,${base64}`,
+  };
 
   if (!instanceId || !token || !clientToken || !documentEndpoint) {
     throw new Error('WhatsApp API não configurada. Defina ZAPI_INSTANCE_ID, ZAPI_TOKEN, ZAPI_CLIENT_TOKEN e, se necessário, ZAPI_DOCUMENT_ENDPOINT.');
@@ -4283,19 +4338,54 @@ async function sendZapiDocument(
           'Client-Token': clientToken,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          phone,
-          fileName,
-          mimeType: 'application/pdf',
-          caption,
-          base64,
-        }),
+        body: JSON.stringify(requestBody),
       }),
     15000,
     'Tempo limite excedido ao enviar documento pela Z-API.',
   );
 
-  const data = await response.json().catch(() => ({}));
+  const responseText = await response.text().catch(() => '');
+  let data: unknown = {};
+  try {
+    data = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    data = responseText || {};
+  }
+  const responseHeaders = Object.fromEntries(response.headers.entries());
+  const responseRecord = data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
+  const responseData = responseRecord.data && typeof responseRecord.data === 'object'
+    ? responseRecord.data as Record<string, unknown>
+    : {};
+  const responseInner = responseRecord.response && typeof responseRecord.response === 'object'
+    ? responseRecord.response as Record<string, unknown>
+    : {};
+  const responseMessages = Array.isArray(responseRecord.messages)
+    ? responseRecord.messages as Array<Record<string, unknown>>
+    : [];
+  const nestedMessages = Array.isArray(responseData.messages)
+    ? responseData.messages as Array<Record<string, unknown>>
+    : [];
+  const providerIdCandidates = [
+    responseRecord.id,
+    responseRecord.messageId,
+    responseRecord.message_id,
+    responseRecord.zaapId,
+    responseData.id,
+    responseData.messageId,
+    responseInner.id,
+    responseInner.messageId,
+    responseMessages[0]?.id,
+    responseMessages[0]?.messageId,
+    nestedMessages[0]?.id,
+    nestedMessages[0]?.messageId,
+    responseHeaders['x-message-id'] || null,
+    responseHeaders['message-id'] || null,
+    responseHeaders['x-provider-message-id'] || null,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  const providerId = providerIdCandidates[0] || '';
+  const durationMs = Date.now() - requestStartedAt;
 
   console.log('[ZAPI COMPANY REQUEST]', {
     source: zapiConfig.source || 'company',
@@ -4311,12 +4401,22 @@ async function sendZapiDocument(
   }
   if (!response.ok) {
     console.error('[ZAPI ERROR]', data);
-    throw new Error(String(data?.message || data?.error || `HTTP ${response.status}`));
+    throw new Error(String(responseRecord.message || responseRecord.error || `HTTP ${response.status}`));
+  }
+  if (!providerId) {
+    throw new Error(`ZAPI_DOCUMENT_NO_PROVIDER_ID: ${JSON.stringify(data)}`);
   }
 
   return {
-    provider_id: String(data?.zaapId || data?.messageId || ''),
+    provider_id: providerId,
     raw: data,
+    request_payload: requestPayload,
+    response_status: response.status,
+    response_headers: responseHeaders,
+    response_body: data,
+    endpoint: documentEndpoint,
+    duration_ms: durationMs,
+    provider_id_candidates: providerIdCandidates,
   };
 }
 
@@ -4595,7 +4695,7 @@ async function findRecentSuccessfulWhatsappCharge(
     .select('id, empresa_id, registro_id, telefone, mensagem, status, zapi_message_id, provider_message_id, created_at')
     .eq('empresa_id', companyId)
     .eq('registro_id', registroId)
-    .in('status', ['queued', 'sent', 'delivered', 'read', 'enviado'])
+    .in('status', ['queued', 'sent', 'sent_pending_provider_id', 'delivered', 'read', 'enviado'])
     .gte('created_at', since)
     .order('created_at', { ascending: false })
     .maybeSingle();
@@ -5442,6 +5542,28 @@ async function processChargeForRecord(
         return { status: 'erro', reason: 'zapi_text_sem_boleto_error' };
       }
       const textProviderId = String(textData?.zaapId || textData?.messageId || '');
+      const initialStatus = textProviderId ? 'sent' : 'queued';
+      const sentAt = textProviderId ? new Date().toISOString() : null;
+      await insertWhatsappCharge(supabaseAdmin, {
+        empresa_id: record.company_id,
+        company_id: record.company_id,
+        registro_id: record.id,
+        telefone: normalizedPhone,
+        mensagem: message,
+        provider: 'zapi',
+        provider_message_id: textProviderId || null,
+        status: initialStatus,
+        sent_at: sentAt,
+        delivered_at: null,
+        read_at: null,
+        failed_at: null,
+        failure_reason: null,
+        simulated: false,
+        force_resend: false,
+        zapi_message_id: textProviderId || null,
+        erro: null,
+        enviado_por: null,
+      });
       await insertLog(supabaseAdmin, {
         financeiro_id: record.id, company_id: record.company_id,
         cliente_nome: clienteEfetivo || record.nome, cliente_numero: record.cliente_numero,
@@ -5455,6 +5577,10 @@ async function processChargeForRecord(
           phone: normalizedPhone,
           message_preview: message,
           sem_boleto: true,
+          sent_at: sentAt,
+          provider_message_id: textProviderId || null,
+          zapi_message_id: textProviderId || null,
+          zapi_raw: textData,
           retry_count: retryCount,
           max_retries: RETRY_MAX_ATTEMPTS,
           previous_log_id: batchCtx?.previousLogId ?? null,
@@ -5553,7 +5679,17 @@ async function processChargeForRecord(
     // Transient errors (timeout, quota, unknown) → fall back to text-only send
   }
 
-  let sendResult: { provider_id: string; raw: unknown };
+  let sendResult: {
+    provider_id: string;
+    raw: unknown;
+    request_payload?: Record<string, unknown>;
+    response_status?: number;
+    response_headers?: Record<string, string>;
+    response_body?: unknown;
+    endpoint?: string;
+    duration_ms?: number;
+    provider_id_candidates?: string[];
+  };
   let pdfAttached = dlResult.ok;
   let attachmentError: string | null = null;
   const sendStartedAt = Date.now();
@@ -5723,6 +5859,25 @@ async function processChargeForRecord(
 
   const sentAt = new Date().toISOString();
   const providerMessageId = sendResult!.provider_id || null;
+  const correlationId = crypto.randomUUID();
+  const providerTrackingStatus = providerMessageId ? 'resolved' : 'pending_webhook';
+  const whatsappStatus = providerMessageId ? 'sent' : 'sent_pending_provider_id';
+  const zapiRequestPayload = sendResult.request_payload || {
+    phone,
+    fileName: pdfFileName,
+    mimeType: pdfAttached ? 'application/pdf' : 'text/plain',
+    caption: message,
+  };
+  const zapiResponsePayload = {
+    status: sendResult.response_status ?? null,
+    headers: sendResult.response_headers || {},
+    body: sendResult.response_body ?? sendResult.raw ?? null,
+    zapi_raw: sendResult.raw ?? null,
+    endpoint: sendResult.endpoint || null,
+    duration_ms: sendResult.duration_ms ?? (Date.now() - sendStartedAt),
+    provider_id_candidates: sendResult.provider_id_candidates || [],
+    pending_provider_id: !providerMessageId,
+  };
 
   await insertWhatsappCharge(supabaseAdmin, {
     empresa_id: record.company_id,
@@ -5732,7 +5887,7 @@ async function processChargeForRecord(
     mensagem: message,
     provider: 'zapi',
     provider_message_id: providerMessageId,
-    status: 'sent',
+    status: whatsappStatus,
     sent_at: sentAt,
     delivered_at: null,
     read_at: null,
@@ -5742,6 +5897,10 @@ async function processChargeForRecord(
     force_resend: false,
     zapi_message_id: providerMessageId,
     erro: null,
+    correlation_id: correlationId,
+    provider_tracking_status: providerTrackingStatus,
+    request_payload: zapiRequestPayload,
+    response_payload: zapiResponsePayload,
   });
 
   const updatePayload: Record<string, unknown> = {
@@ -5786,6 +5945,7 @@ async function processChargeForRecord(
       company_id: record.company_id,
       record_id: record.id,
       provider_message_id: providerMessageId,
+      zapi_raw: sendResult.raw,
       stage: tipo,
       sent_at: sentAt,
       pdf_attachment: pdfAttached,
@@ -5804,6 +5964,15 @@ async function processChargeForRecord(
       // Attachment result
       whatsapp_attachment_sent: pdfAttached,
       whatsapp_attachment_error: attachmentError,
+      zapi_response_status: sendResult.response_status ?? null,
+      zapi_response_headers: sendResult.response_headers || {},
+      zapi_response_body: sendResult.response_body ?? sendResult.raw ?? null,
+      zapi_request_duration_ms: sendResult.duration_ms ?? (Date.now() - sendStartedAt),
+      zapi_endpoint: sendResult.endpoint || null,
+      zapi_provider_id_candidates: sendResult.provider_id_candidates || [],
+      zapi_raw: sendResult.raw ?? null,
+      provider_tracking_status: providerTrackingStatus,
+      correlation_id: correlationId,
       retry_count: retryCount,
       max_retries: RETRY_MAX_ATTEMPTS,
       previous_log_id: batchCtx?.previousLogId ?? null,
@@ -5822,6 +5991,8 @@ async function processChargeForRecord(
     externalReference: providerMessageId,
     metadata: {
       provider_message_id: providerMessageId,
+      provider_tracking_status: providerTrackingStatus,
+      correlation_id: correlationId,
       sent_at: sentAt,
       pdf_attachment: pdfAttached,
     },
@@ -5845,12 +6016,21 @@ async function processChargeForRecord(
       tipo, dias_atraso: diasAtraso, document: record.documento, phone,
       file_id: file.id, file_name: pdfFileName,
       boleto_exact_match: boletoExactMatch,
+      correlation_id: correlationId,
+      endpoint: sendResult.endpoint || null,
+      request_payload: zapiRequestPayload,
     },
     response_payload: {
-      provider_message_id: providerMessageId, sent_at: sentAt,
+      provider_message_id: providerMessageId,
+      provider_tracking_status: providerTrackingStatus,
+      sent_at: sentAt,
       pdf_attached: pdfAttached,
       download_size_bytes: dlResult.sizeBytes,
       attachment_error: attachmentError,
+      response_status: sendResult.response_status ?? null,
+      response_headers: sendResult.response_headers || {},
+      response_body: sendResult.response_body ?? sendResult.raw ?? null,
+      duration_ms: sendResult.duration_ms ?? (Date.now() - sendStartedAt),
     },
   });
 

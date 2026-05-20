@@ -386,7 +386,7 @@ async function sendZapiDocument(
 ) {
   const documentEndpoint =
     String(Deno.env.get('ZAPI_DOCUMENT_ENDPOINT') || '').trim() ||
-    `https://api.z-api.io/instances/${config.instanceId}/token/${config.token}/send-file-base64`;
+    `https://api.z-api.io/instances/${config.instanceId}/token/${config.token}/send-document/pdf`;
 
   let attemptCounter = 0;
   return await withRetry(
@@ -405,9 +405,8 @@ async function sendZapiDocument(
             body: JSON.stringify({
               phone,
               fileName,
-              mimeType: 'application/pdf',
               caption,
-              base64,
+              document: `data:application/pdf;base64,${base64}`,
             }),
           }),
         20000,
@@ -477,7 +476,7 @@ async function findRecentCharge(
     .select('id, status, provider_message_id, created_at')
     .eq('empresa_id', companyId)
     .eq('registro_id', registroId)
-    .in('status', ['queued', 'sent', 'delivered', 'read', 'enviado'])
+    .in('status', ['queued', 'sent', 'sent_pending_provider_id', 'delivered', 'read', 'enviado'])
     .gte('created_at', since)
     .order('created_at', { ascending: false })
     .maybeSingle();

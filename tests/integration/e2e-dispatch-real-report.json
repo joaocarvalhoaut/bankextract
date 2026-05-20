@@ -1,0 +1,160 @@
+{
+  "started_at": "2026-05-19T22:45:04.985Z",
+  "environment": {
+    "supabase_url": "https://hjmknnenbrowzadjcjhl.supabase.co",
+    "company_id": "94aa3163-1e84-4c05-a398-dcef29997c63"
+  },
+  "preflight": {
+    "limits": {
+      "enabled": true,
+      "daily": "95/500",
+      "active_jobs": "0/3"
+    },
+    "scheduler": {
+      "active_jobs": 0
+    },
+    "zapi_original_connected": false,
+    "zapi_instance_id": "3F0B7D969CD752FF47EA16D373312251",
+    "zapi_has_token": true,
+    "zapi_has_client_token": true,
+    "zapi_status": "fixed_connected",
+    "drive_configured": false,
+    "original_allow_without_boleto": false,
+    "drive_folder_id": null,
+    "test_record": {
+      "id": "9035367b-7917-456d-9cbe-02fb00b658d7",
+      "nome": "FRANCISCO FERREIRA MOTA",
+      "documento": "CH01-3",
+      "valor": 5600,
+      "vencimento": "2026-05-10",
+      "status": "vencido",
+      "boleto_status": "pendente",
+      "has_drive_file": false,
+      "boleto_pdf_nome": null,
+      "boleto_match_confidence": null,
+      "original_telefone": "3399137048"
+    }
+  },
+  "phase1": {
+    "phone_override": {
+      "from": "3399137048",
+      "to": "77981376867"
+    },
+    "create_job": {
+      "ok": true,
+      "job_id": "09b0accb-7916-4727-ba8f-bc11e2c287eb",
+      "created_items": 1
+    },
+    "scheduler_tick1": {
+      "ok": true,
+      "processed": [
+        {
+          "job_id": "09b0accb-7916-4727-ba8f-bc11e2c287eb",
+          "company_id": "94aa3163-1e84-4c05-a398-dcef29997c63",
+          "stopped_reason": "completed",
+          "items_processed": 1,
+          "status": "completed"
+        }
+      ]
+    },
+    "direct_batch": {
+      "ok": true,
+      "processed": 0,
+      "stopped_reason": "completed"
+    },
+    "job_final": {
+      "id": "09b0accb-7916-4727-ba8f-bc11e2c287eb",
+      "company_id": "94aa3163-1e84-4c05-a398-dcef29997c63",
+      "created_by": null,
+      "status": "completed",
+      "total_items": 1,
+      "processed_items": 1,
+      "success_count": 0,
+      "error_count": 0,
+      "ignored_count": 1,
+      "current_batch_id": "bc459b58-a1ff-4e24-bf03-9cd5e95be5ea",
+      "started_at": "2026-05-19T22:45:12.687+00:00",
+      "finished_at": "2026-05-19T22:46:50.266+00:00",
+      "created_at": "2026-05-19T22:45:09.97+00:00",
+      "updated_at": "2026-05-19T22:46:50.266+00:00",
+      "avg_ms_per_item": 2,
+      "last_batch_duration_ms": 2,
+      "recommended_batch_size": 25,
+      "heartbeat_at": "2026-05-19T22:45:15.193+00:00",
+      "last_batch_at": "2026-05-19T22:45:10.97+00:00",
+      "worker_version": "etapa9-v1",
+      "stopped_reason": null,
+      "scheduler_runs": 1
+    },
+    "job_items": [
+      {
+        "id": "bddb1229",
+        "status": "ignored",
+        "error_code": null,
+        "attempts": 1,
+        "log_id": "f378d91f-22df-4e2c-8d7b-dbf0834dfde5"
+      }
+    ],
+    "logs_cobranca": [
+      {
+        "id": "f378d91f",
+        "status_envio": "sucesso",
+        "erro": null,
+        "tipo": "manual",
+        "provider_message_id": "3EB02288B0490686801F06",
+        "telefone": null,
+        "boleto_nome": null,
+        "simulate": false
+      }
+    ],
+    "latest_log": {
+      "status_envio": "sucesso",
+      "erro": null,
+      "provider_message_id": "3EB02288B0490686801F06",
+      "telefone": null,
+      "boleto_nome": null,
+      "simulate": false
+    },
+    "whatsapp_sent": true,
+    "provider_message_id": "3EB02288B0490686801F06",
+    "attachment_sent": false,
+    "provider_health": {
+      "state": "healthy",
+      "consecutive_failures": 0,
+      "total_success_24h": 4,
+      "total_error_24h": 1,
+      "last_success_at": "2026-05-19T22:45:13.979+00:00"
+    }
+  },
+  "phase2": {
+    "job_id": "bf643744-3423-40f9-8f45-ebfe7ece020d",
+    "batch_ok": true,
+    "processed": 1,
+    "log_status": "sucesso",
+    "log_error": null,
+    "is_simulated": false,
+    "no_attachment": true
+  },
+  "phase3": {
+    "record_id": "68f6312d-4f5d-43eb-a416-2882ef517fa9",
+    "invalid_phone": "000",
+    "batch_ok": true,
+    "item_status": "ignored",
+    "error_code": null,
+    "attempt_count": 1,
+    "next_retry_at": null,
+    "is_retryable": false
+  },
+  "issues": [
+    "Z-API connected=false — setting connected=true for smoke test",
+    "Google Drive pasta nao configurada — boleto PDF lookup desabilitado",
+    "Phase 2 log status inesperado: sucesso erro=null"
+  ],
+  "corrections": [
+    "Z-API connected set to true for smoke test",
+    "permitir_envio_sem_boleto=true habilitado para smoke (Drive ausente)",
+    "Phone restaurado para retry record: 33988245204"
+  ],
+  "verdict": "PARTIAL",
+  "finished_at": "2026-05-19T22:47:11.660Z"
+}

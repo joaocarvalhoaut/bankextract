@@ -21,6 +21,30 @@ function firstNonEmpty(values: unknown[]) {
   return null;
 }
 
+function normalizeBrazilPhone(raw: unknown) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (!digits) return null;
+  if (digits.startsWith('55') && digits.length >= 12) return digits;
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  return digits;
+}
+
+function extractWebhookPhone(body: Record<string, unknown>, idsEntry: unknown) {
+  const idsRecord = typeof idsEntry === 'object' && idsEntry !== null ? idsEntry as Record<string, unknown> : {};
+  return normalizeBrazilPhone(firstNonEmpty([
+    body.phone,
+    body.to,
+    body.from,
+    body.mobile,
+    body.phoneNumber,
+    body.chatId,
+    body.chatLid,
+    idsRecord.phone,
+    idsRecord.to,
+    idsRecord.from,
+  ]));
+}
+
 function normalizeStatus(value: unknown) {
   const status = String(value || '').trim().toUpperCase();
 
@@ -72,6 +96,7 @@ Deno.serve(async (req) => {
         typeof idsEntry === 'object' && idsEntry !== null ? (idsEntry as Record<string, unknown>).messageId : null,
         typeof idsEntry === 'string' ? idsEntry : null,
       ]);
+    const normalizedPhone = extractWebhookPhone(body, idsEntry);
 
     const status = normalizeStatus(body.status);
 
@@ -88,7 +113,11 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
     const now = new Date().toISOString();
-    const patch: Record<string, unknown> = { status };
+    const patch: Record<string, unknown> = {
+      status,
+      provider_tracking_status: 'resolved',
+      zapi_message_id: providerMessageId,
+    };
 
     if (status === 'sent') {
       patch.sent_at = now;
@@ -104,10 +133,36 @@ Deno.serve(async (req) => {
 
     // Idempotente: update por provider_message_id. Chamadas duplicadas
     // apenas re-aplicam o mesmo status no mesmo registro — sem side effects.
-    await supabaseAdmin
+    const { data: updatedRows } = await supabaseAdmin
       .from('cobrancas_whatsapp')
       .update(patch)
+      .select('id')
       .eq('provider_message_id', providerMessageId);
+
+    if ((!updatedRows || updatedRows.length === 0) && normalizedPhone) {
+      const since = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      const { data: pendingRows } = await supabaseAdmin
+        .from('cobrancas_whatsapp')
+        .select('id')
+        .eq('provider', 'zapi')
+        .eq('telefone', normalizedPhone)
+        .eq('status', 'sent_pending_provider_id')
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .limit(2);
+
+      if ((pendingRows || []).length === 1) {
+        await supabaseAdmin
+          .from('cobrancas_whatsapp')
+          .update({
+            ...patch,
+            provider_message_id: providerMessageId,
+            zapi_message_id: providerMessageId,
+            provider_tracking_status: 'resolved',
+          })
+          .eq('id', pendingRows![0].id);
+      }
+    }
 
     return jsonResponse({ ok: true, received: true });
   } catch {
