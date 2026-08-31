@@ -283,6 +283,30 @@ async function resolveZapiConfig(supabaseAdmin: AdminClient, companyId: string):
     return { mode: 'mock', source: 'mock' };
   }
 
+  const { data: platformData, error: platformError } = await supabaseAdmin
+    .from('platform_integrations')
+    .select('instance_id, token, client_token, connected')
+    .eq('provider', 'zapi')
+    .maybeSingle();
+
+  if (platformError) {
+    throw new Error(platformError.message || 'Falha ao carregar o gateway WhatsApp global.');
+  }
+
+  const platformInstanceId = String(platformData?.instance_id || '').trim();
+  const platformToken = String(platformData?.token || '').trim();
+  const platformClientToken = String(platformData?.client_token || '').trim();
+
+  if (platformInstanceId && platformToken && platformClientToken) {
+    return {
+      mode: 'real',
+      source: 'global',
+      instanceId: platformInstanceId,
+      token: platformToken,
+      clientToken: platformClientToken,
+    };
+  }
+
   const { data, error } = await supabaseAdmin
     .from('company_integrations')
     .select('instance_id, token, client_token, connected')
@@ -450,7 +474,24 @@ async function insertWhatsappTracking(
   supabaseAdmin: AdminClient,
   payload: Record<string, unknown>,
 ) {
-  const { error } = await supabaseAdmin.from('cobrancas_whatsapp').insert(payload);
+  const status = String(payload.status || '').trim().toLowerCase();
+  const providerMessageId = String(payload.provider_message_id || payload.zapi_message_id || '').trim();
+  const providerTrackingStatus = String(payload.provider_tracking_status || '').trim()
+    || (providerMessageId ? 'resolved' : 'pending_webhook');
+  const webhookStatus = String(payload.webhook_status || '').trim()
+    || (
+      ['delivered', 'read'].includes(status)
+        ? 'recebido'
+        : providerTrackingStatus === 'fallback_indisponivel'
+          ? 'fallback_indisponivel'
+          : 'aguardando_evento'
+    );
+
+  const { error } = await supabaseAdmin.from('cobrancas_whatsapp').insert({
+    ...payload,
+    provider_tracking_status: providerTrackingStatus,
+    webhook_status: webhookStatus,
+  });
   if (error) throw new Error(error.message || 'Falha ao registrar tracking WhatsApp.');
 }
 
@@ -1094,6 +1135,11 @@ Deno.serve(async (req: Request) => {
       failed: results.filter((item) => !item.ok).length,
       total: results.length,
     };
+    const duplicateOnlySingle =
+      body.charges.length === 1 &&
+      summary.sent === 0 &&
+      summary.failed === 1 &&
+      results[0]?.duplicate === true;
 
     await safeInsertAudit(supabaseAdmin, {
       company_id: companyId,
@@ -1116,7 +1162,7 @@ Deno.serve(async (req: Request) => {
 
     await logRuntime(runtime, {
       action: 'batch_completed',
-      status: summary.failed > 0 ? 'warning' : 'success',
+      status: duplicateOnlySingle ? 'warning' : (summary.failed > 0 ? 'warning' : 'success'),
       companyId,
       userId: authUser.id,
       metadata: {
@@ -1126,6 +1172,17 @@ Deno.serve(async (req: Request) => {
         mocked: zapiConfig.mode === 'mock',
       },
     });
+
+    if (duplicateOnlySingle) {
+      return errorResponse(runtime, new Error('Esta cobranca ja foi processada recentemente.'), {
+        status: 409,
+        code: 'DUPLICATE_CHARGE',
+        metadata: {
+          company_id: companyId,
+          charge_id: results[0]?.charge_id || null,
+        },
+      });
+    }
 
     return successResponse(runtime, {
       mocked: zapiConfig.mode === 'mock',

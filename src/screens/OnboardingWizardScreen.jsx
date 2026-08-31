@@ -1,505 +1,452 @@
-/**
- * OnboardingWizardScreen.jsx — ETAPA 11
- *
- * Wizard de 7 etapas para configurar uma empresa do zero sem suporte manual.
- * Persiste progresso em onboarding_wizard_progress via onboardingService.
- *
- * Passos:
- *   1. welcome            — Visao geral e boas-vindas
- *   2. connect_whatsapp   — Configurar Z-API (Instance ID + Token)
- *   3. connect_drive      — Configurar Google Drive (pasta de boletos)
- *   4. validate_env       — Validacao automatica do ambiente completo
- *   5. configure_messages — Selecionar preset de tom de mensagens
- *   6. test_dispatch      — Conferir quotas e saude do scheduler
- *   7. complete           — Conclusao com checklist e links
- */
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  BadgeCheck,
   CheckCircle2,
-  ChevronRight,
-  ClipboardCopy,
   ExternalLink,
   FolderOpen,
-  Gauge,
-  HelpCircle,
-  Layers,
   Loader2,
   MessageSquare,
   PartyPopper,
   Rocket,
+  Search,
+  Send,
   ShieldCheck,
-  Smartphone,
   Sparkles,
-  XCircle,
-  Zap,
 } from 'lucide-react';
 import {
   getWizardProgress,
-  saveWizardProgress,
   markWizardComplete,
-  WIZARD_STEPS,
+  saveWizardProgress,
   TEMPLATE_PRESETS,
+  WIZARD_STEPS,
 } from '../services/onboardingService';
 import {
-  getCompanyIntegration,
-  saveCompanyIntegration,
-  validateCompanyIntegration,
-} from '../services/companyIntegrationService';
-import {
-  testDriveConnection,
-  getDriveConfig,
-  saveDriveConfig,
+  getBillingCenter,
   getBillingConfig,
+  getDriveConfig,
+  previewBillingTemplate,
   saveBillingConfig,
-  extractFolderIdFromUrl,
+  saveDriveConfigFull,
+  sendSingleCharge,
+  testBoletoLookup,
+  testDriveConnection,
+  updateFinancialPhone,
 } from '../services/billingAutomationService';
 import {
-  getTenantLimits,
   getProviderHealth,
+  getSchedulerStatus,
+  getTenantLimits,
 } from '../services/dispatchQueueService';
+import {
+  getGlobalWhatsappGateway,
+  getGlobalWhatsappGatewayStatus,
+} from '../services/whatsappGatewayService';
 
-// ── Constantes ──────────────────────────────────────────────────────────────
-
-const STEP_IDS = WIZARD_STEPS.map((s) => s.id);
-
-const TONE_COLORS = {
-  amigavel: 'emerald',
-  neutro:   'blue',
-  firme:    'amber',
-  juridico: 'red',
+const STEP_IDS = WIZARD_STEPS.map((step) => step.id);
+const STEP_CONFIG = {
+  welcome: { icon: Rocket, accent: 'from-blue-500/30 to-cyan-500/10' },
+  connect_drive: { icon: FolderOpen, accent: 'from-amber-500/30 to-orange-500/10' },
+  test_lookup: { icon: Search, accent: 'from-fuchsia-500/30 to-purple-500/10' },
+  configure_messages: { icon: MessageSquare, accent: 'from-violet-500/30 to-blue-500/10' },
+  validate_env: { icon: ShieldCheck, accent: 'from-sky-500/30 to-cyan-500/10' },
+  test_dispatch: { icon: Send, accent: 'from-emerald-500/30 to-lime-500/10' },
+  complete: { icon: PartyPopper, accent: 'from-emerald-500/30 to-cyan-500/10' },
 };
 
-const TONE_BG = {
-  emerald: 'border-emerald-700/60 bg-emerald-900/20',
-  blue:    'border-blue-700/60   bg-blue-900/20',
-  amber:   'border-amber-700/60  bg-amber-900/20',
-  red:     'border-red-700/60    bg-red-900/20',
+const STATUS_TONES = {
+  ok: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  warning: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  error: 'border-red-500/30 bg-red-500/10 text-red-300',
+  info: 'border-blue-500/30 bg-blue-500/10 text-blue-300',
+  idle: 'border-slate-700 bg-slate-800/50 text-slate-300',
 };
 
-const TONE_BADGE = {
-  emerald: 'bg-emerald-900/40 text-emerald-300',
-  blue:    'bg-blue-900/40   text-blue-300',
-  amber:   'bg-amber-900/40  text-amber-300',
-  red:     'bg-red-900/40    text-red-300',
-};
+function normalizePhone(value) {
+  const digits = String(value || '').replace(/\D+/g, '');
+  if (!digits) return '';
+  return digits.startsWith('55') ? digits : `55${digits}`;
+}
 
-// ── Sub-componentes utilitários ──────────────────────────────────────────────
+function extractDriveFolderIdLocal(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const match = raw.match(/folders\/([a-zA-Z0-9_-]+)/);
+  if (match?.[1]) return match[1];
+  return raw;
+}
 
-function StepIndicator({ steps, currentIndex, completedSteps }) {
+function pickTestRecord(items = []) {
+  const rows = Array.isArray(items) ? items : [];
   return (
-    <div className="flex items-center gap-0">
-      {steps.map((step, idx) => {
-        const done = completedSteps.includes(step.id);
-        const active = idx === currentIndex;
-        const reachable = idx <= currentIndex || done;
+    rows.find((item) => item?.boleto_encontrado && (item?.telefone || item?.cliente_numero)) ||
+    rows.find((item) => item?.telefone || item?.cliente_numero) ||
+    rows[0] ||
+    null
+  );
+}
+
+function prettyNumber(value) {
+  const num = Number(value || 0);
+  if (!Number.isFinite(num)) return '0';
+  return new Intl.NumberFormat('pt-BR').format(num);
+}
+
+function Stepper({ currentStepIndex, completedSteps, onJump }) {
+  return (
+    <div className="grid gap-3 lg:grid-cols-7">
+      {WIZARD_STEPS.map((step, index) => {
+        const Icon = STEP_CONFIG[step.id]?.icon || Sparkles;
+        const isCurrent = index === currentStepIndex;
+        const isDone = completedSteps.includes(step.id);
+        const isReachable = index <= currentStepIndex || isDone;
 
         return (
-          <div key={step.id} className="flex items-center">
-            <div
-              className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-all
-                ${done
-                  ? 'bg-emerald-600 text-white'
-                  : active
-                    ? 'ring-2 ring-blue-500 bg-blue-600 text-white'
-                    : reachable
-                      ? 'bg-slate-700 text-slate-300'
-                      : 'bg-slate-800 text-slate-600'
-                }
-              `}
-              title={step.title}
-            >
-              {done ? <CheckCircle2 size={14} /> : idx + 1}
+          <button
+            key={step.id}
+            type="button"
+            onClick={() => isReachable && onJump(index)}
+            className={`group rounded-2xl border px-4 py-3 text-left transition ${
+              isCurrent
+                ? 'border-blue-500/50 bg-blue-500/10 shadow-lg shadow-blue-500/10'
+                : isDone
+                  ? 'border-emerald-500/40 bg-emerald-500/10'
+                  : 'border-slate-700 bg-slate-900/70'
+            } ${isReachable ? 'hover:border-slate-500' : 'opacity-60'}`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`flex h-9 w-9 items-center justify-center rounded-2xl ${
+                isDone
+                  ? 'bg-emerald-500 text-white'
+                  : isCurrent
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-slate-800 text-slate-400'
+              }`}>
+                {isDone ? <CheckCircle2 size={16} /> : <Icon size={16} />}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Etapa {index + 1}</p>
+                <p className="truncate text-sm font-semibold text-slate-100">{step.title}</p>
+              </div>
             </div>
-            {idx < steps.length - 1 && (
-              <div
-                className={`h-0.5 w-6 transition-colors
-                  ${done ? 'bg-emerald-600' : 'bg-slate-700'}
-                `}
-              />
-            )}
-          </div>
+          </button>
         );
       })}
     </div>
   );
 }
 
-function ValidationRow({ label, status, detail }) {
+function StatusPill({ tone = 'idle', children }) {
+  return <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${STATUS_TONES[tone]}`}>{children}</span>;
+}
+
+function InfoCard({ title, value, detail, tone = 'idle' }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3">
-      <span className="text-sm font-medium text-slate-200">{label}</span>
-      <div className="flex items-center gap-2 text-xs">
-        {status === 'pending'  && <Loader2 size={14} className="animate-spin text-blue-400" />}
-        {status === 'ok'       && <CheckCircle2 size={14} className="text-emerald-400" />}
-        {status === 'error'    && <XCircle size={14} className="text-red-400" />}
-        {status === 'skip'     && <HelpCircle size={14} className="text-slate-500" />}
-        <span className={
-          status === 'ok'    ? 'text-emerald-400' :
-          status === 'error' ? 'text-red-400'     :
-          status === 'skip'  ? 'text-slate-500'   :
-          'text-blue-400'
-        }>
-          {detail || (status === 'pending' ? 'Verificando...' : status === 'skip' ? 'Nao configurado' : '')}
-        </span>
-      </div>
+    <div className={`rounded-2xl border px-4 py-4 ${STATUS_TONES[tone]}`}>
+      <p className="text-[11px] uppercase tracking-[0.18em] opacity-75">{title}</p>
+      <p className="mt-2 text-lg font-semibold">{value}</p>
+      {detail ? <p className="mt-1 text-xs opacity-80">{detail}</p> : null}
     </div>
   );
 }
 
-function QuotaMiniMeter({ label, used, limit }) {
-  const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
-  const tone = pct >= 100 ? 'red' : pct >= 80 ? 'amber' : 'emerald';
-  const barClass = tone === 'red' ? 'bg-red-500' : tone === 'amber' ? 'bg-amber-500' : 'bg-emerald-500';
+function Field({ label, hint, children }) {
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-xs text-slate-400">
-        <span>{label}</span>
-        <span className={tone === 'red' ? 'text-red-400' : tone === 'amber' ? 'text-amber-400' : 'text-slate-300'}>
-          {used}/{limit}
-        </span>
-      </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-700">
-        <div className={`h-full rounded-full transition-all ${barClass}`} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
+    <label className="block space-y-1.5">
+      <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</span>
+      {children}
+      {hint ? <p className="text-[11px] text-slate-500">{hint}</p> : null}
+    </label>
   );
 }
 
-function FieldInput({ label, value, onChange, placeholder, type = 'text', hint }) {
+function BaseInput(props) {
   return (
-    <div className="space-y-1.5">
-      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600/30"
-      />
-      {hint && <p className="text-[11px] text-slate-500">{hint}</p>}
-    </div>
+    <input
+      {...props}
+      className={`w-full rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-60 ${props.className || ''}`}
+    />
   );
 }
 
-// ── Componente principal ─────────────────────────────────────────────────────
+function BaseButton({ tone = 'default', className = '', ...props }) {
+  const toneClass =
+    tone === 'primary'
+      ? 'bg-blue-600 text-white hover:bg-blue-500'
+      : tone === 'success'
+        ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+        : tone === 'warning'
+          ? 'bg-amber-500 text-slate-950 hover:bg-amber-400'
+          : 'border border-slate-700 bg-slate-900/70 text-slate-100 hover:bg-slate-800/70';
+
+  return (
+    <button
+      {...props}
+      className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${toneClass} ${className}`}
+    />
+  );
+}
 
 export default function OnboardingWizardScreen({ companyId, companyName, onToast, onNavigate }) {
-  // ── State ──
+  const [loadingWizard, setLoadingWizard] = useState(true);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [completedSteps, setCompletedSteps] = useState([]);
   const [wizardMetadata, setWizardMetadata] = useState({});
-  const [loadingWizard, setLoadingWizard] = useState(true);
-  const [savingProgress, setSavingProgress] = useState(false);
 
-  // Z-API step state
-  const [zapiInstanceId, setZapiInstanceId] = useState('');
-  const [zapiToken, setZapiToken] = useState('');
-  const [zapiTesting, setZapiTesting] = useState(false);
-  const [zapiResult, setZapiResult] = useState(null); // null | 'ok' | 'error'
-  const [zapiError, setZapiError] = useState('');
-
-  // Drive step state
   const [driveFolderUrl, setDriveFolderUrl] = useState('');
+  const [driveStatus, setDriveStatus] = useState(null);
   const [driveTesting, setDriveTesting] = useState(false);
-  const [driveResult, setDriveResult] = useState(null);
-  const [driveError, setDriveError] = useState('');
 
-  // Validate env step state
-  const [validating, setValidating] = useState(false);
-  const [validationResults, setValidationResults] = useState({
-    zapi:  { status: 'skip', detail: '' },
-    drive: { status: 'skip', detail: '' },
-    quota: { status: 'skip', detail: '' },
+  const [lookupQuery, setLookupQuery] = useState('');
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupResult, setLookupResult] = useState(null);
+
+  const [selectedPreset, setSelectedPreset] = useState('');
+  const [messagePreview, setMessagePreview] = useState('');
+  const [messagePreviewLoading, setMessagePreviewLoading] = useState(false);
+  const [messageSaving, setMessageSaving] = useState(false);
+
+  const [envLoading, setEnvLoading] = useState(false);
+  const [envStatus, setEnvStatus] = useState({
+    gateway: { status: 'idle', detail: 'Pendente' },
+    drive: { status: 'idle', detail: 'Pendente' },
+    scheduler: { status: 'idle', detail: 'Pendente' },
+    dispatch: { status: 'idle', detail: 'Pendente' },
+    provider: { status: 'idle', detail: 'Pendente' },
+    cron: { status: 'idle', detail: 'Pendente' },
+    quotas: { status: 'idle', detail: 'Pendente' },
   });
-  const [allValidationsPassed, setAllValidationsPassed] = useState(false);
 
-  // Message presets step state
-  const [selectedPreset, setSelectedPreset] = useState(null);
-  const [previewPresetId, setPreviewPresetId] = useState(null);
-  const [savingPreset, setSavingPreset] = useState(false);
+  const [testPhone, setTestPhone] = useState('5577981376867');
+  const [testRecord, setTestRecord] = useState(null);
+  const [testDispatchLoading, setTestDispatchLoading] = useState(false);
+  const [testDispatchResult, setTestDispatchResult] = useState(null);
 
-  // Test dispatch step state
-  const [tenantLimits, setTenantLimits] = useState(null);
-  const [quotaUsage, setQuotaUsage]     = useState(null);
-  const [providerHealth, setProviderHealth] = useState(null);
-  const [dispatchLoading, setDispatchLoading] = useState(false);
+  const autoAdvanceRef = useRef('');
+  const currentStepId = STEP_IDS[currentStepIndex];
 
-  const saveTimerRef = useRef(null);
+  const updateMetadata = useCallback((patch = {}) => {
+    setWizardMetadata((current) => ({ ...current, ...patch }));
+  }, []);
 
-  // ── Load saved progress on mount ───────────────────────────────────────────
+  const markStepCompleted = useCallback((stepId, metadata = {}) => {
+    setCompletedSteps((current) => (current.includes(stepId) ? current : [...current, stepId]));
+    if (Object.keys(metadata).length) {
+      updateMetadata(metadata);
+    }
+  }, [updateMetadata]);
+
+  const advanceStep = useCallback(async () => {
+    if (currentStepIndex >= STEP_IDS.length - 1) return;
+    const nextIndex = Math.min(STEP_IDS.length - 1, currentStepIndex + 1);
+    setCurrentStepIndex(nextIndex);
+
+    if (nextIndex === STEP_IDS.length - 1) {
+      const metadata = {
+        ...wizardMetadata,
+        setup_completed_at: wizardMetadata.setup_completed_at || new Date().toISOString(),
+      };
+      setWizardMetadata(metadata);
+      await markWizardComplete(companyId, metadata);
+    }
+  }, [companyId, currentStepIndex, wizardMetadata]);
+
+  const goBack = useCallback(() => {
+    setCurrentStepIndex((current) => Math.max(0, current - 1));
+  }, []);
+
   useEffect(() => {
     if (!companyId) {
       setLoadingWizard(false);
       return;
     }
 
-    let alive = true;
+    let active = true;
     setLoadingWizard(true);
 
     Promise.all([
-      getWizardProgress(companyId),
-      getCompanyIntegration(companyId, 'zapi').catch(() => null),
+      getWizardProgress(companyId).catch(() => null),
       getDriveConfig(companyId).catch(() => null),
       getBillingConfig(companyId).catch(() => null),
-    ]).then(([progress, zapiIntegration, driveConfig, billingConfig]) => {
-      if (!alive) return;
+      getBillingCenter(companyId).catch(() => null),
+    ])
+      .then(async ([savedWizard, driveConfig, billingConfig, billingCenter]) => {
+        if (!active) return;
 
-      // Restore wizard state
-      if (progress?.current_step) {
-        const savedIdx = STEP_IDS.indexOf(progress.current_step);
-        if (savedIdx >= 0) setCurrentStepIndex(savedIdx);
-      }
-      if (Array.isArray(progress?.completed_steps)) {
-        setCompletedSteps(progress.completed_steps);
-      }
-      if (progress?.metadata) {
-        setWizardMetadata(progress.metadata);
-      }
+        const nextCompleted = Array.isArray(savedWizard?.completed_steps) ? savedWizard.completed_steps : [];
+        const nextMetadata = savedWizard?.metadata || {};
+        const currentStep = String(savedWizard?.current_step || 'welcome');
+        const stepIndex = Math.max(0, STEP_IDS.indexOf(currentStep));
 
-      // Pre-fill Z-API fields if already configured
-      if (zapiIntegration?.instance_id) setZapiInstanceId(zapiIntegration.instance_id);
-      if (zapiIntegration?.connected) setZapiResult('ok');
+        setCompletedSteps(nextCompleted.filter((stepId) => STEP_IDS.includes(stepId)));
+        setWizardMetadata(nextMetadata);
+        setCurrentStepIndex(stepIndex >= 0 ? stepIndex : 0);
 
-      // Pre-fill Drive field if already configured
-      if (driveConfig?.folder_id) {
-        setDriveFolderUrl(driveConfig.folder_id);
-        setDriveResult('ok');
-      }
+        const folderUrl = driveConfig?.drive_root_folder_url || driveConfig?.drive_root_folder_id || '';
+        setDriveFolderUrl(folderUrl);
+        if (driveConfig?.drive_root_folder_id) {
+          setDriveStatus({
+            ok: true,
+            folder_name: driveConfig?.drive_folder_name || 'Configurado',
+            pdf_count: driveConfig?.pdf_count || 0,
+            subfolders_found: driveConfig?.subfolders_found || 0,
+            recursive_enabled: driveConfig?.drive_recursive_scan !== false,
+            matching_strategy: driveConfig?.drive_matching_strategy || 'auto',
+            max_depth: driveConfig?.drive_max_depth ?? 2,
+            service_account_email: driveConfig?.service_account_email || '',
+          });
+        }
 
-      // Restore selected preset
-      if (billingConfig?.preset_id) setSelectedPreset(billingConfig.preset_id);
+        const presetId = billingConfig?.billing_rules?.preset_id || billingConfig?.preset_id || nextMetadata?.billing_preset_id || '';
+        if (presetId) {
+          setSelectedPreset(presetId);
+        }
 
-    }).catch((err) => {
-      if (!alive) return;
-      console.warn('[OnboardingWizard] load progress error:', err.message);
-    }).finally(() => {
-      if (alive) setLoadingWizard(false);
-    });
+        const pickedRecord = pickTestRecord(billingCenter?.registros || billingCenter?.items || []);
+        setTestRecord(pickedRecord);
+        if (pickedRecord && !lookupQuery) {
+          setLookupQuery(
+            String(
+              pickedRecord.documento ||
+              pickedRecord.numero_boleto ||
+              pickedRecord.numero_nf ||
+              pickedRecord.cliente_nome ||
+              pickedRecord.nome ||
+              ''
+            ).trim()
+          );
+        }
 
-    return () => { alive = false; };
-  }, [companyId]);
-
-  // ── Load dispatch data when on step 5 ─────────────────────────────────────
-  useEffect(() => {
-    if (STEP_IDS[currentStepIndex] !== 'test_dispatch') return;
-    if (!companyId) return;
-
-    let alive = true;
-    setDispatchLoading(true);
-
-    Promise.all([
-      getTenantLimits(companyId).catch(() => null),
-      getProviderHealth(companyId).catch(() => null),
-    ]).then(([limits, health]) => {
-      if (!alive) return;
-      if (limits?.limits) setTenantLimits(limits.limits);
-      if (limits?.usage)  setQuotaUsage(limits.usage);
-      setProviderHealth(health);
-    }).finally(() => {
-      if (alive) setDispatchLoading(false);
-    });
-
-    return () => { alive = false; };
-  }, [companyId, currentStepIndex]);
-
-  // ── Persist progress (debounced) ───────────────────────────────────────────
-  const persistProgress = useCallback((stepIdx, completed, meta) => {
-    if (!companyId) return;
-    clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      saveWizardProgress(companyId, STEP_IDS[stepIdx], completed, meta).catch(() => {});
-    }, 600);
-  }, [companyId]);
-
-  // ── Navigation ──────────────────────────────────────────────────────────────
-  const advanceStep = useCallback(async () => {
-    const currentId = STEP_IDS[currentStepIndex];
-    const nextIdx = currentStepIndex + 1;
-    const nextCompletedSteps = completedSteps.includes(currentId)
-      ? completedSteps
-      : [...completedSteps, currentId];
-
-    setSavingProgress(true);
-    try {
-      if (nextIdx >= STEP_IDS.length) {
-        await markWizardComplete(companyId, wizardMetadata);
-        setCompletedSteps(WIZARD_STEPS.map((s) => s.id));
-        setCurrentStepIndex(STEP_IDS.length - 1);
-        onToast?.('sucesso', 'Wizard de onboarding concluido!');
-        return;
-      }
-      setCompletedSteps(nextCompletedSteps);
-      setCurrentStepIndex(nextIdx);
-      persistProgress(nextIdx, nextCompletedSteps, wizardMetadata);
-    } catch (err) {
-      onToast?.('erro', err.message || 'Falha ao salvar progresso.');
-    } finally {
-      setSavingProgress(false);
-    }
-  }, [companyId, completedSteps, currentStepIndex, persistProgress, wizardMetadata, onToast]);
-
-  const goBack = useCallback(() => {
-    if (currentStepIndex > 0) {
-      const prevIdx = currentStepIndex - 1;
-      setCurrentStepIndex(prevIdx);
-      persistProgress(prevIdx, completedSteps, wizardMetadata);
-    }
-  }, [completedSteps, currentStepIndex, persistProgress, wizardMetadata]);
-
-  // ── Z-API test ─────────────────────────────────────────────────────────────
-  const handleTestZapi = useCallback(async () => {
-    if (!zapiInstanceId.trim() || !zapiToken.trim()) {
-      setZapiError('Preencha o Instance ID e o Token antes de testar.');
-      return;
-    }
-
-    setZapiTesting(true);
-    setZapiResult(null);
-    setZapiError('');
-
-    try {
-      await saveCompanyIntegration(companyId, {
-        instance_id: zapiInstanceId.trim(),
-        token: zapiToken.trim(),
-      }, 'zapi');
-
-      await validateCompanyIntegration(companyId, {
-        instance_id: zapiInstanceId.trim(),
-        token: zapiToken.trim(),
+        const preset = TEMPLATE_PRESETS.find((item) => item.id === presetId);
+        if (preset && pickedRecord) {
+          setMessagePreviewLoading(true);
+          try {
+            const preview = await previewBillingTemplate(companyId, preset.template_atraso, pickedRecord);
+            if (active) {
+              setMessagePreview(preview?.message || preview?.preview || '');
+            }
+          } catch {
+            if (active) {
+              setMessagePreview(preset.template_atraso);
+            }
+          } finally {
+            if (active) {
+              setMessagePreviewLoading(false);
+            }
+          }
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoadingWizard(false);
+        }
       });
 
-      setZapiResult('ok');
-      setWizardMetadata((prev) => ({ ...prev, zapi_connected: true, zapi_instance: zapiInstanceId.trim() }));
-      onToast?.('sucesso', 'WhatsApp Z-API conectado com sucesso!');
-    } catch (err) {
-      setZapiResult('error');
-      setZapiError(err.message || 'Falha na conexao com Z-API.');
-    } finally {
-      setZapiTesting(false);
-    }
-  }, [companyId, zapiInstanceId, zapiToken, onToast]);
+    return () => {
+      active = false;
+    };
+  }, [companyId, lookupQuery]);
 
-  // ── Drive test ────────────────────────────────────────────────────────────
-  const handleTestDrive = useCallback(async () => {
-    if (!driveFolderUrl.trim()) {
-      setDriveError('Informe a URL ou ID da pasta do Google Drive.');
+  useEffect(() => {
+    if (loadingWizard || !companyId || !currentStepId) return;
+    saveWizardProgress(companyId, currentStepId, completedSteps, wizardMetadata).catch(() => {});
+  }, [companyId, completedSteps, currentStepId, loadingWizard, wizardMetadata]);
+
+  useEffect(() => {
+    const autoAdvanceMap = {
+      connect_drive: Boolean(driveStatus?.ok),
+      test_lookup: Boolean(lookupResult?.results?.length),
+      configure_messages: Boolean(selectedPreset),
+      test_dispatch: Boolean(testDispatchResult?.success),
+    };
+
+    if (!autoAdvanceMap[currentStepId]) return;
+    if (autoAdvanceRef.current === currentStepId) return;
+
+    autoAdvanceRef.current = currentStepId;
+    const timer = window.setTimeout(() => {
+      advanceStep().catch((error) => onToast?.('erro', error.message || 'Falha ao avancar no wizard.'));
+    }, 800);
+
+    return () => window.clearTimeout(timer);
+  }, [advanceStep, currentStepId, driveStatus?.ok, lookupResult?.results?.length, onToast, selectedPreset, testDispatchResult?.success]);
+
+  const handleValidateDrive = useCallback(async () => {
+    const folderId = extractDriveFolderIdLocal(driveFolderUrl);
+    if (!folderId) {
+      onToast?.('erro', 'Cole a URL ou o ID da pasta raiz do Google Drive.');
       return;
     }
 
     setDriveTesting(true);
-    setDriveResult(null);
-    setDriveError('');
-
     try {
-      // Try to extract folder ID from URL first
-      let folderId = driveFolderUrl.trim();
-      try {
-        const extracted = await extractFolderIdFromUrl(companyId, driveFolderUrl.trim());
-        if (extracted?.folder_id) folderId = extracted.folder_id;
-      } catch {
-        // If extraction fails, use raw value — might already be an ID
-      }
-
-      await saveDriveConfig(companyId, folderId);
-      await testDriveConnection(companyId);
-
-      setDriveResult('ok');
-      setWizardMetadata((prev) => ({ ...prev, drive_connected: true, drive_folder_id: folderId }));
-      onToast?.('sucesso', 'Google Drive conectado com sucesso!');
-    } catch (err) {
-      setDriveResult('error');
-      setDriveError(err.message || 'Falha ao conectar com o Google Drive.');
+      await saveDriveConfigFull(companyId, {
+        drive_root_folder_id: folderId,
+        drive_recursive_scan: true,
+        drive_matching_strategy: 'auto',
+        drive_max_depth: 2,
+      });
+      const result = await testDriveConnection(companyId);
+      const nextStatus = {
+        ok: true,
+        folder_name: result?.folder_name || 'Pasta validada',
+        pdf_count: result?.quantidade_arquivos_pdf || 0,
+        subfolders_found: result?.subfolders_found || 0,
+        recursive_enabled: true,
+        matching_strategy: 'auto',
+        max_depth: 2,
+        service_account_email: result?.service_account_email || '',
+      };
+      setDriveStatus(nextStatus);
+      markStepCompleted('connect_drive', {
+        drive_connected: true,
+        drive_folder_id: folderId,
+        drive_validated_at: new Date().toISOString(),
+      });
+      onToast?.('sucesso', 'Google Drive validado e salvo com sucesso.');
+    } catch (error) {
+      setDriveStatus({
+        ok: false,
+        error: error.message || 'Falha ao validar o Google Drive.',
+      });
+      onToast?.('erro', error.message || 'Falha ao validar o Google Drive.');
     } finally {
       setDriveTesting(false);
     }
-  }, [companyId, driveFolderUrl, onToast]);
+  }, [companyId, driveFolderUrl, markStepCompleted, onToast]);
 
-  // ── Validate environment ───────────────────────────────────────────────────
-  const handleValidateAll = useCallback(async () => {
-    setValidating(true);
-    setAllValidationsPassed(false);
-    setValidationResults({
-      zapi:  { status: 'pending', detail: 'Verificando...' },
-      drive: { status: 'pending', detail: 'Verificando...' },
-      quota: { status: 'pending', detail: 'Verificando...' },
-    });
-
-    const results = { zapi: {}, drive: {}, quota: {} };
-
-    // Z-API
-    try {
-      const zapiIntegration = await getCompanyIntegration(companyId, 'zapi');
-      if (!zapiIntegration?.connected && !zapiIntegration?.instance_id) {
-        results.zapi = { status: 'skip', detail: 'Nao configurado — volte ao passo 2.' };
-      } else {
-        await validateCompanyIntegration(companyId, {
-          instance_id: zapiIntegration?.instance_id || '',
-          token: zapiIntegration?.token || '',
-        });
-        results.zapi = { status: 'ok', detail: 'Conexao ativa' };
-      }
-    } catch (err) {
-      results.zapi = { status: 'error', detail: err.message || 'Falha Z-API' };
+  const handleLookup = useCallback(async () => {
+    const query = String(lookupQuery || '').trim();
+    if (!query) {
+      onToast?.('erro', 'Informe um termo para testar a busca de boleto.');
+      return;
     }
 
-    setValidationResults((prev) => ({ ...prev, zapi: results.zapi }));
-
-    // Google Drive
+    setLookupLoading(true);
     try {
-      const driveConfig = await getDriveConfig(companyId);
-      if (!driveConfig?.folder_id) {
-        results.drive = { status: 'skip', detail: 'Nao configurado — volte ao passo 3.' };
-      } else {
-        await testDriveConnection(companyId);
-        results.drive = { status: 'ok', detail: 'Acesso confirmado' };
-      }
-    } catch (err) {
-      results.drive = { status: 'error', detail: err.message || 'Falha Drive' };
+      const result = await testBoletoLookup(companyId, query);
+      setLookupResult(result);
+      markStepCompleted('test_lookup', {
+        lookup_validated: true,
+        lookup_strategy: result?.strategy || result?.match_origin || null,
+        lookup_exact_match: Boolean(result?.exact_match),
+      });
+      onToast?.('sucesso', result?.exact_match ? 'Lookup validado com exact match.' : 'Lookup executado com sucesso.');
+    } catch (error) {
+      setLookupResult({ error: error.message || 'Falha ao testar o lookup.' });
+      onToast?.('erro', error.message || 'Falha ao testar o lookup.');
+    } finally {
+      setLookupLoading(false);
     }
+  }, [companyId, lookupQuery, markStepCompleted, onToast]);
 
-    setValidationResults((prev) => ({ ...prev, drive: results.drive }));
-
-    // Quota
-    try {
-      const limitsData = await getTenantLimits(companyId);
-      const enabled = limitsData?.limits?.enabled !== false;
-      const usage = limitsData?.usage;
-      const msg = enabled
-        ? `${usage?.daily_messages ?? 0}/${limitsData?.limits?.max_daily_messages ?? 500} msgs/dia`
-        : 'Empresa suspensa';
-      results.quota = {
-        status: enabled ? 'ok' : 'error',
-        detail: msg,
-      };
-    } catch (err) {
-      results.quota = { status: 'error', detail: err.message || 'Falha quota' };
-    }
-
-    setValidationResults((prev) => ({ ...prev, quota: results.quota }));
-
-    const passed = (
-      (results.zapi.status  === 'ok' || results.zapi.status  === 'skip') &&
-      (results.drive.status === 'ok' || results.drive.status === 'skip') &&
-       results.quota.status === 'ok'
-    );
-
-    setAllValidationsPassed(passed);
-    setWizardMetadata((prev) => ({ ...prev, validation_passed: passed, validation_at: new Date().toISOString() }));
-    setValidating(false);
-  }, [companyId]);
-
-  // ── Save preset ────────────────────────────────────────────────────────────
   const handleSelectPreset = useCallback(async (presetId) => {
-    setSelectedPreset(presetId);
-    const preset = TEMPLATE_PRESETS.find((p) => p.id === presetId);
+    const preset = TEMPLATE_PRESETS.find((item) => item.id === presetId);
     if (!preset) return;
 
-    setSavingPreset(true);
+    setSelectedPreset(presetId);
+    setMessageSaving(true);
     try {
       await saveBillingConfig(companyId, {
         preset_id: presetId,
@@ -508,543 +455,545 @@ export default function OnboardingWizardScreen({ companyId, companyName, onToast
         template_vencimento: preset.template_vencimento,
         template_atraso: preset.template_atraso,
       });
-      setWizardMetadata((prev) => ({ ...prev, preset_id: presetId }));
-      onToast?.('sucesso', `Preset "${preset.label}" aplicado.`);
-    } catch (err) {
-      onToast?.('erro', err.message || 'Falha ao salvar preset.');
+
+      if (testRecord) {
+        setMessagePreviewLoading(true);
+        try {
+          const preview = await previewBillingTemplate(companyId, preset.template_atraso, testRecord);
+          setMessagePreview(preview?.message || preview?.preview || preset.template_atraso);
+        } finally {
+          setMessagePreviewLoading(false);
+        }
+      } else {
+        setMessagePreview(preset.template_atraso);
+      }
+
+      markStepCompleted('configure_messages', {
+        messages_configured: true,
+        billing_preset_id: presetId,
+      });
+      onToast?.('sucesso', `Mensagens configuradas no tom ${preset.label}.`);
+    } catch (error) {
+      onToast?.('erro', error.message || 'Falha ao salvar o preset de mensagens.');
     } finally {
-      setSavingPreset(false);
+      setMessageSaving(false);
     }
-  }, [companyId, onToast]);
+  }, [companyId, markStepCompleted, onToast, testRecord]);
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  const copyToClipboard = useCallback(async (text) => {
+  const handleValidateEnvironment = useCallback(async () => {
+    setEnvLoading(true);
+    const next = {
+      gateway: { status: 'idle', detail: 'Pendente' },
+      drive: { status: 'idle', detail: 'Pendente' },
+      scheduler: { status: 'idle', detail: 'Pendente' },
+      dispatch: { status: 'idle', detail: 'Pendente' },
+      provider: { status: 'idle', detail: 'Pendente' },
+      cron: { status: 'idle', detail: 'Pendente' },
+      quotas: { status: 'idle', detail: 'Pendente' },
+    };
+
     try {
-      await navigator.clipboard.writeText(text);
-      onToast?.('sucesso', 'Copiado para a area de transferencia.');
-    } catch {
-      onToast?.('aviso', 'Nao foi possivel copiar. Copie manualmente.');
-    }
-  }, [onToast]);
+      const [gatewayConfig, driveResult, schedulerStatus, tenantLimits, providerHealth] = await Promise.all([
+        getGlobalWhatsappGateway().catch(() => null),
+        testDriveConnection(companyId).catch(() => null),
+        getSchedulerStatus().catch(() => null),
+        getTenantLimits(companyId).catch(() => null),
+        getProviderHealth(companyId).catch(() => null),
+      ]);
 
-  // ── Can advance check ──────────────────────────────────────────────────────
-  const canAdvance = useCallback(() => {
-    const stepId = STEP_IDS[currentStepIndex];
-    if (stepId === 'connect_whatsapp') {
-      // Allow advancing even without testing — user may skip
-      return true;
-    }
-    if (stepId === 'connect_drive') {
-      return true; // Skip allowed
-    }
-    if (stepId === 'validate_env') {
-      return allValidationsPassed;
-    }
-    if (stepId === 'configure_messages') {
-      return Boolean(selectedPreset);
-    }
-    return true;
-  }, [currentStepIndex, allValidationsPassed, selectedPreset]);
+      let gatewayStatus = null;
+      if (gatewayConfig?.instance_id && gatewayConfig?.token && gatewayConfig?.client_token) {
+        gatewayStatus = await getGlobalWhatsappGatewayStatus(gatewayConfig).catch(() => null);
+      }
 
-  // ── Render loading ─────────────────────────────────────────────────────────
+      next.gateway = gatewayStatus?.connected
+        ? {
+            status: gatewayStatus.connected_pending_phone ? 'warning' : 'ok',
+            detail: gatewayStatus.connected_pending_phone
+              ? 'Gateway global conectado, aguardando numero'
+              : 'Gateway global conectado e operacional',
+          }
+        : gatewayConfig?.instance_id
+          ? { status: 'warning', detail: 'Credenciais globais salvas, mas o gateway ainda nao esta conectado' }
+          : { status: 'warning', detail: 'Gateway WhatsApp global ainda nao configurado no Admin Ops' };
+
+      next.drive = driveResult
+        ? { status: 'ok', detail: `${prettyNumber(driveResult?.quantidade_arquivos_pdf || 0)} PDFs encontrados` }
+        : { status: 'error', detail: 'Drive nao validado' };
+
+      next.scheduler = schedulerStatus?.worker_online
+        ? { status: 'ok', detail: `Worker online${schedulerStatus?.active_jobs ? ` - ${schedulerStatus.active_jobs} job(s)` : ''}` }
+        : { status: 'warning', detail: 'Worker sem sinal online recente' };
+
+      next.dispatch = tenantLimits?.limits?.enabled !== false
+        ? { status: 'ok', detail: `Batch max ${tenantLimits?.limits?.max_batch_size ?? 20}` }
+        : { status: 'warning', detail: 'Dispatch pausado para este tenant' };
+
+      next.provider = providerHealth
+        ? { status: providerHealth?.status === 'healthy' ? 'ok' : 'warning', detail: providerHealth?.status || 'Sem status' }
+        : { status: 'warning', detail: 'Sem leitura recente do provider' };
+
+      next.cron = schedulerStatus?.last_tick_at
+        ? { status: 'ok', detail: `Ultimo tick em ${new Date(schedulerStatus.last_tick_at).toLocaleString('pt-BR')}` }
+        : { status: 'warning', detail: 'Cron ainda sem tick registrado' };
+
+      next.quotas = tenantLimits?.usage
+        ? {
+            status: 'ok',
+            detail: `${tenantLimits.usage.daily_messages ?? 0}/${tenantLimits?.limits?.max_daily_messages ?? 0} mensagens hoje`,
+          }
+        : { status: 'warning', detail: 'Uso de quota indisponivel' };
+
+      setEnvStatus(next);
+      markStepCompleted('validate_env', {
+        gateway_validated: next.gateway.status === 'ok' || next.gateway.status === 'warning',
+        scheduler_validated: true,
+        scheduler_worker_online: Boolean(schedulerStatus?.worker_online),
+        provider_health_status: providerHealth?.status || null,
+        env_validated_at: new Date().toISOString(),
+      });
+      onToast?.('sucesso', 'Ambiente operacional validado.');
+    } catch (error) {
+      onToast?.('erro', error.message || 'Falha ao validar o ambiente.');
+    } finally {
+      setEnvLoading(false);
+    }
+  }, [companyId, markStepCompleted, onToast]);
+
+  const handleSendTestDispatch = useCallback(async () => {
+    if (!testRecord?.id) {
+      onToast?.('erro', 'Nao encontramos um titulo elegivel para teste.');
+      return;
+    }
+
+    const finalPhone = normalizePhone(testPhone);
+    if (finalPhone.length < 12) {
+      onToast?.('erro', 'Informe um telefone valido para o envio teste.');
+      return;
+    }
+
+    setTestDispatchLoading(true);
+    try {
+      await updateFinancialPhone(companyId, testRecord.id, finalPhone);
+      const result = await sendSingleCharge(companyId, testRecord.id, {
+        simulate: false,
+        force_resend: true,
+      });
+      const normalized = {
+        success: true,
+        phone: finalPhone,
+        provider_message_id: result?.provider_message_id || result?.providerMessageId || null,
+        attachment_sent: result?.whatsapp_attachment_sent === true || result?.attachment_sent === true || false,
+        boleto_file_name: result?.boleto_file_name || result?.file_name || testRecord?.boleto_pdf_nome || null,
+        status: result?.status_envio || result?.status || 'sent',
+        raw: result,
+      };
+      setTestDispatchResult(normalized);
+      markStepCompleted('test_dispatch', {
+        test_dispatch_sent: true,
+        test_dispatch_phone: finalPhone,
+        test_dispatch_provider_message_id: normalized.provider_message_id,
+        setup_completed_at: new Date().toISOString(),
+      });
+      onToast?.('sucesso', normalized.attachment_sent ? 'Envio teste com anexo concluido.' : 'Envio teste concluido.');
+    } catch (error) {
+      setTestDispatchResult({
+        success: false,
+        error: error.message || 'Falha no envio teste.',
+      });
+      onToast?.('erro', error.message || 'Falha no envio teste.');
+    } finally {
+      setTestDispatchLoading(false);
+    }
+  }, [companyId, markStepCompleted, onToast, testPhone, testRecord]);
+
+  const completeSummary = [
+    { label: 'Drive conectado', done: Boolean(wizardMetadata.drive_connected || driveStatus?.ok) },
+    { label: 'Busca de boleto validada', done: Boolean(wizardMetadata.lookup_validated) },
+    { label: 'Mensagens configuradas', done: Boolean(selectedPreset) },
+    { label: 'Ambiente validado', done: Boolean(wizardMetadata.env_validated_at) },
+    { label: 'Envio teste concluido', done: Boolean(wizardMetadata.test_dispatch_sent || testDispatchResult?.success) },
+  ];
+
+  const canAdvanceManually = {
+    welcome: true,
+    connect_drive: Boolean(driveStatus?.ok),
+    test_lookup: Boolean(lookupResult?.results?.length),
+    configure_messages: Boolean(selectedPreset),
+    validate_env: Boolean(wizardMetadata.env_validated_at),
+    test_dispatch: Boolean(testDispatchResult?.success),
+    complete: true,
+  }[currentStepId];
+
   if (loadingWizard) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 size={28} className="animate-spin text-blue-500" />
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-900/80 px-5 py-4 text-slate-200">
+          <Loader2 size={18} className="animate-spin text-blue-400" />
+          Preparando o Wizard Setup...
+        </div>
       </div>
     );
   }
 
-  const currentStep = WIZARD_STEPS[currentStepIndex];
-  const isCompleteStep = currentStep?.id === 'complete';
+  const StepIcon = STEP_CONFIG[currentStepId]?.icon || Sparkles;
 
-  // ── Step renderers ─────────────────────────────────────────────────────────
+  return (
+    <div className="space-y-6">
+      <section className="overflow-hidden rounded-[28px] border border-slate-700 bg-slate-950/80 shadow-2xl">
+        <div className={`bg-gradient-to-r ${STEP_CONFIG[currentStepId]?.accent || 'from-blue-500/20 to-cyan-500/5'} p-8`}>
+          <div className="flex flex-wrap items-start justify-between gap-6">
+            <div className="max-w-3xl">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-200">
+                <Sparkles size={13} />
+                Wizard Setup
+              </div>
+              <h1 className="text-3xl font-semibold tracking-tight text-slate-50 lg:text-4xl">
+                Configure {companyName || 'sua empresa'} do zero sem tocar nas telas tecnicas
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-300 lg:text-base">
+                O gateway WhatsApp agora e configurado globalmente no Admin Ops. Aqui o onboarding da empresa fica focado em Drive, lookup, mensagens, validacao operacional e envio teste.
+              </p>
+            </div>
+            <div className="grid min-w-[280px] grid-cols-2 gap-3">
+              <InfoCard title="Etapa atual" value={`${currentStepIndex + 1}/${WIZARD_STEPS.length}`} detail={WIZARD_STEPS[currentStepIndex]?.title} tone="info" />
+              <InfoCard title="Concluidas" value={`${completedSteps.length}`} detail="com persistencia automatica" tone="ok" />
+              <InfoCard title="Empresa" value={companyName || 'Nao selecionada'} detail={companyId || 'Sem company_id'} tone="idle" />
+              <InfoCard title="Gateway" value="Global" detail="WhatsApp fora do onboarding" tone="warning" />
+            </div>
+          </div>
+        </div>
+        <div className="border-t border-slate-800 p-6">
+          <Stepper currentStepIndex={currentStepIndex} completedSteps={completedSteps} onJump={setCurrentStepIndex} />
+        </div>
+      </section>
 
-  const renderStepContent = () => {
-    switch (currentStep?.id) {
+      <section className="rounded-[28px] border border-slate-700 bg-slate-950/80 p-6 shadow-xl lg:p-8">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-slate-900 text-slate-100 shadow-lg">
+              <StepIcon size={24} />
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Etapa {currentStepIndex + 1}</p>
+              <h2 className="text-2xl font-semibold text-slate-50">{WIZARD_STEPS[currentStepIndex]?.title}</h2>
+            </div>
+          </div>
 
-      // ── 1. Welcome ─────────────────────────────────────────────────────────
-      case 'welcome':
-        return (
+          <div className="flex flex-wrap items-center gap-2">
+            {completedSteps.includes(currentStepId) ? <StatusPill tone="ok">Concluida</StatusPill> : <StatusPill tone="info">Em andamento</StatusPill>}
+            {wizardMetadata.setup_completed_at ? <StatusPill tone="ok">Setup concluido</StatusPill> : null}
+          </div>
+        </div>
+
+        {currentStepId === 'welcome' ? (
           <div className="space-y-6">
-            <div className="hero-mesh overflow-hidden rounded-2xl border border-slate-700/60 px-8 py-10 text-center shadow-soft">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600/20 ring-1 ring-blue-500/30">
-                <Rocket size={26} className="text-blue-400" />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-3xl border border-slate-700 bg-slate-900/70 p-6">
+                <h3 className="text-lg font-semibold text-slate-100">O que vamos configurar</h3>
+                <ul className="mt-4 space-y-3 text-sm text-slate-300">
+                  <li>Google Drive para localizar boletos PDF com targeted lookup</li>
+                  <li>Teste de busca real para validar exact match</li>
+                  <li>Mensagens em quatro tons com preview imediato</li>
+                  <li>Scheduler, dispatch queue, quotas e provider health</li>
+                  <li>Envio teste com rastreabilidade operacional</li>
+                </ul>
               </div>
-              <h2 className="text-2xl font-semibold text-slate-50">
-                Bem-vindo, {companyName ? companyName : 'ao NC Finance'}!
-              </h2>
-              <p className="mt-2 text-sm text-slate-400">
-                Este wizard configura sua empresa em {WIZARD_STEPS.length - 1} etapas rapidas — sem suporte manual.
-              </p>
-            </div>
-
-            <div className="surface-card rounded-2xl p-6 shadow-soft">
-              <h3 className="mb-4 text-sm font-semibold text-slate-200">O que vamos configurar</h3>
-              <ul className="space-y-3">
-                {[
-                  { icon: Smartphone,   label: 'WhatsApp Z-API',      detail: 'Token de acesso para envio real de cobranças' },
-                  { icon: FolderOpen,   label: 'Google Drive',         detail: 'Pasta com boletos PDF para leitura automatica' },
-                  { icon: ShieldCheck,  label: 'Validacao do ambiente', detail: 'Checklist automatico de integracoes e quotas' },
-                  { icon: MessageSquare,label: 'Tom de mensagens',      detail: 'Preset pronto para amigavel, neutro, firme ou juridico' },
-                  { icon: Layers,       label: 'Fila de dispatch',      detail: 'Quotas, health do provider e scheduler ativo' },
-                ].map(({ icon: Icon, label, detail }) => (
-                  <li key={label} className="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-800/30 px-4 py-3">
-                    <Icon size={15} className="mt-0.5 flex-shrink-0 text-blue-400" />
-                    <div>
-                      <span className="text-sm font-medium text-slate-200">{label}</span>
-                      <p className="text-xs text-slate-500">{detail}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        );
-
-      // ── 2. Connect WhatsApp ────────────────────────────────────────────────
-      case 'connect_whatsapp':
-        return (
-          <div className="space-y-5">
-            <div className="surface-card rounded-2xl p-6 shadow-soft">
-              <div className="mb-4 flex items-center gap-2">
-                <Smartphone size={16} className="text-blue-400" />
-                <h3 className="text-sm font-semibold text-slate-200">Credenciais Z-API</h3>
-              </div>
-              <div className="space-y-4">
-                <FieldInput
-                  label="Instance ID"
-                  value={zapiInstanceId}
-                  onChange={setZapiInstanceId}
-                  placeholder="Ex: 3A5E79B1C2D..."
-                  hint="Encontrado no painel Z-API → Instancia → ID"
-                />
-                <FieldInput
-                  label="Token"
-                  value={zapiToken}
-                  onChange={setZapiToken}
-                  placeholder="Cole o token aqui"
-                  type="password"
-                  hint="Painel Z-API → Instancia → Security → Client Token"
-                />
-
-                <button
-                  type="button"
-                  onClick={handleTestZapi}
-                  disabled={zapiTesting || !zapiInstanceId.trim() || !zapiToken.trim()}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {zapiTesting
-                    ? <><Loader2 size={14} className="animate-spin" /> Testando conexao...</>
-                    : <><Zap size={14} /> Testar conexao</>
-                  }
-                </button>
-
-                {zapiResult === 'ok' && (
-                  <div className="flex items-center gap-2 rounded-xl bg-emerald-900/20 px-4 py-3 text-sm text-emerald-300 border border-emerald-700/40">
-                    <CheckCircle2 size={15} /> WhatsApp conectado com sucesso!
-                  </div>
-                )}
-                {zapiResult === 'error' && (
-                  <div className="flex items-start gap-2 rounded-xl bg-red-900/20 px-4 py-3 text-sm text-red-300 border border-red-700/40">
-                    <XCircle size={15} className="mt-0.5 flex-shrink-0" />
-                    <span>{zapiError || 'Falha na conexao. Verifique as credenciais.'}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-700/60 bg-slate-800/30 px-4 py-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Como obter</p>
-              <ol className="list-decimal space-y-1 pl-4 text-xs text-slate-400">
-                <li>Acesse <span className="text-blue-400">app.z-api.io</span> e faca login.</li>
-                <li>Abra a instancia desejada e copie o <strong className="text-slate-300">Instance ID</strong>.</li>
-                <li>Va em <strong className="text-slate-300">Security → Client Token</strong> e copie o token.</li>
-                <li>Cole os dados acima e clique em Testar conexao.</li>
-              </ol>
-            </div>
-          </div>
-        );
-
-      // ── 3. Connect Drive ───────────────────────────────────────────────────
-      case 'connect_drive':
-        return (
-          <div className="space-y-5">
-            <div className="surface-card rounded-2xl p-6 shadow-soft">
-              <div className="mb-4 flex items-center gap-2">
-                <FolderOpen size={16} className="text-blue-400" />
-                <h3 className="text-sm font-semibold text-slate-200">Pasta de boletos no Google Drive</h3>
-              </div>
-              <div className="space-y-4">
-                <FieldInput
-                  label="URL ou ID da pasta"
-                  value={driveFolderUrl}
-                  onChange={setDriveFolderUrl}
-                  placeholder="https://drive.google.com/drive/folders/1ABC... ou ID direto"
-                  hint="A conta de servico deve ter acesso de leitura a esta pasta."
-                />
-
-                <button
-                  type="button"
-                  onClick={handleTestDrive}
-                  disabled={driveTesting || !driveFolderUrl.trim()}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {driveTesting
-                    ? <><Loader2 size={14} className="animate-spin" /> Testando acesso...</>
-                    : <><FolderOpen size={14} /> Testar acesso ao Drive</>
-                  }
-                </button>
-
-                {driveResult === 'ok' && (
-                  <div className="flex items-center gap-2 rounded-xl bg-emerald-900/20 px-4 py-3 text-sm text-emerald-300 border border-emerald-700/40">
-                    <CheckCircle2 size={15} /> Google Drive conectado com sucesso!
-                  </div>
-                )}
-                {driveResult === 'error' && (
-                  <div className="flex items-start gap-2 rounded-xl bg-red-900/20 px-4 py-3 text-sm text-red-300 border border-red-700/40">
-                    <XCircle size={15} className="mt-0.5 flex-shrink-0" />
-                    <span>{driveError || 'Falha no acesso. Verifique as permissoes da pasta.'}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-700/60 bg-slate-800/30 px-4 py-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Permissao necessaria</p>
-              <p className="text-xs text-slate-400">
-                Compartilhe a pasta com a conta de servico do NC Finance (
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard('nc-finance@seu-projeto.iam.gserviceaccount.com')}
-                  className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300"
-                >
-                  ver email <ClipboardCopy size={11} />
-                </button>
-                ) com papel de <strong className="text-slate-300">Leitor</strong>.
-              </p>
-            </div>
-          </div>
-        );
-
-      // ── 4. Validate Environment ────────────────────────────────────────────
-      case 'validate_env':
-        return (
-          <div className="space-y-5">
-            <div className="surface-card rounded-2xl p-6 shadow-soft">
-              <div className="mb-4 flex items-center gap-2">
-                <ShieldCheck size={16} className="text-blue-400" />
-                <h3 className="text-sm font-semibold text-slate-200">Checklist automatico do ambiente</h3>
-              </div>
-              <div className="space-y-2">
-                <ValidationRow label="WhatsApp Z-API" status={validationResults.zapi.status}  detail={validationResults.zapi.detail} />
-                <ValidationRow label="Google Drive"   status={validationResults.drive.status} detail={validationResults.drive.detail} />
-                <ValidationRow label="Quotas / Tenant" status={validationResults.quota.status} detail={validationResults.quota.detail} />
-              </div>
-
-              <button
-                type="button"
-                onClick={handleValidateAll}
-                disabled={validating}
-                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {validating
-                  ? <><Loader2 size={14} className="animate-spin" /> Validando ambiente...</>
-                  : <><ShieldCheck size={14} /> Validar ambiente</>
-                }
-              </button>
-
-              {!validating && allValidationsPassed && (
-                <div className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-900/20 px-4 py-3 text-sm text-emerald-300 border border-emerald-700/40">
-                  <CheckCircle2 size={15} /> Ambiente validado! Pode avancar.
-                </div>
-              )}
-              {!validating && !allValidationsPassed && validationResults.quota.status !== 'skip' && (
-                <p className="mt-3 text-center text-xs text-slate-500">
-                  Itens com erro precisam ser corrigidos antes de avancar.
+              <div className="rounded-3xl border border-blue-500/20 bg-blue-500/10 p-6">
+                <h3 className="text-lg font-semibold text-blue-100">Antes de avancar</h3>
+                <p className="mt-3 text-sm leading-relaxed text-blue-100/80">
+                  Se o gateway WhatsApp global ainda nao estiver configurado, isso agora acontece na Central Operacional em Admin Ops. O onboarding da empresa nao depende mais desse passo para seguir.
                 </p>
-              )}
-            </div>
-
-            <div className="rounded-xl border border-slate-700/60 bg-slate-800/30 px-4 py-3">
-              <p className="text-xs text-slate-500">
-                <strong className="text-slate-400">Dica:</strong> Itens marcados como &quot;nao configurado&quot; podem ser pulados agora e configurados depois — voce conseguira avancar mesmo assim.
-              </p>
+              </div>
             </div>
           </div>
-        );
+        ) : null}
 
-      // ── 5. Configure Messages ──────────────────────────────────────────────
-      case 'configure_messages':
-        return (
-          <div className="space-y-4">
-            <p className="text-sm text-slate-400">
-              Selecione o tom das mensagens de cobranca. Voce pode ajustar os templates depois em <strong className="text-slate-300">Automacoes</strong>.
-            </p>
+        {currentStepId === 'connect_drive' ? (
+          <div className="space-y-6">
+            <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
+              <Field label="URL da pasta raiz do Drive" hint="O Wizard extrai o folder ID automaticamente e salva recursive scan, strategy e max depth.">
+                <BaseInput value={driveFolderUrl} onChange={(e) => setDriveFolderUrl(e.target.value)} placeholder="Cole a URL da pasta CLIENTES ou o folder ID" />
+              </Field>
+              <div className="rounded-3xl border border-slate-700 bg-slate-900/70 p-5">
+                <p className="text-sm font-semibold text-slate-100">Folder ID detectado</p>
+                <p className="mt-3 break-all text-sm text-slate-300">{extractDriveFolderIdLocal(driveFolderUrl) || 'Aguardando URL da pasta'}</p>
+              </div>
+            </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="flex flex-wrap gap-3">
+              <BaseButton tone="primary" onClick={handleValidateDrive} disabled={driveTesting}>
+                {driveTesting ? <Loader2 size={16} className="animate-spin" /> : <FolderOpen size={16} />}
+                Validar acesso e salvar
+              </BaseButton>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <InfoCard title="Status" value={driveStatus?.ok ? 'Drive conectado' : 'Pendente'} detail={driveStatus?.folder_name || 'Aguardando validacao'} tone={driveStatus?.ok ? 'ok' : 'idle'} />
+              <InfoCard title="PDFs encontrados" value={prettyNumber(driveStatus?.pdf_count)} detail="na pasta raiz e subpastas" tone={driveStatus?.ok ? 'ok' : 'idle'} />
+              <InfoCard title="Subpastas" value={prettyNumber(driveStatus?.subfolders_found)} detail={driveStatus?.recursive_enabled ? 'recursive enabled' : 'scan simples'} tone={driveStatus?.ok ? 'ok' : 'idle'} />
+              <InfoCard title="Strategy" value={driveStatus?.matching_strategy || 'auto'} detail={`max depth ${driveStatus?.max_depth ?? 2}`} tone="info" />
+            </div>
+
+            {driveStatus?.service_account_email ? (
+              <div className="rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-sm text-slate-300">
+                Service account validada: <span className="font-semibold text-slate-100">{driveStatus.service_account_email}</span>
+              </div>
+            ) : null}
+
+            {driveStatus?.error ? (
+              <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                {driveStatus.error}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {currentStepId === 'test_lookup' ? (
+          <div className="space-y-6">
+            <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
+              <Field label="Consulta de teste" hint="Use nome do cliente, numero do documento ou numero do boleto para validar o targeted lookup.">
+                <BaseInput value={lookupQuery} onChange={(e) => setLookupQuery(e.target.value)} placeholder="Ex: MENEZES E BATISTA ou 42402-1" />
+              </Field>
+              <div className="flex items-end">
+                <BaseButton tone="primary" onClick={handleLookup} disabled={lookupLoading} className="w-full">
+                  {lookupLoading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+                  Executar targeted lookup
+                </BaseButton>
+              </div>
+            </div>
+
+            {lookupResult?.error ? (
+              <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                {lookupResult.error}
+              </div>
+            ) : null}
+
+            {lookupResult ? (
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-3">
+                  <StatusPill tone={lookupResult.exact_match ? 'ok' : 'warning'}>
+                    {lookupResult.exact_match ? 'exact_match=true' : 'Sem exact match'}
+                  </StatusPill>
+                  <StatusPill tone="info">
+                    strategy: {lookupResult.strategy || lookupResult.match_origin || lookupResult.first_result?.match_origin || 'n/a'}
+                  </StatusPill>
+                </div>
+
+                <div className="grid gap-3">
+                  {(lookupResult.results || []).slice(0, 5).map((item, index) => (
+                    <div key={`${item.file_id || item.file_name || index}`} className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-slate-100">{item.file_name || 'Arquivo sem nome'}</p>
+                          <p className="mt-1 text-xs text-slate-400">{item.match_origin || 'match'} - {item.score || 0} pts</p>
+                        </div>
+                        {item.view_url ? (
+                          <a href={item.view_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950/70 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800/80">
+                            <ExternalLink size={12} />
+                            Ver no Drive
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {currentStepId === 'configure_messages' ? (
+          <div className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {TEMPLATE_PRESETS.map((preset) => {
-                const color = TONE_COLORS[preset.id] || 'blue';
-                const isSelected = selectedPreset === preset.id;
-                const isPreviewing = previewPresetId === preset.id;
+                const active = selectedPreset === preset.id;
                 return (
                   <button
                     key={preset.id}
                     type="button"
                     onClick={() => handleSelectPreset(preset.id)}
-                    disabled={savingPreset}
-                    className={`w-full rounded-2xl border p-4 text-left transition-all
-                      ${isSelected
-                        ? `ring-2 ring-offset-2 ring-offset-[#060d19] ring-blue-500 ${TONE_BG[color]}`
-                        : `border-slate-700/60 bg-slate-800/30 hover:border-slate-600 hover:bg-slate-800/60`
-                      }
-                    `}
+                    disabled={messageSaving}
+                    className={`rounded-3xl border p-5 text-left transition ${
+                      active
+                        ? 'border-blue-500/50 bg-blue-500/10 ring-2 ring-blue-500/30'
+                        : 'border-slate-700 bg-slate-900/70 hover:border-slate-500'
+                    }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-slate-100">{preset.label}</span>
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${TONE_BADGE[color]}`}>
-                            {preset.tone}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-500">{preset.description}</p>
-                      </div>
-                      {isSelected && <CheckCircle2 size={16} className="flex-shrink-0 text-emerald-400" />}
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-slate-100">{preset.label}</p>
+                      {active ? <CheckCircle2 size={16} className="text-blue-300" /> : null}
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setPreviewPresetId(isPreviewing ? null : preset.id); }}
-                      className="mt-2 text-[11px] text-blue-400 hover:text-blue-300"
-                    >
-                      {isPreviewing ? 'Ocultar' : 'Ver exemplo de atraso'} ↓
-                    </button>
-
-                    {isPreviewing && (
-                      <div className="mt-2 rounded-lg border border-slate-700/60 bg-slate-900/50 px-3 py-2 text-xs text-slate-400 whitespace-pre-wrap">
-                        {preset.template_atraso}
-                      </div>
-                    )}
+                    <p className="mt-2 text-xs text-slate-400">{preset.description}</p>
                   </button>
                 );
               })}
             </div>
 
-            {!selectedPreset && (
-              <p className="text-center text-xs text-amber-400">
-                <AlertTriangle size={12} className="mr-1 inline" />
-                Selecione um preset para continuar.
-              </p>
-            )}
-          </div>
-        );
-
-      // ── 6. Test Dispatch ───────────────────────────────────────────────────
-      case 'test_dispatch':
-        return (
-          <div className="space-y-5">
-            <div className="surface-card rounded-2xl p-6 shadow-soft">
-              <div className="mb-4 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Gauge size={16} className="text-blue-400" />
-                  <h3 className="text-sm font-semibold text-slate-200">Quotas da empresa</h3>
+            <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+              <div className="rounded-3xl border border-slate-700 bg-slate-900/70 p-5">
+                <p className="text-sm font-semibold text-slate-100">Preview em tempo real</p>
+                <div className="mt-4 rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-sm leading-relaxed text-slate-200">
+                  {messagePreviewLoading ? (
+                    <div className="flex items-center gap-2 text-slate-400">
+                      <Loader2 size={14} className="animate-spin" />
+                      Gerando preview...
+                    </div>
+                  ) : (
+                    messagePreview || 'Selecione um tom para ver o preview da mensagem.'
+                  )}
                 </div>
-                {dispatchLoading && <Loader2 size={14} className="animate-spin text-slate-500" />}
               </div>
 
-              {tenantLimits && quotaUsage ? (
-                <div className="space-y-3">
-                  <QuotaMiniMeter
-                    label="Mensagens hoje"
-                    used={quotaUsage.daily_messages ?? 0}
-                    limit={tenantLimits.max_daily_messages ?? 500}
-                  />
-                  <QuotaMiniMeter
-                    label="Jobs ativos"
-                    used={quotaUsage.active_jobs ?? 0}
-                    limit={tenantLimits.max_active_jobs ?? 3}
-                  />
-                  <QuotaMiniMeter
-                    label="Retries / hora"
-                    used={quotaUsage.retries_last_hour ?? 0}
-                    limit={tenantLimits.max_retries_per_hour ?? 30}
-                  />
-                </div>
-              ) : !dispatchLoading ? (
-                <p className="text-xs text-slate-500">Dados de quota nao disponiveis.</p>
-              ) : null}
+              <div className="rounded-3xl border border-slate-700 bg-slate-900/70 p-5">
+                <p className="text-sm font-semibold text-slate-100">Cobertura dos templates</p>
+                <ul className="mt-4 space-y-3 text-sm text-slate-300">
+                  <li>Amigavel: relacionamento e proximidade</li>
+                  <li>Neutro: padrao operacional equilibrado</li>
+                  <li>Firme: cobranca objetiva sem perder cordialidade</li>
+                  <li>Juridico: linguagem mais formal e contundente</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {currentStepId === 'validate_env' ? (
+          <div className="space-y-6">
+            <div className="flex flex-wrap gap-3">
+              <BaseButton tone="primary" onClick={handleValidateEnvironment} disabled={envLoading}>
+                {envLoading ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                Validar ambiente completo
+              </BaseButton>
             </div>
 
-            {providerHealth && (
-              <div className="surface-card rounded-2xl p-5 shadow-soft">
-                <div className="mb-3 flex items-center gap-2">
-                  <Zap size={15} className="text-blue-400" />
-                  <h3 className="text-sm font-semibold text-slate-200">Saude do provider WhatsApp</h3>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {Object.entries(envStatus).map(([key, item]) => (
+                <div key={key} className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold capitalize text-slate-100">{key.replace('_', ' ')}</p>
+                    <StatusPill tone={item.status === 'ok' ? 'ok' : item.status === 'warning' ? 'warning' : item.status === 'error' ? 'error' : 'idle'}>
+                      {item.status}
+                    </StatusPill>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-400">{item.detail}</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  {providerHealth.state === 'healthy'   && <span className="rounded-full bg-emerald-900/30 px-3 py-1 text-xs font-medium text-emerald-400">✓ Saudavel</span>}
-                  {providerHealth.state === 'degraded'  && <span className="rounded-full bg-amber-900/30  px-3 py-1 text-xs font-medium text-amber-400">~ Degradado</span>}
-                  {providerHealth.state === 'unhealthy' && <span className="rounded-full bg-red-900/30    px-3 py-1 text-xs font-medium text-red-400">✗ Inoperante</span>}
-                  {!providerHealth.state && <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-400">Sem dados ainda</span>}
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {currentStepId === 'test_dispatch' ? (
+          <div className="space-y-6">
+            <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+              <div className="rounded-3xl border border-slate-700 bg-slate-900/70 p-5">
+                <p className="text-sm font-semibold text-slate-100">Telefone para envio teste</p>
+                <div className="mt-4 grid gap-4 md:grid-cols-[1fr_220px]">
+                  <Field label="WhatsApp de teste">
+                    <BaseInput value={testPhone} onChange={(e) => setTestPhone(e.target.value)} placeholder="5577981376867" />
+                  </Field>
+                  <div className="flex items-end">
+                    <BaseButton tone="success" onClick={handleSendTestDispatch} disabled={testDispatchLoading || !testRecord} className="w-full">
+                      {testDispatchLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                      Enviar teste agora
+                    </BaseButton>
+                  </div>
                 </div>
-                {(providerHealth.consecutive_failures ?? 0) > 0 && (
-                  <p className="mt-2 text-xs text-slate-500">
-                    {providerHealth.consecutive_failures} falha(s) consecutiva(s) registrada(s).
-                  </p>
+              </div>
+
+              <div className="rounded-3xl border border-slate-700 bg-slate-900/70 p-5">
+                <p className="text-sm font-semibold text-slate-100">Titulo escolhido para teste</p>
+                {testRecord ? (
+                  <div className="mt-4 space-y-2 text-sm text-slate-300">
+                    <p><span className="text-slate-500">Cliente:</span> {testRecord.cliente_nome || testRecord.nome || 'Nao informado'}</p>
+                    <p><span className="text-slate-500">Documento:</span> {testRecord.documento || testRecord.numero_boleto || testRecord.numero_nf || 'Nao informado'}</p>
+                    <p><span className="text-slate-500">Boleto:</span> {testRecord.boleto_pdf_nome || 'Nao informado'}</p>
+                    <p><span className="text-slate-500">Telefone atual:</span> {testRecord.telefone || testRecord.cliente_numero || 'Nao informado'}</p>
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-slate-400">Nenhum titulo elegivel foi carregado ainda.</p>
                 )}
               </div>
-            )}
-
-            <div className="rounded-xl border border-slate-700/60 bg-slate-800/30 px-4 py-4 space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Proximos passos</p>
-              <ul className="space-y-2 text-xs text-slate-400">
-                <li className="flex items-center gap-2">
-                  <ChevronRight size={12} className="text-blue-400" />
-                  Acesse <strong className="text-slate-300">Fila Dispatch</strong> para criar o primeiro job real.
-                </li>
-                <li className="flex items-center gap-2">
-                  <ChevronRight size={12} className="text-blue-400" />
-                  Va em <strong className="text-slate-300">Automacoes</strong> para ativar a cadencia automatica.
-                </li>
-                <li className="flex items-center gap-2">
-                  <ChevronRight size={12} className="text-blue-400" />
-                  Importe a carteira em <strong className="text-slate-300">Importacao</strong> para habilitar as cobranças.
-                </li>
-              </ul>
-              <button
-                type="button"
-                onClick={() => onNavigate?.('dispatch-queue')}
-                className="flex items-center gap-1.5 text-xs font-semibold text-blue-400 hover:text-blue-300"
-              >
-                <ExternalLink size={12} /> Abrir Fila Dispatch agora
-              </button>
             </div>
-          </div>
-        );
 
-      // ── 7. Complete ────────────────────────────────────────────────────────
-      case 'complete':
-        return (
+            {testDispatchResult ? (
+              <div className={`rounded-3xl border p-5 ${testDispatchResult.success ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-red-500/30 bg-red-500/10'}`}>
+                <div className="flex flex-wrap items-center gap-3">
+                  <StatusPill tone={testDispatchResult.success ? 'ok' : 'error'}>
+                    {testDispatchResult.success ? 'Envio teste concluido' : 'Falha no envio teste'}
+                  </StatusPill>
+                  {testDispatchResult.attachment_sent ? <StatusPill tone="ok">attachment_sent=true</StatusPill> : null}
+                </div>
+                {testDispatchResult.success ? (
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <InfoCard title="Telefone" value={testDispatchResult.phone} tone="ok" />
+                    <InfoCard title="Provider message ID" value={testDispatchResult.provider_message_id || 'Pendente'} tone={testDispatchResult.provider_message_id ? 'ok' : 'warning'} />
+                    <InfoCard title="Arquivo PDF" value={testDispatchResult.boleto_file_name || 'Nao informado'} tone={testDispatchResult.attachment_sent ? 'ok' : 'warning'} />
+                    <InfoCard title="Status" value={testDispatchResult.status || 'sent'} tone="ok" />
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm text-red-100">{testDispatchResult.error}</p>
+                )}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {currentStepId === 'complete' ? (
           <div className="space-y-6">
-            <div className="hero-mesh overflow-hidden rounded-2xl border border-emerald-700/30 bg-emerald-900/10 px-8 py-10 text-center shadow-soft">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600/20 ring-1 ring-emerald-500/30">
-                <PartyPopper size={26} className="text-emerald-400" />
+            <div className="rounded-3xl border border-emerald-500/30 bg-emerald-500/10 p-6">
+              <div className="flex items-center gap-3">
+                <PartyPopper size={22} className="text-emerald-300" />
+                <div>
+                  <h3 className="text-lg font-semibold text-emerald-100">Setup operacional concluido</h3>
+                  <p className="text-sm text-emerald-100/80">A empresa esta pronta para operar cobranca automatica pelo fluxo oficial do Wizard.</p>
+                </div>
               </div>
-              <h2 className="text-2xl font-semibold text-slate-50">
-                {companyName ? `${companyName} esta pronta!` : 'Empresa configurada!'}
-              </h2>
-              <p className="mt-2 text-sm text-slate-400">
-                Todas as etapas foram concluidas. O sistema esta pronto para operar.
-              </p>
             </div>
 
-            <div className="surface-card rounded-2xl p-6 shadow-soft">
-              <h3 className="mb-4 text-sm font-semibold text-slate-200">Checklist de implantacao</h3>
-              <ul className="space-y-2">
-                {[
-                  { label: 'WhatsApp Z-API',        done: Boolean(wizardMetadata.zapi_connected) },
-                  { label: 'Google Drive',           done: Boolean(wizardMetadata.drive_connected) },
-                  { label: 'Ambiente validado',      done: Boolean(wizardMetadata.validation_passed) },
-                  { label: 'Preset de mensagens',    done: Boolean(wizardMetadata.preset_id) },
-                  { label: 'Quotas conferidas',      done: Boolean(tenantLimits) },
-                ].map(({ label, done }) => (
-                  <li key={label} className="flex items-center gap-3 text-sm">
-                    {done
-                      ? <CheckCircle2 size={15} className="flex-shrink-0 text-emerald-400" />
-                      : <AlertTriangle size={15} className="flex-shrink-0 text-amber-400" />
-                    }
-                    <span className={done ? 'text-slate-200' : 'text-slate-400'}>{label}</span>
-                    {!done && <span className="text-xs text-slate-600">(opcional)</span>}
-                  </li>
-                ))}
-              </ul>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              {completeSummary.map((item) => (
+                <InfoCard key={item.label} title={item.label} value={item.done ? 'OK' : 'Pendente'} tone={item.done ? 'ok' : 'warning'} />
+              ))}
             </div>
 
-            <div className="surface-card rounded-2xl p-5 shadow-soft">
-              <h3 className="mb-3 text-sm font-semibold text-slate-200">Ir para</h3>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { label: 'Fila Dispatch',  tab: 'dispatch-queue', icon: Layers },
-                  { label: 'Automacoes',     tab: 'automacoes',     icon: Sparkles },
-                  { label: 'Importacao',     tab: 'importacao',     icon: BadgeCheck },
-                  { label: 'Dashboard',      tab: 'dashboard',      icon: Gauge },
-                ].map(({ label, tab, icon: Icon }) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => onNavigate?.(tab)}
-                    className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/50 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:bg-slate-800"
-                  >
-                    <Icon size={12} className="text-blue-400" />
-                    {label}
-                  </button>
-                ))}
-              </div>
+            <div className="flex flex-wrap gap-3">
+              <BaseButton tone="primary" onClick={() => onNavigate?.('dashboard')}>
+                Ir para Dashboard
+              </BaseButton>
+              <BaseButton onClick={() => onNavigate?.('dispatch-queue')}>
+                Ir para Fila Dispatch
+              </BaseButton>
+              <BaseButton onClick={() => onNavigate?.('cobrancas')}>
+                Ir para Cobranca Automatica
+              </BaseButton>
             </div>
           </div>
-        );
+        ) : null}
 
-      default:
-        return null;
-    }
-  };
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-6">
+          <BaseButton onClick={goBack} disabled={currentStepIndex === 0}>
+            <ArrowLeft size={16} />
+            Voltar
+          </BaseButton>
 
-  // ── Main render ─────────────────────────────────────────────────────────────
-  return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      {/* Progress header */}
-      <div className="surface-card flex flex-wrap items-center justify-between gap-4 rounded-2xl px-5 py-4 shadow-soft">
-        <div>
-          <h1 className="text-base font-semibold text-slate-100">
-            {currentStep?.title || 'Wizard'}
-          </h1>
-          <p className="text-xs text-slate-500">
-            Passo {currentStepIndex + 1} de {WIZARD_STEPS.length}
-          </p>
+          <div className="flex items-center gap-3">
+            {!canAdvanceManually && currentStepId !== 'complete' ? (
+              <div className="inline-flex items-center gap-2 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                <AlertTriangle size={16} />
+                Finalize esta etapa para continuar.
+              </div>
+            ) : null}
+
+            {currentStepId !== 'complete' ? (
+              <BaseButton tone="primary" onClick={() => advanceStep().catch((error) => onToast?.('erro', error.message || 'Falha ao avancar no wizard.'))} disabled={!canAdvanceManually}>
+                Continuar
+                <ArrowRight size={16} />
+              </BaseButton>
+            ) : null}
+          </div>
         </div>
-        <StepIndicator
-          steps={WIZARD_STEPS}
-          currentIndex={currentStepIndex}
-          completedSteps={completedSteps}
-        />
-      </div>
-
-      {/* Step content */}
-      {renderStepContent()}
-
-      {/* Navigation */}
-      {!isCompleteStep && (
-        <div className="flex items-center justify-between gap-3 pb-4">
-          <button
-            type="button"
-            onClick={goBack}
-            disabled={currentStepIndex === 0 || savingProgress}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-slate-600 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <ArrowLeft size={14} /> Voltar
-          </button>
-
-          <button
-            type="button"
-            onClick={advanceStep}
-            disabled={!canAdvance() || savingProgress}
-            className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {savingProgress
-              ? <><Loader2 size={14} className="animate-spin" /> Salvando...</>
-              : currentStepIndex === WIZARD_STEPS.length - 2
-                ? <><PartyPopper size={14} /> Concluir wizard</>
-                : <>{currentStep?.id === 'connect_whatsapp' && !zapiResult
-                    ? 'Pular por agora'
-                    : currentStep?.id === 'connect_drive' && !driveResult
-                      ? 'Pular por agora'
-                      : 'Continuar'
-                  } <ArrowRight size={14} /></>
-            }
-          </button>
-        </div>
-      )}
+      </section>
     </div>
   );
 }

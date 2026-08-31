@@ -56,7 +56,10 @@
       "Bash(git restore *)",
       "Bash(python3 -)",
       "Bash(node -e ' *)",
-      "Bash(grep -v \"node_modules\\\\|//\")"
+      "Bash(grep -v \"node_modules\\\\|//\")",
+      "Bash(npx vercel *)",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__computer"
     ]
   }
 }

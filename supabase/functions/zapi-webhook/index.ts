@@ -17,7 +17,6 @@ function firstNonEmpty(values: unknown[]) {
       return value.trim();
     }
   }
-
   return null;
 }
 
@@ -58,64 +57,102 @@ function normalizeStatus(value: unknown) {
   return status ? status.toLowerCase() : 'queued';
 }
 
+async function getSupabaseAdmin() {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+  const supabaseServiceRoleKey =
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    || Deno.env.get('SERVICE_ROLE_KEY')
+    || '';
+  if (!supabaseUrl || !supabaseServiceRoleKey) return null;
+  return createClient(supabaseUrl, supabaseServiceRoleKey);
+}
+
+async function loadAcceptedWebhookTokens() {
+  const accepted = new Set<string>();
+  const webhookSecret = String(Deno.env.get('ZAPI_WEBHOOK_SECRET') || '').trim();
+  if (webhookSecret) accepted.add(webhookSecret);
+  const envClientToken = String(Deno.env.get('ZAPI_CLIENT_TOKEN') || '').trim();
+  if (envClientToken) accepted.add(envClientToken);
+
+  const supabaseAdmin = await getSupabaseAdmin();
+  if (!supabaseAdmin) return accepted;
+
+  const [{ data: platformData }, { data: companyRows }] = await Promise.all([
+    supabaseAdmin
+      .from('platform_integrations')
+      .select('client_token')
+      .eq('provider', 'zapi')
+      .maybeSingle(),
+    supabaseAdmin
+      .from('company_integrations')
+      .select('client_token')
+      .eq('provider', 'zapi')
+      .limit(50),
+  ]);
+
+  const platformToken = String(platformData?.client_token || '').trim();
+  if (platformToken) accepted.add(platformToken);
+
+  for (const row of companyRows || []) {
+    const token = String(row?.client_token || '').trim();
+    if (token) accepted.add(token);
+  }
+
+  return accepted;
+}
+
 Deno.serve(async (req) => {
   try {
-    // ── Validação de secret (se configurado) ─────────────────────────────────
-    // Configura ZAPI_WEBHOOK_SECRET no painel de secrets do Supabase.
-    // A Z-API envia o token no header x-api-token ou como query param ?token=.
-    const webhookSecret = Deno.env.get('ZAPI_WEBHOOK_SECRET') || '';
-    if (webhookSecret) {
-      const headerToken = req.headers.get('x-api-token') || req.headers.get('x-token') || '';
-      const url = new URL(req.url);
-      const queryToken = url.searchParams.get('token') || '';
-      const receivedToken = headerToken || queryToken;
-      if (receivedToken !== webhookSecret) {
-        return jsonResponse({ ok: false, error: 'Unauthorized' }, 401);
-      }
+    const headerToken = req.headers.get('x-api-token')
+      || req.headers.get('x-token')
+      || req.headers.get('client-token')
+      || req.headers.get('client_token')
+      || '';
+    const url = new URL(req.url);
+    const queryToken = url.searchParams.get('token') || '';
+    const receivedToken = String(headerToken || queryToken || '').trim();
+
+    const acceptedTokens = await loadAcceptedWebhookTokens();
+    if (acceptedTokens.size > 0 && (!receivedToken || !acceptedTokens.has(receivedToken))) {
+      return jsonResponse({ ok: false, error: 'Unauthorized' }, 401);
     }
 
     const rawBody = await req.text();
 
     let body: Record<string, unknown> = {};
-
     try {
       body = JSON.parse(rawBody);
     } catch {
-      // Invalid JSON — acknowledge silently to avoid Z-API retries
       return jsonResponse({ ok: true, received: true });
     }
 
     const idsEntry = Array.isArray(body?.ids) ? body.ids[0] : null;
-    const providerMessageId =
-      firstNonEmpty([
-        body.provider_message_id,
-        body.messageId,
-        body.message_id,
-        body.id,
-        typeof idsEntry === 'object' && idsEntry !== null ? (idsEntry as Record<string, unknown>).id : null,
-        typeof idsEntry === 'object' && idsEntry !== null ? (idsEntry as Record<string, unknown>).messageId : null,
-        typeof idsEntry === 'string' ? idsEntry : null,
-      ]);
+    const providerMessageId = firstNonEmpty([
+      body.provider_message_id,
+      body.messageId,
+      body.message_id,
+      body.id,
+      typeof idsEntry === 'object' && idsEntry !== null ? (idsEntry as Record<string, unknown>).id : null,
+      typeof idsEntry === 'object' && idsEntry !== null ? (idsEntry as Record<string, unknown>).messageId : null,
+      typeof idsEntry === 'string' ? idsEntry : null,
+    ]);
     const normalizedPhone = extractWebhookPhone(body, idsEntry);
-
     const status = normalizeStatus(body.status);
 
     if (!providerMessageId) {
       return jsonResponse({ ok: true, received: true });
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-    const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-
-    if (!supabaseUrl || !supabaseServiceRoleKey) {
+    const supabaseAdmin = await getSupabaseAdmin();
+    if (!supabaseAdmin) {
       return jsonResponse({ ok: true, received: true });
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
     const now = new Date().toISOString();
     const patch: Record<string, unknown> = {
       status,
       provider_tracking_status: 'resolved',
+      webhook_status: 'recebido',
       zapi_message_id: providerMessageId,
     };
 
@@ -124,6 +161,7 @@ Deno.serve(async (req) => {
     } else if (status === 'delivered') {
       patch.delivered_at = now;
     } else if (status === 'read') {
+      patch.delivered_at = now;
       patch.read_at = now;
     } else if (status === 'failed') {
       patch.failed_at = now;
@@ -131,8 +169,6 @@ Deno.serve(async (req) => {
       patch.erro = String(body?.type || body?.status || 'Falha retornada pela Z-API.');
     }
 
-    // Idempotente: update por provider_message_id. Chamadas duplicadas
-    // apenas re-aplicam o mesmo status no mesmo registro — sem side effects.
     const { data: updatedRows } = await supabaseAdmin
       .from('cobrancas_whatsapp')
       .update(patch)
@@ -159,6 +195,7 @@ Deno.serve(async (req) => {
             provider_message_id: providerMessageId,
             zapi_message_id: providerMessageId,
             provider_tracking_status: 'resolved',
+            webhook_status: 'recebido',
           })
           .eq('id', pendingRows![0].id);
       }
@@ -166,7 +203,6 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ ok: true, received: true });
   } catch {
-    // Não expõe detalhes do erro para o caller
     return jsonResponse({ ok: true, received: false });
   }
 });

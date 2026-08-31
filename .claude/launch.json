@@ -6,6 +6,20 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173
+    },
+    {
+      "name": "magazine-guimaraes",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd /d C:\\Users\\ACIRLE~1\\DOWNLO~1\\MAGAZI~1 && node_modules\\.bin\\tsx server.ts"],
+      "port": 3001,
+      "autoPort": true
+    },
+    {
+      "name": "nc-finance",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd /d C:\\Users\\ACIRLE~1\\DOWNLO~1\\NC-FIN~1 && (if not exist dist\\server.cjs npm run build) && set NODE_ENV=production&& npm start"],
+      "port": 3000,
+      "autoPort": true
     }
   ]
 }

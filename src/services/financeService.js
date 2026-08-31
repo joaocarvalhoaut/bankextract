@@ -168,6 +168,41 @@ const normalizeIsoDate = (value) => {
   return date.toISOString();
 };
 
+const chunkArray = (items, size) => {
+  const chunkSize = Math.max(1, Number(size) || 1);
+  const chunks = [];
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+  return chunks;
+};
+
+async function loadExistingFinancialIdempotencyKeys(client, companyId, keys = []) {
+  const uniqueKeys = [...new Set((keys || []).filter(Boolean))];
+  if (!uniqueKeys.length) {
+    return new Set();
+  }
+
+  const existing = new Set();
+  for (const batch of chunkArray(uniqueKeys, 200)) {
+    const { data, error } = await client
+      .from('registros_financeiros')
+      .select('idempotency_key')
+      .eq('company_id', companyId)
+      .in('idempotency_key', batch);
+
+    if (error) {
+      throw buildError(error, 'Falha ao validar registros financeiros duplicados.');
+    }
+
+    for (const row of data || []) {
+      if (row?.idempotency_key) existing.add(row.idempotency_key);
+    }
+  }
+
+  return existing;
+}
+
 export async function getRepresentatives(companyId, tenantOptions = {}) {
   try {
     const reps = await financeService.fetchRepresentantes({
@@ -805,20 +840,73 @@ export const financeService = {
         return clone;
       });
 
+      const payloadWithoutKey = [];
+      const payloadWithKey = [];
+      const seenKeysInBatch = new Set();
+
+      cleanPayload.forEach((item) => {
+        if (!item.idempotency_key) {
+          payloadWithoutKey.push(item);
+          return;
+        }
+
+        const scopedKey = `${tenant.companyId}::${item.idempotency_key}`;
+        if (seenKeysInBatch.has(scopedKey)) {
+          return;
+        }
+
+        seenKeysInBatch.add(scopedKey);
+        payloadWithKey.push(item);
+      });
+
+      const existingKeys = await loadExistingFinancialIdempotencyKeys(
+        client,
+        tenant.companyId,
+        payloadWithKey.map((item) => item.idempotency_key),
+      );
+
+      const finalPayload = [
+        ...payloadWithoutKey,
+        ...payloadWithKey.filter((item) => !existingKeys.has(item.idempotency_key)),
+      ];
+
+      if (!finalPayload.length) {
+        return [];
+      }
+
+      let insertedRows = [];
       const { data, error } = await client
         .from('registros_financeiros')
-        .upsert(cleanPayload, {
-          onConflict: 'company_id,idempotency_key',
-          ignoreDuplicates: true,
-        })
+        .insert(finalPayload)
         .select();
+
       if (error) {
-        if (isFinancialRecordConflictError(error)) {
-          throw new Error('Alguns registros ja existiam na carteira e foram bloqueados pela protecao de idempotencia.');
+        if (!isFinancialRecordConflictError(error)) {
+          throw buildError(error, 'Falha ao inserir registros.');
         }
-        throw buildError(error, 'Falha ao inserir registros.');
+
+        insertedRows = [];
+        for (const item of finalPayload) {
+          const { data: singleRow, error: singleError } = await client
+            .from('registros_financeiros')
+            .insert(item)
+            .select()
+            .maybeSingle();
+
+          if (singleError) {
+            if (isFinancialRecordConflictError(singleError)) {
+              continue;
+            }
+            throw buildError(singleError, 'Falha ao inserir registros.');
+          }
+
+          if (singleRow) insertedRows.push(singleRow);
+        }
+      } else {
+        insertedRows = data || [];
       }
-      return (data || []).map(mapRegistroToApp);
+
+      return insertedRows.map(mapRegistroToApp);
     }
 
     db.registros.push(...clone(items));

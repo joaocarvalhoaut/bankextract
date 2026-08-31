@@ -310,6 +310,21 @@ export async function reprocessBoletoDriveSingle(companyId, registroId) {
   );
 }
 
+export async function searchOperationalBoletoTargets(companyId, targets = []) {
+  if (!companyId) throw new Error('Selecione uma empresa para auditar boletos.');
+  if (!Array.isArray(targets) || targets.length === 0) {
+    throw new Error('Informe ao menos um titulo para auditoria operacional.');
+  }
+  return invokeBillingAutomation(
+    {
+      action: 'search_operational_boleto_targets',
+      company_id: companyId,
+      targets,
+    },
+    'Falha ao executar a auditoria operacional de boletos.'
+  );
+}
+
 export async function previewChargePayload(companyId, registroId) {
   const data = await invokeBillingAutomation(
     {
@@ -658,6 +673,7 @@ export default {
   getBillingHistory,
   getBillingInconsistencies,
   reprocessBoletoDriveSingle,
+  searchOperationalBoletoTargets,
   getPlanCapabilities,
   getUsageSummary,
   checkSendPermission,

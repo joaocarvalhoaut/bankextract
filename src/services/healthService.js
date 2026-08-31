@@ -131,11 +131,11 @@ async function checkZapiConnection() {
 
   try {
     const { data, error } = await supabase
-      .from('company_integrations')
-      .select('company_id, provider, connected, updated_at')
+      .from('platform_integrations')
+      .select('provider, connected, updated_at')
       .eq('provider', 'zapi')
       .order('updated_at', { ascending: false })
-      .limit(100);
+      .limit(1);
 
     if (error) {
       return buildCheck('WhatsApp / Z-API', HEALTH_STATUS.CRITICAL, error.message);
@@ -144,15 +144,12 @@ async function checkZapiConnection() {
     const rows = data || [];
     const connected = rows.filter((row) => row.connected).length;
     if (!rows.length) {
-      return buildCheck('WhatsApp / Z-API', HEALTH_STATUS.DEGRADED, 'Nenhuma integracao Z-API configurada.');
+      return buildCheck('WhatsApp / Z-API', HEALTH_STATUS.DEGRADED, 'Nenhum gateway Z-API global configurado.');
     }
     if (connected === 0) {
-      return buildCheck('WhatsApp / Z-API', HEALTH_STATUS.CRITICAL, 'Todas as integracoes Z-API estao desconectadas.');
+      return buildCheck('WhatsApp / Z-API', HEALTH_STATUS.CRITICAL, 'O gateway Z-API global esta desconectado.');
     }
-    if (connected < rows.length) {
-      return buildCheck('WhatsApp / Z-API', HEALTH_STATUS.DEGRADED, `${connected}/${rows.length} integracao(oes) conectada(s).`);
-    }
-    return buildCheck('WhatsApp / Z-API', HEALTH_STATUS.HEALTHY, `${connected} integracao(oes) conectada(s).`);
+    return buildCheck('WhatsApp / Z-API', HEALTH_STATUS.HEALTHY, 'Gateway Z-API global conectado.');
   } catch (error) {
     return buildCheck('WhatsApp / Z-API', HEALTH_STATUS.CRITICAL, String(error?.message || error));
   }

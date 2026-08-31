@@ -61,9 +61,10 @@ export default function PreviewImportTable({
         <input
           value={row.nome}
           onChange={(event) => onFieldChange(row.id, 'nome', event.target.value)}
-          className="input-premium w-full border-transparent bg-transparent px-2 py-1 font-medium text-slate-50 shadow-none"
+          className="input-premium w-full min-w-0 border-transparent bg-transparent px-2 py-1 font-medium text-slate-50 shadow-none"
         />
       ),
+      cellClassName: 'min-w-[240px]',
     },
     {
       key: 'documento',
@@ -72,9 +73,10 @@ export default function PreviewImportTable({
         <input
           value={row.documento}
           onChange={(event) => onFieldChange(row.id, 'documento', event.target.value)}
-          className="input-premium w-full border-transparent bg-transparent px-2 py-1 shadow-none"
+          className="input-premium w-full min-w-0 border-transparent bg-transparent px-2 py-1 shadow-none"
         />
       ),
+      cellClassName: 'min-w-[180px]',
     },
     {
       key: 'data_vencimento',
@@ -127,9 +129,10 @@ export default function PreviewImportTable({
         <input
           value={row.telefone}
           onChange={(event) => onFieldChange(row.id, 'telefone', event.target.value)}
-          className="input-premium w-full border-transparent bg-transparent px-2 py-1 shadow-none"
+          className="input-premium w-full min-w-0 border-transparent bg-transparent px-2 py-1 shadow-none"
         />
       ),
+      cellClassName: 'min-w-[160px]',
     },
     {
       key: 'observacoes',
@@ -138,9 +141,10 @@ export default function PreviewImportTable({
         <input
           value={row.observacoes}
           onChange={(event) => onFieldChange(row.id, 'observacoes', event.target.value)}
-          className="input-premium w-full border-transparent bg-transparent px-2 py-1 shadow-none"
+          className="input-premium w-full min-w-0 border-transparent bg-transparent px-2 py-1 shadow-none"
         />
       ),
+      cellClassName: 'min-w-[220px]',
     },
   ];
 

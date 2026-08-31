@@ -169,7 +169,7 @@ export default function PreviewScreen({
                               <button onClick={onCancelEdit} className="text-slate-400"><X size={14} /></button>
                             </div>
                           ) : (
-                            <button className={`w-full text-left ${field === 'nome' ? 'font-medium text-slate-50' : ''}`} onDoubleClick={() => onStartEdit(row.id, field, row[field])}>
+                            <button className={`w-full break-words text-left ${field === 'nome' ? 'font-medium text-slate-50' : ''}`} onDoubleClick={() => onStartEdit(row.id, field, row[field])}>
                               {row[field] || <span className="italic text-red-500">(vazio)</span>}
                             </button>
                           )}

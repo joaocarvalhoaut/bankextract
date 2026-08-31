@@ -1,5 +1,15 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { createRequestContext, errorResponse, logRuntime, withTimeout } from '../_shared/runtime.ts';
+import { createRequestContext, errorResponse, logRuntime, maskPhone, withTimeout } from '../_shared/runtime.ts';
+import {
+  buildFinancialLookupVariants,
+  compareFinancialIdVariants,
+  extractFinancialIdsFromText,
+  normalizeFinancialId,
+} from '../_shared/normalizeFinancialId.ts';
+import {
+  buildDriveAuditReport,
+  scanFolderTree,
+} from '../_shared/driveTreeAudit.ts';
 
 type AdminClient = ReturnType<typeof createClient>;
 
@@ -82,6 +92,9 @@ interface DriveCandidate {
   webViewLink?: string;
   webContentLink?: string;
   modifiedTime?: string;
+  _parentFolderName?: string;
+  _parentFolderId?: string;
+  _folderPathHint?: string;
 }
 
 interface ExtractedBoletoData {
@@ -101,6 +114,7 @@ interface ExtractedBoletoData {
   match_strategy: string;
   ocr_used?: boolean;
   ocr_source?: string | null;
+  folder_hint?: string | null;
 }
 
 interface MatchCandidate {
@@ -111,7 +125,7 @@ interface MatchCandidate {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret, x-gateway-admin-secret',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -297,6 +311,10 @@ function normalizeLinhaDigitavel(value: string | null | undefined) {
   return digits || null;
 }
 
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
 function extractLinhaDigitavel(text: string) {
   const match = text.match(/((?:\d[\s.\-]*){47,48})/);
   if (!match) return null;
@@ -364,16 +382,141 @@ function extractDocumento(text: string) {
 }
 
 function extractBoletoNumberFromName(name: string) {
-  const normalized = normalizeBoletoNumber(name);
-  if (normalized) return normalized;
-  const base = String(name || '').replace(/\.pdf$/i, '');
-  const tokens = base.split(/[_\s]+/).map((item) => item.trim()).filter(Boolean);
-  for (const token of tokens.reverse()) {
-    if (/^\d{2,}[-/A-Z0-9]*$/i.test(token)) {
-      return normalizeBoletoNumber(token);
+  const extractedIds = extractFinancialIdsFromText(name);
+  for (const candidate of extractedIds) {
+    if (/^\d+$/.test(candidate.primary) && candidate.primary.length >= 4) {
+      return candidate.primary;
+    }
+    if (candidate.compact.length >= 3) {
+      return candidate.compact;
     }
   }
-  return null;
+
+  const normalized = normalizeBoletoNumber(name);
+  return normalized || null;
+}
+
+function explainMatch(score: number, matchedBy: string[]) {
+  return {
+    score: Number(score.toFixed(2)),
+    matchedBy: [...new Set(matchedBy.filter(Boolean))],
+  };
+}
+
+const GENERIC_NON_BOLETO_TOKENS = [
+  'RELATORIO',
+  'RECIBO',
+  'RECIBOS',
+  'NOTA',
+  'COMPROVANTE',
+  'CONTRATO',
+  'PLANILHA',
+  'MOBILAR NOTA',
+];
+
+function normalizePathForMatch(value: string | null | undefined) {
+  return normalizeName(value).replace(/\s+/g, ' ').trim();
+}
+
+function tokenListForMatch(value: string | null | undefined) {
+  return normalizePathForMatch(value)
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3);
+}
+
+function countStrongTokenMatches(source: string | null | undefined, targetTokens: string[]) {
+  const sourceTokens = new Set(tokenListForMatch(source));
+  return targetTokens.filter((token) => sourceTokens.has(token)).length;
+}
+
+function containsGenericNonBoletoName(value: string | null | undefined) {
+  const upper = normalizePathForMatch(value);
+  if (!upper) return false;
+  return GENERIC_NON_BOLETO_TOKENS.some((token) => upper.includes(token))
+    || /^(?:\d+\s*VIA|SEGUNDA\s+VIA|2\s+VIA|VIA)\b/i.test(upper);
+}
+
+function detectDriveNamingSignals(
+  filename: string | null | undefined,
+  folderHint: string | null | undefined,
+  primaryFinancialId: string | null | undefined,
+  clientName: string | null | undefined,
+) {
+  const upperFilename = normalizePathForMatch(filename);
+  const upperFolder = normalizePathForMatch(folderHint);
+  const compactId = normalizeFinancialId(primaryFinancialId).compact;
+  const clientTokens = tokenListForMatch(clientName).slice(0, 4);
+  const strongFileNameMatches = countStrongTokenMatches(filename, clientTokens);
+  const strongFolderMatches = countStrongTokenMatches(folderHint, clientTokens);
+  const fileHasFinancialId = compactId
+    ? extractFinancialIdsFromText(filename || '').some((candidate) => compareFinancialIdVariants(candidate, normalizeFinancialId(compactId)).exact || compareFinancialIdVariants(candidate, normalizeFinancialId(compactId)).family)
+    : false;
+
+  const escapedCompact = compactId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const boletoPrefix = compactId
+    ? new RegExp(`\\bBOLETO\\b[\\s_-]*[A-Z0-9]*${escapedCompact}`, 'i').test(upperFilename.replace(/\s+/g, ''))
+      || /^BOLETO[\s_-]/i.test(String(filename || ''))
+    : /^BOLETO[\s_-]/i.test(String(filename || ''));
+  const numberDashClient = compactId
+    ? new RegExp(`${escapedCompact}[\\s_-]*-[\\s_-]*[A-Z]`, 'i').test(upperFilename.replace(/\s+/g, ''))
+    : false;
+
+  return {
+    boletoPrefix,
+    numberDashClient,
+    clientFolder: strongFolderMatches >= 2 || (strongFolderMatches >= 1 && upperFolder.length >= 8),
+    genericDocument: containsGenericNonBoletoName(filename),
+    strongFileNameMatches,
+    strongFolderMatches,
+    fileHasFinancialId,
+  };
+}
+
+function buildSafeFolderHint(folderHint: string | null | undefined) {
+  const segments = String(folderHint || '')
+    .split('/')
+    .map((segment) => segment.trim())
+    .flatMap((segment) => segment.split(/\s+\|\s+|\s+\/\s+/))
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (segments.length === 0) return '';
+  return segments.slice(-2).join(' / ');
+}
+
+function buildExplainMatchPayload(
+  score: number,
+  matchedBy: string[],
+  filename: string | null | undefined,
+  folderHint: string | null | undefined,
+  rejectionReason?: string | null,
+) {
+  return {
+    score: Number(score.toFixed(2)),
+    matchedBy: [...new Set(matchedBy.filter(Boolean))],
+    filename: String(filename || ''),
+    folderHint: buildSafeFolderHint(folderHint),
+    rejectionReason: rejectionReason || null,
+  };
+}
+
+function buildRecordLookupQuery(record: FinancialRow) {
+  const { numeroBoletoEfetivo, clienteEfetivo } = logCobrancaMapping(record);
+  const queryParts: string[] = [];
+  if (numeroBoletoEfetivo) queryParts.push(String(numeroBoletoEfetivo).trim());
+  if (record.documento) queryParts.push(String(record.documento).trim());
+  if (record.numero_nf) queryParts.push(String(record.numero_nf).trim());
+  if (clienteEfetivo || record.nome) queryParts.push(String(clienteEfetivo || record.nome).trim());
+  return queryParts.filter(Boolean).join(', ');
+}
+
+function summarizeFinancialVariants(value: string | null | undefined) {
+  const normalized = normalizeFinancialId(value);
+  return {
+    compact: normalized.compact,
+    primary: normalized.primary,
+    variants: normalized.variants.slice(0, 8),
+  };
 }
 
 function extractReadableTextFromBytes(bytes: Uint8Array) {
@@ -465,6 +608,19 @@ async function getCompanyZapiIntegration(
   return (data || null) as CompanyIntegrationRow | null;
 }
 
+async function getPlatformZapiIntegration(
+  supabaseAdmin: AdminClient,
+) {
+  const { data, error } = await supabaseAdmin
+    .from('platform_integrations')
+    .select('provider, instance_id, token, client_token, phone_number, connected, connected_at, last_healthcheck_at, metadata')
+    .eq('provider', 'zapi')
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return (data || null) as Record<string, unknown> | null;
+}
+
 function getTestZapiConfig() {
   const instanceId = Deno.env.get('TEST_ZAPI_INSTANCE_ID') || '';
   const token = Deno.env.get('TEST_ZAPI_TOKEN') || '';
@@ -483,14 +639,38 @@ function getTestZapiConfig() {
   };
 }
 
+function getEnvGlobalZapiConfig() {
+  const instanceId = Deno.env.get('ZAPI_INSTANCE_ID') || '';
+  const token = Deno.env.get('ZAPI_TOKEN') || '';
+  const clientToken = Deno.env.get('ZAPI_CLIENT_TOKEN') || '';
+
+  if (!instanceId || !token || !clientToken) {
+    return null;
+  }
+
+  return {
+    source: 'env',
+    instanceId,
+    token,
+    clientToken,
+    phoneNumber: '',
+  };
+}
+
 async function resolveCompanyZapiConfig(
   supabaseAdmin: AdminClient,
   companyId: string,
   options: { allowTestMode?: boolean } = {},
 ) {
+  const platformIntegration = await getPlatformZapiIntegration(supabaseAdmin);
   const integration = await getCompanyZapiIntegration(supabaseAdmin, companyId);
   const allowTestMode = options.allowTestMode === true;
   const testConfig = allowTestMode ? getTestZapiConfig() : null;
+  const envGlobalConfig = getEnvGlobalZapiConfig();
+  const platformInstanceId = String(platformIntegration?.instance_id || '').trim();
+  const platformToken = String(platformIntegration?.token || '').trim();
+  const platformClientToken = String(platformIntegration?.client_token || '').trim();
+  const platformPhoneNumber = String(platformIntegration?.phone_number || '').trim();
 
   console.log('[ZAPI COMPANY CONFIG]', {
     company_id: companyId,
@@ -499,9 +679,30 @@ async function resolveCompanyZapiConfig(
     has_instance_id: Boolean(String(integration?.instance_id || '').trim()),
     has_token: Boolean(String(integration?.token || '').trim()),
     has_client_token: Boolean(String(integration?.client_token || '').trim()),
-    source: integration?.connected ? 'company' : (testConfig ? 'test' : 'missing'),
-    instance_id: maskSecret(integration?.instance_id),
+    platform_connected: Boolean(platformIntegration?.connected),
+    source: platformInstanceId && platformToken && platformClientToken
+      ? 'platform'
+      : envGlobalConfig
+        ? 'env'
+        : integration?.connected
+          ? 'company'
+          : (testConfig ? 'test' : 'missing'),
+    instance_id: maskSecret(platformInstanceId || envGlobalConfig?.instanceId || integration?.instance_id),
   });
+
+  if (platformInstanceId && platformToken && platformClientToken) {
+    return {
+      source: 'platform',
+      instanceId: platformInstanceId,
+      token: platformToken,
+      clientToken: platformClientToken,
+      phoneNumber: platformPhoneNumber,
+    };
+  }
+
+  if (envGlobalConfig) {
+    return envGlobalConfig;
+  }
 
   if (
     integration?.connected &&
@@ -525,12 +726,196 @@ async function resolveCompanyZapiConfig(
   throw new Error('Empresa sem integracao Z-API configurada.');
 }
 
+async function resolvePlatformZapiConfig(
+  supabaseAdmin: AdminClient,
+  options: { allowTestMode?: boolean } = {},
+) {
+  const integration = await getPlatformZapiIntegration(supabaseAdmin);
+  const allowTestMode = options.allowTestMode === true;
+  const testConfig = allowTestMode ? getTestZapiConfig() : null;
+  const envGlobalConfig = getEnvGlobalZapiConfig();
+  const instanceId = String(integration?.instance_id || '').trim();
+  const token = String(integration?.token || '').trim();
+  const clientToken = String(integration?.client_token || '').trim();
+  const phoneNumber = String(integration?.phone_number || '').trim();
+
+  console.log('[ZAPI PLATFORM CONFIG]', {
+    provider: 'zapi',
+    connected: Boolean(integration?.connected),
+    has_instance_id: Boolean(instanceId),
+    has_token: Boolean(token),
+    has_client_token: Boolean(clientToken),
+    source: instanceId && token && clientToken ? 'platform' : envGlobalConfig ? 'env' : (testConfig ? 'test' : 'missing'),
+    instance_id: maskSecret(instanceId || envGlobalConfig?.instanceId),
+  });
+
+  if (instanceId && token && clientToken) {
+    return {
+      source: 'platform',
+      instanceId,
+      token,
+      clientToken,
+      phoneNumber,
+    };
+  }
+
+  if (envGlobalConfig) {
+    return envGlobalConfig;
+  }
+
+  if (testConfig) {
+    return testConfig;
+  }
+
+  throw new Error('Gateway WhatsApp global sem configuracao Z-API.');
+}
+
+async function bootstrapPlatformZapiIntegration(
+  supabaseAdmin: AdminClient,
+  options: { allowTestMode?: boolean } = {},
+) {
+  const config = await resolvePlatformZapiConfig(supabaseAdmin, options);
+  const validation = await validatePlatformGatewayConnection(config);
+  const connected = isZapiConnected(validation);
+  const phoneNumber = await resolveZapiPhoneNumber(config, validation) || null;
+  const connectedAt = connected ? new Date().toISOString() : null;
+  const lastHealthcheckAt = new Date().toISOString();
+
+  const { data, error } = await supabaseAdmin
+    .from('platform_integrations')
+    .upsert({
+      provider: 'zapi',
+      instance_id: config.instanceId,
+      token: config.token,
+      client_token: config.clientToken,
+      connected,
+      phone_number: phoneNumber,
+      connected_at: connectedAt,
+      last_healthcheck_at: lastHealthcheckAt,
+      metadata: {
+        source: config.source,
+        bootstrapped_at: lastHealthcheckAt,
+      },
+    }, { onConflict: 'provider' })
+    .select('provider, instance_id, connected, phone_number, connected_at, last_healthcheck_at, metadata')
+    .single();
+
+  if (error) {
+    throw new Error(error.message || 'Falha ao inicializar o gateway WhatsApp global.');
+  }
+
+  return {
+    row: data,
+    validation,
+    connected,
+    phone_number: phoneNumber,
+    phone_number_masked: maskPhone(phoneNumber),
+    connected_pending_phone: connected && !phoneNumber,
+    status: connected ? 'connected' : 'awaiting_qr',
+    config_source: config.source,
+  };
+}
+
+async function validatePlatformGatewayConnection(config: {
+  instanceId: string;
+  token: string;
+  clientToken: string;
+}) {
+  const url = `https://api.z-api.io/instances/${config.instanceId}/token/${config.token}/status`;
+  const response = await withTimeout(
+    (signal) =>
+      fetch(url, {
+        method: 'GET',
+        signal,
+        headers: {
+          'Client-Token': String(config.clientToken || '').trim(),
+          'Content-Type': 'application/json',
+        },
+      }),
+    8000,
+    'Tempo limite excedido ao validar o gateway WhatsApp global.',
+  );
+
+  const responseText = await response.text().catch(() => '');
+  try {
+    return responseText ? JSON.parse(responseText) : {};
+  } catch {
+    return responseText || {};
+  }
+}
+
+async function fetchZapiDeviceInfo(config: {
+  instanceId: string;
+  token: string;
+  clientToken: string;
+}) {
+  const url = `https://api.z-api.io/instances/${config.instanceId}/token/${config.token}/device`;
+  const response = await withTimeout(
+    (signal) =>
+      fetch(url, {
+        method: 'GET',
+        signal,
+        headers: {
+          'Client-Token': String(config.clientToken || '').trim(),
+          'Content-Type': 'application/json',
+        },
+      }),
+    8000,
+    'Tempo limite excedido ao consultar o dispositivo Z-API.',
+  );
+
+  const responseText = await response.text().catch(() => '');
+  let data: unknown = {};
+  try {
+    data = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    data = responseText || {};
+  }
+
+  if (!response.ok) {
+    const responseRecord = data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
+    const zapiMsg = String(responseRecord.error || responseRecord.message || responseText || '').trim();
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(`Client Token invalido ou expirado (HTTP ${response.status}). Atualize o Client Token em Integracoes.`);
+    }
+    throw new Error(
+      zapiMsg
+        ? `Z-API device erro (HTTP ${response.status}): ${zapiMsg}`
+        : `Z-API device erro ${response.status}.`,
+    );
+  }
+
+  return data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
+}
+
+async function resolveZapiPhoneNumber(config: {
+  instanceId: string;
+  token: string;
+  clientToken: string;
+}, statusData?: Record<string, unknown> | null) {
+  const directPhone = extractZapiPhoneNumber(statusData);
+  if (directPhone) return directPhone;
+  if (!isZapiConnected(statusData || {})) return '';
+
+  try {
+    const deviceInfo = await fetchZapiDeviceInfo(config);
+    return extractZapiPhoneNumber(deviceInfo) || '';
+  } catch (error) {
+    console.warn('[ZAPI DEVICE PHONE FALLBACK]', {
+      instance_id: maskSecret(config.instanceId),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return '';
+  }
+}
+
 async function validateZapiConnection(config: {
   instanceId: string;
   token: string;
   clientToken: string;
 }) {
   const url = `https://api.z-api.io/instances/${config.instanceId}/token/${config.token}/status`;
+  const requestStartedAt = Date.now();
 
   const response = await withTimeout(
     (signal) => fetch(url, {
@@ -671,6 +1056,34 @@ async function resolveRequestedZapiConfig(
   return resolveCompanyZapiConfig(supabaseAdmin, companyId, options);
 }
 
+async function resolveRequestedPlatformZapiConfig(
+  supabaseAdmin: AdminClient,
+  config: Record<string, unknown> | null | undefined,
+  options: { allowTestMode?: boolean } = {},
+) {
+  const hasInlineConfig = Boolean(
+    String(config?.instance_id || '').trim() &&
+    String(config?.token || '').trim() &&
+    String(config?.client_token || '').trim(),
+  );
+
+  if (hasInlineConfig) {
+    const inlineConfig = resolveInlineZapiConfig(config);
+    console.log('[ZAPI PLATFORM CONFIG]', {
+      provider: 'zapi',
+      connected: false,
+      has_instance_id: true,
+      has_token: true,
+      has_client_token: true,
+      source: 'inline',
+      instance_id: maskSecret(inlineConfig.instanceId),
+    });
+    return inlineConfig;
+  }
+
+  return resolvePlatformZapiConfig(supabaseAdmin, options);
+}
+
 function extractZapiPhoneNumber(data: Record<string, unknown> | null | undefined) {
   return String(
     data?.phone ||
@@ -707,7 +1120,7 @@ async function assertZapiPaired(
   companyId: string,
   options: { allowTestMode?: boolean } = {},
 ): Promise<void> {
-  let config: { instanceId: string; token: string; clientToken: string };
+  let config: { instanceId: string; token: string; clientToken: string; phoneNumber?: string };
   try {
     config = await resolveCompanyZapiConfig(supabaseAdmin, companyId, options);
   } catch (err) {
@@ -734,7 +1147,7 @@ async function assertZapiPaired(
   }
 
   const liveConnected = isZapiConnected(liveStatus);
-  const livePhone = extractZapiPhoneNumber(liveStatus);
+  const livePhone = (await resolveZapiPhoneNumber(config, liveStatus)) || String(config.phoneNumber || '').trim();
 
   if (!liveConnected || !livePhone) {
     const reason = !liveConnected
@@ -1453,6 +1866,8 @@ function scoreFileAgainstQuery(
 
   const fnNorm = normalize(filename);
   const folderNorm = normalize(parentFolderName);
+  const fileIds = extractFinancialIdsFromText(filename);
+  const folderIds = extractFinancialIdsFromText(parentFolderName);
 
   const matched: string[] = [];
   const reasons: string[] = [];
@@ -1462,11 +1877,14 @@ function scoreFileAgainstQuery(
   // ── Number tokens ─────────────────────────────────────────────────────────────
   let numMatchedCount = 0;
   numberTokens.forEach((nt, idx) => {
+    const tokenId = normalizeFinancialId(nt);
     const tNorm = normalize(nt);
-    if (!tNorm) return;
-    const inFile = fnNorm.includes(tNorm);
-    const inFolder = folderNorm.includes(tNorm);
-    if (inFile || inFolder) {
+    if (!tNorm || !tokenId.compact) return;
+    let inFile = fnNorm.includes(tNorm);
+    let inFolder = folderNorm.includes(tNorm);
+    const familyInFile = !inFile && fileIds.some((candidate) => compareFinancialIdVariants(tokenId, candidate).family);
+    const familyInFolder = !inFolder && folderIds.some((candidate) => compareFinancialIdVariants(tokenId, candidate).family);
+    if (inFile || inFolder || familyInFile || familyInFolder) {
       numMatchedCount++;
       matched.push(nt);
       let pts: number;
@@ -1526,6 +1944,151 @@ function scoreFileAgainstQuery(
 
   if (score === 0 || matched.length === 0) {
     return { score: 0, matched: [], reasons: ['no_match'], exact_match: false };
+  }
+
+  return { score, matched, reasons, exact_match: exactMatch };
+}
+
+function scoreFileAgainstQueryV2(
+  filename: string,
+  parentFolderName: string,
+  numberTokens: string[],
+  nameTokens: string[],
+  folderPathHint = parentFolderName,
+): { score: number; matched: string[]; reasons: string[]; exact_match: boolean } {
+  const normalize = (s: string) =>
+    s.replace(/\.pdf$/i, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const fnNorm = normalize(filename);
+  const folderNorm = normalize(parentFolderName);
+  const pathNorm = normalize(folderPathHint);
+  const fileIds = extractFinancialIdsFromText(filename);
+  const folderIds = extractFinancialIdsFromText(parentFolderName);
+  const pathIds = extractFinancialIdsFromText(folderPathHint);
+  const primaryFinancialId = numberTokens[0] || numberTokens[1] || numberTokens[2] || '';
+  const namingSignals = detectDriveNamingSignals(filename, folderPathHint, primaryFinancialId, nameTokens.join(' '));
+
+  const matched: string[] = [];
+  const reasons: string[] = [];
+  let score = 0;
+  let exactMatch = false;
+  let numMatchedCount = 0;
+
+  for (const [idx, nt] of numberTokens.entries()) {
+    const tokenId = normalizeFinancialId(nt);
+    const tNorm = normalize(nt);
+    if (!tNorm || !tokenId.compact) continue;
+
+    const exactInFile = fnNorm.includes(tNorm)
+      || fileIds.some((candidate) => compareFinancialIdVariants(tokenId, candidate).exact);
+    const exactInFolder = !exactInFile && (
+      folderNorm.includes(tNorm)
+      || folderIds.some((candidate) => compareFinancialIdVariants(tokenId, candidate).exact)
+    );
+    const exactInPath = !exactInFile && !exactInFolder && (
+      pathNorm.includes(tNorm)
+      || pathIds.some((candidate) => compareFinancialIdVariants(tokenId, candidate).exact)
+    );
+    const familyInFile = !exactInFile && !exactInFolder && !exactInPath
+      && fileIds.some((candidate) => compareFinancialIdVariants(tokenId, candidate).family);
+    const familyInFolder = !exactInFile && !exactInFolder && !exactInPath && !familyInFile
+      && folderIds.some((candidate) => compareFinancialIdVariants(tokenId, candidate).family);
+    const familyInPath = !exactInFile && !exactInFolder && !exactInPath && !familyInFile && !familyInFolder
+      && pathIds.some((candidate) => compareFinancialIdVariants(tokenId, candidate).family);
+
+    if (!(exactInFile || exactInFolder || exactInPath || familyInFile || familyInFolder || familyInPath)) continue;
+
+    numMatchedCount += 1;
+    matched.push(nt);
+
+    const location = exactInFile || familyInFile ? 'file' : exactInPath || familyInPath ? 'path' : 'folder';
+    const matchKind = exactInFile || exactInFolder || exactInPath ? 'exact' : 'family';
+    let pts = 0;
+
+    if (idx === 0) {
+      if (matchKind === 'exact') {
+        pts = location === 'file' ? 100 : 90;
+        exactMatch = true;
+      } else {
+        pts = location === 'file' ? 84 : 74;
+      }
+    } else if (idx === 1) {
+      pts = matchKind === 'exact'
+        ? (location === 'file' ? 30 : 20)
+        : (location === 'file' ? 24 : 18);
+    } else {
+      pts = matchKind === 'exact'
+        ? (location === 'file' ? 20 : 15)
+        : (location === 'file' ? 14 : 10);
+    }
+
+    score += pts;
+    reasons.push(`financial_${matchKind}_${location}:${nt}`);
+  }
+
+  if (numberTokens.length > 0 && numMatchedCount === 0) {
+    return { score: 0, matched: [], reasons: ['rejected:no_number_match'], exact_match: false };
+  }
+
+  if (numberTokens.length > 0 && numMatchedCount === numberTokens.length) {
+    score += 15;
+    reasons.push('bonus:all_numbers_matched');
+  }
+
+  let nameMatchedCount = 0;
+  for (const nt of nameTokens) {
+    const tNorm = normalize(nt);
+    if (!tNorm) continue;
+    const inFile = fnNorm.includes(tNorm);
+    const inFolder = folderNorm.includes(tNorm);
+    const inPath = !inFile && !inFolder && pathNorm.includes(tNorm);
+    if (!inFile && !inFolder && !inPath) continue;
+    nameMatchedCount += 1;
+    matched.push(nt);
+    score += inFile ? 15 : inFolder ? 10 : 8;
+    reasons.push(`name${inFile ? '_file' : inFolder ? '_folder' : '_path'}:${nt}`);
+  }
+
+  if (namingSignals.boletoPrefix && namingSignals.fileHasFinancialId) {
+    score += 18;
+    reasons.push('pattern:boleto_prefix');
+  }
+  if (namingSignals.numberDashClient && namingSignals.fileHasFinancialId) {
+    score += 16;
+    reasons.push('pattern:number_dash_client');
+  }
+  if (namingSignals.clientFolder && numMatchedCount > 0) {
+    score += 14;
+    reasons.push('pattern:client_folder');
+  }
+  if (namingSignals.strongFileNameMatches >= 2 && numMatchedCount > 0) {
+    score += 12;
+    reasons.push('pattern:client_tokens_in_filename');
+  }
+  if (namingSignals.strongFolderMatches >= 2 && numMatchedCount > 0) {
+    score += 8;
+    reasons.push('pattern:client_tokens_in_folder');
+  }
+  if (namingSignals.genericDocument) {
+    score = Math.max(0, score - 45);
+    reasons.push('penalty:generic_document');
+  }
+
+  if (nameTokens.length >= 2 && nameMatchedCount === 1 && numMatchedCount === 0) {
+    return { score: 0, matched: [], reasons: ['rejected:single_name_no_number'], exact_match: false };
+  }
+
+  if (nameTokens.length >= 2 && nameMatchedCount === nameTokens.length) {
+    score += 10;
+    reasons.push('bonus:all_names_matched');
+  }
+
+  if (score === 0 || matched.length === 0) {
+    return { score: 0, matched: [], reasons: ['no_match'], exact_match: false };
+  }
+
+  if (namingSignals.genericDocument && !exactMatch && score < 80) {
+    return { score: 0, matched: [], reasons: ['rejected:generic_document'], exact_match: false };
   }
 
   return { score, matched, reasons, exact_match: exactMatch };
@@ -1660,14 +2223,19 @@ async function targetedDriveLookup(
   }));
 
   // ── Step 2: Collect PDFs from each client folder candidate ─────────────────
-  const collected: Array<DriveCandidate & { _parentFolderName: string; _parentFolderId: string }> = [];
+  const collected: Array<DriveCandidate & { _parentFolderName: string; _parentFolderId: string; _folderPathHint: string }> = [];
 
   for (const clientFolder of clientCandidates) {
     // PDFs directly in the client folder
     apiCalls++;
     const directPdfs = await listPdfFilesInFolder(token, clientFolder.id, 100).catch(() => []);
     pathLog.push(`${clientFolder.path}/ → ${directPdfs.length} PDFs diretos`);
-    collected.push(...directPdfs.map((f) => ({ ...f, _parentFolderName: clientFolder.name, _parentFolderId: clientFolder.id })));
+    collected.push(...directPdfs.map((f) => ({
+      ...f,
+      _parentFolderName: clientFolder.name,
+      _parentFolderId: clientFolder.id,
+      _folderPathHint: clientFolder.path,
+    })));
 
     // Subfolders of the client folder
     apiCalls++;
@@ -1700,7 +2268,12 @@ async function targetedDriveLookup(
       apiCalls++;
       const subPdfs = await listPdfFilesInFolder(token, sub.id, 100).catch(() => []);
       pathLog.push(`${clientFolder.path} / ${sub.name}/ → ${subPdfs.length} PDFs`);
-      collected.push(...subPdfs.map((f) => ({ ...f, _parentFolderName: sub.name, _parentFolderId: sub.id })));
+      collected.push(...subPdfs.map((f) => ({
+        ...f,
+        _parentFolderName: sub.name,
+        _parentFolderId: sub.id,
+        _folderPathHint: `${clientFolder.path} / ${sub.name}`,
+      })));
 
       // One deeper level (e.g. MENEZES E BATISTA / 4239 / BOLETOS)
       apiCalls++;
@@ -1713,7 +2286,12 @@ async function targetedDriveLookup(
         apiCalls++;
         const subsubPdfs = await listPdfFilesInFolder(token, subsub.id, 50).catch(() => []);
         pathLog.push(`${clientFolder.path} / ${sub.name} / ${subsub.name}/ → ${subsubPdfs.length} PDFs`);
-        collected.push(...subsubPdfs.map((f) => ({ ...f, _parentFolderName: subsub.name, _parentFolderId: subsub.id })));
+        collected.push(...subsubPdfs.map((f) => ({
+          ...f,
+          _parentFolderName: subsub.name,
+          _parentFolderId: subsub.id,
+          _folderPathHint: `${clientFolder.path} / ${sub.name} / ${subsub.name}`,
+        })));
       }
     }
   }
@@ -1825,16 +2403,13 @@ function extractQueryTokens(query: string): {
   const nameTokens: string[] = [];
 
   // Extract hyphenated numbers first: "4239-2" → combined "42392" + base "4239"
-  const hyphenNums = norm.match(/\d+-\d+/g) || [];
-  for (const hn of hyphenNums) {
-    const combined = hn.replace(/-/g, '');
-    if (combined.length >= 2) numberTokens.push(combined);
-    const base = hn.split('-')[0];
-    if (base.length >= 3) numberTokens.push(base);
+  const financialIdMatches = norm.match(/[a-z]*\d+(?:[\/._-]\d+)*/g) || [];
+  for (const rawId of financialIdMatches) {
+    numberTokens.push(...buildFinancialLookupVariants(rawId));
   }
 
   // Tokenize the remainder
-  const remainder = norm.replace(/\d+-\d+/g, ' ');
+  const remainder = norm.replace(/[a-z]*\d+(?:[\/._-]\d+)*/g, ' ');
   const words = remainder.split(/[\s,;:\/\\.()+\-]+/).filter(Boolean);
 
   for (const word of words) {
@@ -1842,13 +2417,13 @@ function extractQueryTokens(query: string): {
     const clean = word.replace(/[^a-z0-9]/g, '');
     if (!clean || clean.length < 2) continue;
     if (/^\d+$/.test(clean)) {
-      numberTokens.push(clean);
+      numberTokens.push(...buildFinancialLookupVariants(clean));
     } else {
       if (!STOP.has(clean)) nameTokens.push(clean);
     }
   }
 
-  const uniqueNums = [...new Set(numberTokens)].filter((t) => t.length >= 2);
+  const uniqueNums = [...new Set(numberTokens)].filter((t) => t.length >= 3);
   const uniqueNames = [...new Set(nameTokens)].filter((t) => t.length >= 2);
   return {
     numberTokens: uniqueNums,
@@ -2107,8 +2682,8 @@ async function testBoletoLookup(
       const tAllScored = tPdfs.map((file) => {
         const fnNorm = normStr(file.name || '');
         const folderNorm = normStr(file._parentFolderName || '');
-        const { score, matched, reasons, exact_match } = scoreFileAgainstQuery(
-          file.name || '', file._parentFolderName || '', numberTokens, nameTokens,
+        const { score, matched, reasons, exact_match } = scoreFileAgainstQueryV2(
+          file.name || '', file._parentFolderName || '', numberTokens, nameTokens, file._folderPathHint || file._parentFolderName || '',
         );
         if (score > 0) {
           console.log(JSON.stringify({ event: 'targeted_score', name: file.name, folder: file._parentFolderName, score, exact_match, matched }));
@@ -2283,11 +2858,12 @@ async function testBoletoLookup(
   const allScored = allPdfs.map((file) => {
     const fnNorm = normStr(file.name || '');
     const folderNorm = normStr(file._parentFolderName || '');
-    const { score, matched, reasons, exact_match } = scoreFileAgainstQuery(
+    const { score, matched, reasons, exact_match } = scoreFileAgainstQueryV2(
       file.name || '',
       file._parentFolderName || '',
       numberTokens,
       nameTokens,
+      file._folderPathHint || file._parentFolderName || '',
     );
     if (score > 0) {
       console.log(JSON.stringify({
@@ -2419,8 +2995,8 @@ async function testBoletoLookup(
 
     scored = Array.from(fallbackMap.values())
       .map(({ file, parentFolderName }) => {
-        const { score, matched, reasons, exact_match } = scoreFileAgainstQuery(
-          file.name || '', parentFolderName, numberTokens, nameTokens,
+        const { score, matched, reasons, exact_match } = scoreFileAgainstQueryV2(
+          file.name || '', parentFolderName, numberTokens, nameTokens, parentFolderName,
         );
         // Files found by explicit Drive API query already passed a 'name contains' filter,
         // so apply a floor of 30 (they are at least weakly relevant).
@@ -2488,31 +3064,65 @@ async function searchDriveFiles(token: string, folderId: string, record: Financi
     }
   }
 
+  const query = buildRecordLookupQuery(record);
+  if (query) {
+    try {
+      const lookup = await testBoletoLookup(token, folderId, query, { maxFolders: 100 });
+      const files = lookup.results
+        .slice(0, 10)
+        .map((result) => result.file)
+        .filter((file, index, arr) => file?.id && arr.findIndex((item) => item.id === file.id) === index);
+
+      if (files.length > 0) {
+        console.log(JSON.stringify({
+          event: 'search_drive_files_lookup_success',
+          record_id: record.id,
+          query,
+          count: files.length,
+          top_file: files[0]?.name || null,
+          top_score: lookup.results[0]?.score || 0,
+          top_exact_match: Boolean(lookup.results[0]?.exact_match),
+        }));
+        return files;
+      }
+    } catch (lookupError) {
+      console.warn(JSON.stringify({
+        event: 'search_drive_files_lookup_failed',
+        record_id: record.id,
+        query,
+        error: lookupError instanceof Error ? lookupError.message : String(lookupError),
+      }));
+    }
+  }
+
   const { numeroBoletoEfetivo, clienteEfetivo } = logCobrancaMapping(record);
   const boleto = String(numeroBoletoEfetivo || '').trim();
   const normalizedName = normalizeDriveName(clienteEfetivo || record.nome || '');
-  const candidates = [
+  const financialVariants = buildFinancialLookupVariants(boleto || record.documento || record.numero_nf || '');
+  const exactNameCandidates = [
     boleto ? `${boleto}.pdf` : '',
     boleto && normalizedName ? `${normalizedName}_${boleto}.pdf` : '',
+    ...financialVariants.map((variant) => `${variant}.pdf`),
   ].filter(Boolean);
 
   const results: DriveCandidate[] = [];
 
-  for (const candidateName of candidates) {
+  for (const candidateName of exactNameCandidates) {
     const escapedName = candidateName.replace(/'/g, "\\'");
-    const queryParts = [`name='${escapedName}'`, 'trashed=false'];
+    const queryParts = [`name='${escapedName}'`, 'trashed=false', "mimeType='application/pdf'"];
     queryParts.push(`'${folderId}' in parents`);
-    const query = encodeURIComponent(queryParts.join(' and '));
+    const queryText = encodeURIComponent(queryParts.join(' and '));
     const data = await googleJson<{ files?: DriveCandidate[] }>(
-      `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType)&pageSize=5`,
+      `https://www.googleapis.com/drive/v3/files?q=${queryText}&fields=files(id,name,mimeType,parents,webViewLink,webContentLink)&pageSize=5`,
       token,
-    );
+    ).catch(() => ({ files: [] as DriveCandidate[] }));
     if (data.files?.length) {
       return data.files;
     }
   }
 
   const fuzzySearches = [
+    ...financialVariants.map((variant) => [`fullText contains '${variant.replace(/'/g, "\\'")}'`]),
     boleto ? [`fullText contains '${boleto.replace(/'/g, "\\'")}'`] : [],
     normalizedName ? [`fullText contains '${normalizedName.replace(/'/g, "\\'")}'`] : [],
   ].filter((parts) => parts.length);
@@ -2522,16 +3132,18 @@ async function searchDriveFiles(token: string, folderId: string, record: Financi
     queryParts.push("mimeType='application/pdf'");
     queryParts.push('trashed=false');
     const data = await googleJson<{ files?: DriveCandidate[] }>(
-      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(queryParts.join(' and '))}&fields=files(id,name,mimeType)&pageSize=10`,
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(queryParts.join(' and '))}&fields=files(id,name,mimeType,parents,webViewLink,webContentLink)&pageSize=10`,
       token,
-    );
+    ).catch(() => ({ files: [] as DriveCandidate[] }));
     if (data.files?.length) {
       results.push(...data.files);
       break;
     }
   }
 
-  return results;
+  const deduped = results.filter((file, index, arr) => arr.findIndex((item) => item.id === file.id) === index);
+  if (deduped.length > 0) return deduped;
+  return await searchDriveFilesByFinancialVariants(token, record);
 }
 
 // ── ETAPA 1: Scored live search — returns candidates with confidence scores ──
@@ -2609,6 +3221,386 @@ async function searchDriveFilesScored(
   }
 
   return results.sort((a, b) => b.score - a.score);
+}
+
+async function searchDriveFilesByFinancialVariants(
+  token: string,
+  record: FinancialRow,
+): Promise<DriveCandidate[]> {
+  const nameTokens = normalizeName(getClienteEfetivo(record) || record.nome || '')
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 4)
+    .slice(0, 3);
+  const financialVariants = uniqueStrings([
+    ...buildFinancialLookupVariants(record.numero_boleto || ''),
+    ...buildFinancialLookupVariants(record.documento || ''),
+    ...buildFinancialLookupVariants(record.numero_nf || ''),
+  ]).filter((token) => token.length >= 4).slice(0, 6);
+
+  const results: DriveCandidate[] = [];
+  for (const variant of financialVariants) {
+    const clauses = [
+      `name contains '${variant.replace(/'/g, "\\'")}'`,
+      "mimeType='application/pdf'",
+      'trashed=false',
+    ];
+    const data = await googleJson<{ files?: DriveCandidate[] }>(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(clauses.join(' and '))}&fields=files(id,name,mimeType,parents,webViewLink,webContentLink)&pageSize=20`,
+      token,
+    ).catch(() => ({ files: [] as DriveCandidate[] }));
+
+    for (const file of data.files || []) {
+      if (results.find((item) => item.id === file.id)) continue;
+      if (nameTokens.length === 0) {
+        results.push(file);
+        continue;
+      }
+      const normalizedFile = normalizeName(file.name || '');
+      if (nameTokens.some((token) => normalizedFile.includes(token))) {
+        results.push(file);
+      }
+    }
+
+    if (results.length >= 10) break;
+  }
+
+  return results.slice(0, 10);
+}
+
+async function searchDriveGlobalByVariants(
+  token: string,
+  record: FinancialRow,
+): Promise<DriveCandidate[]> {
+  const results: DriveCandidate[] = [];
+  const nameTokens = normalizeName(getClienteEfetivo(record) || record.nome || '')
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 4)
+    .slice(0, 3);
+  const financialVariants = uniqueStrings([
+    ...buildFinancialLookupVariants(record.numero_boleto || ''),
+    ...buildFinancialLookupVariants(record.documento || ''),
+    ...buildFinancialLookupVariants(record.numero_nf || ''),
+  ]).filter((token) => token.length >= 3).slice(0, 8);
+
+  for (const variant of financialVariants) {
+    const clauses = [
+      `name contains '${variant.replace(/'/g, "\\'")}'`,
+      "mimeType='application/pdf'",
+      'trashed=false',
+    ];
+    const data = await googleJson<{ files?: DriveCandidate[] }>(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(clauses.join(' and '))}&fields=files(id,name,mimeType,parents,webViewLink,webContentLink,modifiedTime)&pageSize=25&corpora=allDrives&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+      token,
+    ).catch(() => ({ files: [] as DriveCandidate[] }));
+    for (const file of data.files || []) {
+      if (results.find((item) => item.id === file.id)) continue;
+      const fileNameNorm = normalizeName(file.name || '');
+      if (nameTokens.length > 0) {
+        const strongMatches = nameTokens.filter((token) => fileNameNorm.includes(token)).length;
+        if (strongMatches === 0 && !extractFinancialIdsFromText(file.name || '').some((candidate) =>
+          buildFinancialLookupVariants(record.numero_boleto || record.documento || record.numero_nf || '')
+            .some((variantToken) => compareFinancialIdVariants(candidate, normalizeFinancialId(variantToken)).family || compareFinancialIdVariants(candidate, normalizeFinancialId(variantToken)).exact))) {
+          continue;
+        }
+      }
+      results.push(file);
+    }
+    if (results.length >= 15) break;
+  }
+
+  if (results.length === 0 && nameTokens.length > 0) {
+    const clientClause = nameTokens
+      .slice(0, 2)
+      .map((token) => `name contains '${token.replace(/'/g, "\\'")}'`)
+      .join(' and ');
+    const data = await googleJson<{ files?: DriveCandidate[] }>(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`${clientClause} and mimeType='application/pdf' and trashed=false`)}&fields=files(id,name,mimeType,parents,webViewLink,webContentLink,modifiedTime)&pageSize=20&corpora=allDrives&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+      token,
+    ).catch(() => ({ files: [] as DriveCandidate[] }));
+    for (const file of data.files || []) {
+      if (!results.find((item) => item.id === file.id)) results.push(file);
+    }
+  }
+
+  return results.slice(0, 20);
+}
+
+async function collectOperationalClientFolderCandidates(
+  token: string,
+  rootFolderId: string,
+  clientName: string,
+): Promise<Array<{ id: string; name: string; path: string; score: number }>> {
+  const nameTokens = normalizeName(clientName)
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3)
+    .slice(0, 4);
+  if (nameTokens.length === 0) return [];
+
+  const rootChildren = await listSubfoldersAll(token, rootFolderId, 600).catch(() => []);
+  const containerCandidates = rootChildren.filter((folder) => /\bCLIENTES?\b/i.test(folder.name) || scoreFolderName(folder.name, nameTokens).score >= 60);
+
+  const candidates: Array<{ id: string; name: string; path: string; score: number }> = [];
+  for (const folder of rootChildren) {
+    const directScore = scoreFolderName(folder.name, nameTokens);
+    if (directScore.score >= 60) {
+      candidates.push({ id: folder.id, name: folder.name, path: folder.name, score: directScore.score });
+    }
+  }
+
+  for (const container of containerCandidates.slice(0, 8)) {
+    const subfolders = await listSubfoldersAll(token, container.id, 700).catch(() => []);
+    for (const folder of subfolders) {
+      const directScore = scoreFolderName(folder.name, nameTokens);
+      if (directScore.score >= 60) {
+        candidates.push({
+          id: folder.id,
+          name: folder.name,
+          path: `${container.name} / ${folder.name}`,
+          score: directScore.score,
+        });
+      }
+    }
+  }
+
+  return candidates
+    .sort((a, b) => b.score - a.score)
+    .filter((item, index, arr) => arr.findIndex((other) => other.id === item.id) === index)
+    .slice(0, 6);
+}
+
+async function listOperationalPdfsForFolderCandidate(
+  token: string,
+  folder: { id: string; name: string; path: string },
+): Promise<DriveCandidate[]> {
+  const files: DriveCandidate[] = [];
+  const direct = await listPdfFilesInFolder(token, folder.id, 40).catch(() => []);
+  files.push(...direct.map((file) => ({
+    ...file,
+    _parentFolderName: folder.name,
+    _parentFolderId: folder.id,
+    _folderPathHint: folder.path,
+  })));
+
+  const subfolders = await listSubfolders(token, folder.id).catch(() => []);
+  for (const sub of subfolders.slice(0, 8)) {
+    const pdfs = await listPdfFilesInFolder(token, sub.id, 20).catch(() => []);
+    files.push(...pdfs.map((file) => ({
+      ...file,
+      _parentFolderName: sub.name,
+      _parentFolderId: sub.id,
+      _folderPathHint: `${folder.path} / ${sub.name}`,
+    })));
+  }
+
+  return files.filter((item, index, arr) => arr.findIndex((other) => other.id === item.id) === index);
+}
+
+async function findFinancialRecordByTarget(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+  target: OperationalBoletoTarget,
+): Promise<FinancialRow | null> {
+  if (target.registro_id) {
+    const { data } = await supabaseAdmin
+      .from('registros_financeiros')
+      .select('id, company_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, status, drive_file_id, linha_digitavel, codigo_barras, boleto_url, boleto_pdf_nome, boleto_match_confidence, boleto_extraido_em, boleto_status, boleto_match_strategy, boleto_erro, preventiva_enviada, data_envio_preventiva, cobranca_vencimento_enviada, data_envio_vencimento, ultima_cobranca, tentativas_cobranca')
+      .eq('id', target.registro_id)
+      .eq('company_id', companyId)
+      .maybeSingle();
+    return (data as FinancialRow | null) || null;
+  }
+
+  const terms = uniqueStrings([target.numero_titulo, target.cliente_nome]).slice(0, 2);
+  const ors = [
+    target.numero_titulo ? `numero_boleto.eq.${String(target.numero_titulo).replace(/,/g, '')}` : '',
+    target.numero_titulo ? `documento.eq.${String(target.numero_titulo).replace(/,/g, '')}` : '',
+    target.cliente_nome ? `nome.ilike.%${String(target.cliente_nome).replace(/,/g, ' ')}%` : '',
+    target.cliente_nome ? `cliente_nome.ilike.%${String(target.cliente_nome).replace(/,/g, ' ')}%` : '',
+  ].filter(Boolean);
+
+  const { data } = await supabaseAdmin
+    .from('registros_financeiros')
+    .select('id, company_id, nome, cliente_nome, cliente_numero, telefone, documento, numero_boleto, numero_nf, valor, data_vencimento, status, drive_file_id, linha_digitavel, codigo_barras, boleto_url, boleto_pdf_nome, boleto_match_confidence, boleto_extraido_em, boleto_status, boleto_match_strategy, boleto_erro, preventiva_enviada, data_envio_preventiva, cobranca_vencimento_enviada, data_envio_vencimento, ultima_cobranca, tentativas_cobranca')
+    .eq('company_id', companyId)
+    .or(ors.join(','))
+    .limit(25);
+
+  const rows = (data as FinancialRow[] | null) || [];
+  if (rows.length === 0) return null;
+
+  return rows
+    .map((record) => {
+      const idScore = target.numero_titulo
+        ? Math.max(
+          compareFinancialIdVariants(normalizeFinancialId(record.numero_boleto || ''), normalizeFinancialId(target.numero_titulo)).exact ? 100 : 0,
+          compareFinancialIdVariants(normalizeFinancialId(record.documento || ''), normalizeFinancialId(target.numero_titulo)).exact ? 95 : 0,
+          compareFinancialIdVariants(normalizeFinancialId(record.numero_boleto || ''), normalizeFinancialId(target.numero_titulo)).family ? 70 : 0,
+          compareFinancialIdVariants(normalizeFinancialId(record.documento || ''), normalizeFinancialId(target.numero_titulo)).family ? 65 : 0,
+        )
+        : 0;
+      const nameScore = nameSimilarityScore(getClienteEfetivo(record) || record.nome, target.cliente_nome || '') * 100;
+      return { record, score: idScore + nameScore };
+    })
+    .sort((a, b) => b.score - a.score)[0]?.record || null;
+}
+
+async function auditOperationalBoletoTarget(
+  supabaseAdmin: AdminClient,
+  token: string,
+  folderId: string,
+  companyId: string,
+  target: OperationalBoletoTarget,
+) {
+  const record = await findFinancialRecordByTarget(supabaseAdmin, companyId, target);
+  if (!record) {
+    return {
+      target,
+      found: false,
+      status: 'boleto_indisponivel',
+      topCandidates: [],
+      rejectionReason: 'registro_nao_encontrado',
+    };
+  }
+
+  const candidateMap = new Map<string, DriveCandidate>();
+  const addCandidates = (items: DriveCandidate[]) => {
+    for (const item of items || []) {
+      if (item?.id && !candidateMap.has(item.id)) candidateMap.set(item.id, item);
+    }
+  };
+
+  addCandidates(await searchDriveFiles(token, folderId, record).catch(() => []));
+  addCandidates(await searchDriveGlobalByVariants(token, record).catch(() => []));
+
+  const clientFolders = await collectOperationalClientFolderCandidates(token, folderId, getClienteEfetivo(record) || record.nome).catch(() => []);
+  for (const folder of clientFolders) {
+    addCandidates(await listOperationalPdfsForFolderCandidate(token, folder).catch(() => []));
+  }
+
+  const rescored: Array<{
+    file: DriveCandidate;
+    pdfData: ExtractedBoletoData | null;
+    score: number;
+    matchedBy: string[];
+    rejectionReason: string | null;
+  }> = [];
+
+  for (const file of Array.from(candidateMap.values()).slice(0, 20)) {
+    try {
+      const pdfData = await extractBoletoDataFromDriveFile(token, file);
+      const match = scoreFinancialMatchV2(pdfData, record);
+      const rejected =
+        match.score < 50 ? 'score_baixo' :
+        match.reasons.includes('rejected:generic_document') ? 'generico' :
+        match.reasons.includes('rejected:ambiguous_without_financial_id') ? 'cliente_sem_numero_seguro' :
+        (match.reasons.includes('financial_id_family') && !match.reasons.includes('nome_token_similarity') && !match.reasons.includes('nome_token_partial')) ? 'numero_sem_cliente_forte' :
+        null;
+
+      rescored.push({
+        file,
+        pdfData,
+        score: match.score,
+        matchedBy: match.reasons,
+        rejectionReason: rejected,
+      });
+    } catch {
+      rescored.push({
+        file,
+        pdfData: null,
+        score: 0,
+        matchedBy: [],
+        rejectionReason: 'pdf_ilegivel_ou_inacessivel',
+      });
+    }
+  }
+
+  rescored.sort((a, b) => b.score - a.score);
+  const best = rescored[0] || null;
+  const second = rescored[1] || null;
+  const ambiguous = Boolean(best && second && best.score >= 80 && second.score >= 80 && Math.abs(best.score - second.score) <= 5);
+  const safeFound = Boolean(best && best.score >= 80 && !ambiguous && !best.rejectionReason && best.pdfData);
+
+  if (safeFound && best?.pdfData) {
+    const strategy = ['operational_audit', best.pdfData.match_strategy, ...best.matchedBy].filter(Boolean).join('|');
+    await upsertBoletoMatchResult(supabaseAdmin, companyId, record, best.pdfData, 'encontrado', best.score, strategy, null);
+    const prepared = await prepareManualChargeData(supabaseAdmin, companyId, record.id).catch(() => null);
+    await supabaseAdmin.from('audit_logs').insert({
+      company_id: companyId,
+      user_id: null,
+      action: 'drive_operational_boleto_audit_found',
+      entity: 'registros_financeiros',
+      metadata: {
+        registro_id: record.id,
+        numero_titulo: target.numero_titulo || record.numero_boleto || record.documento || null,
+        score: best.score,
+        filename: best.pdfData.pdf_nome,
+        folder_hint: buildSafeFolderHint(best.pdfData.folder_hint),
+      },
+    }).then(() => {}).catch(() => {});
+
+    return {
+      target,
+      record_id: record.id,
+      found: true,
+      status: 'encontrado',
+      boleto_pdf_nome: prepared?.payload?.boleto_pdf_nome || best.pdfData.pdf_nome,
+      prepare_manual_charge: prepared ? {
+        boleto_pdf_nome: prepared.payload?.boleto_pdf_nome || null,
+        drive_file_id: prepared.payload?.drive_file_id || null,
+      } : null,
+      topCandidates: rescored.slice(0, 5).map((candidate) => buildExplainMatchPayload(
+        candidate.score,
+        candidate.matchedBy,
+        candidate.file.name,
+        candidate.pdfData?.folder_hint || candidate.file._folderPathHint || candidate.file._parentFolderName || '',
+        candidate.rejectionReason,
+      )),
+    };
+  }
+
+  await supabaseAdmin
+    .from('registros_financeiros')
+    .update({
+      boleto_status: 'nao_encontrado',
+      boleto_match_confidence: best?.score ? Number(best.score.toFixed(2)) : 0,
+      boleto_match_strategy: 'operational_audit_not_found',
+      boleto_erro: 'boleto_indisponivel',
+      boleto_extraido_em: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', record.id)
+    .eq('company_id', companyId);
+
+  await supabaseAdmin.from('audit_logs').insert({
+    company_id: companyId,
+    user_id: null,
+    action: 'drive_operational_boleto_audit_missing',
+    entity: 'registros_financeiros',
+    metadata: {
+      registro_id: record.id,
+      numero_titulo: target.numero_titulo || record.numero_boleto || record.documento || null,
+      best_score: best?.score || 0,
+      rejection_reason: ambiguous ? 'match_ambiguo' : (best?.rejectionReason || 'nao_encontrado'),
+    },
+  }).then(() => {}).catch(() => {});
+
+  return {
+    target,
+    record_id: record.id,
+    found: false,
+    status: ambiguous ? 'match_ambiguo' : 'boleto_indisponivel',
+    topCandidates: rescored.slice(0, 5).map((candidate) => buildExplainMatchPayload(
+      candidate.score,
+      candidate.matchedBy,
+      candidate.file.name,
+      candidate.pdfData?.folder_hint || candidate.file._folderPathHint || candidate.file._parentFolderName || '',
+      ambiguous && candidate === best ? 'match_ambiguo' : candidate.rejectionReason,
+    )),
+    rejectionReason: ambiguous ? 'match_ambiguo' : (best?.rejectionReason || 'nenhum_pdf_com_score_suficiente'),
+  };
 }
 
 async function downloadDriveFileBase64(token: string, fileId: string) {
@@ -3251,6 +4243,7 @@ async function extractBoletoDataFromDriveFile(token: string, file: DriveCandidat
     match_strategy: ocrUsed ? `ocr_${ocrSource || 'unknown'}` : 'regex_texto_pdf',
     ocr_used: ocrUsed,
     ocr_source: ocrSource,
+    folder_hint: file._folderPathHint || file._parentFolderName || null,
   };
 }
 
@@ -3354,6 +4347,161 @@ function scoreFinancialMatch(pdfData: ExtractedBoletoData, record: FinancialRow)
   return { record, score: Math.min(100, score), reasons };
 }
 
+function scoreFinancialMatchV2(pdfData: ExtractedBoletoData, record: FinancialRow): MatchCandidate {
+  let score = 0;
+  const reasons: string[] = [];
+  const primaryRecordId = record.numero_boleto || record.documento || record.numero_nf || '';
+  const namingSignals = detectDriveNamingSignals(
+    pdfData.pdf_nome || '',
+    pdfData.folder_hint || '',
+    primaryRecordId,
+    getClienteEfetivo(record) || record.nome,
+  );
+
+  const pdfIdentifiers = [
+    pdfData.numero_boleto,
+    pdfData.documento,
+    pdfData.numero_nf,
+    pdfData.nosso_numero,
+    extractBoletoNumberFromName(pdfData.pdf_nome || ''),
+  ].filter(Boolean);
+  const recordIdentifiers = [
+    record.numero_boleto,
+    record.documento,
+    record.numero_nf,
+  ].filter(Boolean);
+
+  const pdfVariantSets = pdfIdentifiers.map((item) => normalizeFinancialId(item));
+  const recordVariantSets = recordIdentifiers.map((item) => normalizeFinancialId(item));
+  const financialComparisons = recordVariantSets.flatMap((recordVariant) =>
+    pdfVariantSets.map((pdfVariant) => compareFinancialIdVariants(pdfVariant, recordVariant)));
+
+  const hasExactFinancialId = financialComparisons.some((comparison) => comparison.exact);
+  const hasFamilyFinancialId = !hasExactFinancialId && financialComparisons.some((comparison) => comparison.family);
+  const matchedBy = financialComparisons.flatMap((comparison) => comparison.matchedBy);
+
+  if (hasExactFinancialId) {
+    score += 60;
+    reasons.push('financial_id_normalized');
+  } else if (hasFamilyFinancialId) {
+    score += 42;
+    reasons.push('financial_id_family');
+  }
+
+  const nossoNumeroComparison = pdfData.nosso_numero
+    ? recordVariantSets.some((recordVariant) => compareFinancialIdVariants(normalizeFinancialId(pdfData.nosso_numero), recordVariant).exact)
+    : false;
+  if (nossoNumeroComparison) {
+    score += 22;
+    reasons.push('nosso_numero_match');
+  }
+
+  const linhaDigitavelComparison = pdfData.linha_digitavel
+    ? recordVariantSets.some((recordVariant) => compareFinancialIdVariants(normalizeFinancialId(pdfData.linha_digitavel), recordVariant).exact)
+    : false;
+  if (linhaDigitavelComparison) {
+    score += 28;
+    reasons.push('linha_digitavel_match');
+  }
+
+  const recordDocNumeric = String(record.documento || '').replace(/\D/g, '');
+  if (recordDocNumeric.length >= 11) {
+    const pdfTextNumeric = String(pdfData.texto_extraido || '').replace(/\D/g, '');
+    if (pdfTextNumeric.includes(recordDocNumeric)) {
+      score += 25;
+      reasons.push('cpf_cnpj_match');
+    }
+  }
+
+  const filenameIds = extractFinancialIdsFromText(pdfData.pdf_nome || '');
+  const filenameExactMatch = filenameIds.some((fileId) =>
+    recordVariantSets.some((recordVariant) => compareFinancialIdVariants(fileId, recordVariant).exact));
+  const filenameFamilyMatch = !filenameExactMatch && filenameIds.some((fileId) =>
+    recordVariantSets.some((recordVariant) => compareFinancialIdVariants(fileId, recordVariant).family));
+  if (filenameExactMatch) {
+    score += 18;
+    reasons.push('filename_financial_id_match');
+  } else if (filenameFamilyMatch) {
+    score += 10;
+    reasons.push('filename_financial_family_match');
+  }
+
+  if (namingSignals.boletoPrefix && (hasExactFinancialId || hasFamilyFinancialId || filenameExactMatch || filenameFamilyMatch)) {
+    score += 16;
+    reasons.push('boleto_prefix_pattern');
+  }
+  if (namingSignals.numberDashClient && (hasExactFinancialId || hasFamilyFinancialId || filenameExactMatch || filenameFamilyMatch)) {
+    score += 14;
+    reasons.push('number_dash_client_pattern');
+  }
+  const valueMatch = compareNumbers(pdfData.valor, record.valor, 0.05);
+  if (valueMatch) {
+    score += 15;
+    reasons.push('boleto_value_match');
+  }
+
+  const dueDateMatch = compareIsoDates(pdfData.vencimento, record.data_vencimento);
+  if (dueDateMatch) {
+    score += 10;
+    reasons.push('due_date_match');
+  }
+
+  if (namingSignals.clientFolder) {
+    score += 8;
+    reasons.push('client_folder_match');
+  }
+  if (namingSignals.strongFileNameMatches >= 2 && (hasExactFinancialId || hasFamilyFinancialId)) {
+    score += 10;
+    reasons.push('client_tokens_filename_match');
+  }
+  if (namingSignals.strongFolderMatches >= 2 && (hasExactFinancialId || hasFamilyFinancialId || valueMatch || dueDateMatch)) {
+    score += 9;
+    reasons.push('client_tokens_folder_match');
+  }
+  if (namingSignals.genericDocument) {
+    score = Math.max(0, score - 50);
+    reasons.push('generic_document_penalty');
+  }
+
+  const similarity = nameSimilarityScore(pdfData.nome_cliente, getClienteEfetivo(record) || record.nome);
+  if (similarity >= 0.8) {
+    score += 12;
+    reasons.push('nome_token_similarity');
+  } else if (similarity >= 0.6) {
+    score += 7;
+    reasons.push('nome_token_partial');
+  }
+
+  if ((hasExactFinancialId || linhaDigitavelComparison || nossoNumeroComparison) && valueMatch && dueDateMatch) {
+    score = Math.max(score, 95);
+  } else if ((hasExactFinancialId || linhaDigitavelComparison) && valueMatch) {
+    score = Math.max(score, 90);
+  } else if (hasExactFinancialId || linhaDigitavelComparison) {
+    score = Math.max(score, 82);
+  } else if ((filenameExactMatch || hasFamilyFinancialId) && namingSignals.strongFileNameMatches >= 2) {
+    score = Math.max(score, 80);
+  } else if (hasFamilyFinancialId && valueMatch && dueDateMatch) {
+    score = Math.max(score, 78);
+  } else if (hasFamilyFinancialId && namingSignals.clientFolder && (valueMatch || dueDateMatch)) {
+    score = Math.max(score, 74);
+  }
+
+  if (!hasExactFinancialId && !hasFamilyFinancialId && !(valueMatch && dueDateMatch)) {
+    score = Math.min(score, similarity >= 0.8 ? 35 : 20);
+  }
+  if (!hasExactFinancialId && !hasFamilyFinancialId && similarity < 0.6 && !(valueMatch && dueDateMatch)) {
+    score = 0;
+    reasons.push('rejected:ambiguous_without_financial_id');
+  }
+  if (namingSignals.genericDocument && score < 85) {
+    score = 0;
+    reasons.push('rejected:generic_document');
+  }
+
+  const explanation = explainMatch(Math.min(100, score), [...reasons, ...matchedBy]);
+  return { record, score: explanation.score, reasons: explanation.matchedBy };
+}
+
 function shouldUpdateBoletoMatch(record: FinancialRow, nextConfidence: number) {
   const currentConfidence = Number(record.boleto_match_confidence || 0);
   const currentStatus = buildBoletoStatus(record.boleto_status);
@@ -3452,7 +4600,7 @@ async function syncBoletoDriveIntelligentForCompany(
     try {
       const pdfData = await extractBoletoDataFromDriveFile(token, file);
       const candidates = records
-        .map((record) => scoreFinancialMatch(pdfData, record))
+        .map((record) => scoreFinancialMatchV2(pdfData, record))
         .filter((candidate) => candidate.score > 0)
         .sort((a, b) => b.score - a.score);
 
@@ -4680,7 +5828,26 @@ async function insertWhatsappCharge(
   supabaseAdmin: AdminClient,
   payload: Record<string, unknown>,
 ) {
-  const { error } = await supabaseAdmin.from('cobrancas_whatsapp').insert(payload);
+  const status = String(payload.status || '').trim().toLowerCase();
+  const providerMessageId = String(payload.provider_message_id || payload.zapi_message_id || '').trim();
+  const providerTrackingStatus = String(payload.provider_tracking_status || '').trim()
+    || (providerMessageId ? 'resolved' : 'pending_webhook');
+  const webhookStatus = String(payload.webhook_status || '').trim()
+    || (
+      ['delivered', 'read'].includes(status)
+        ? 'recebido'
+        : providerTrackingStatus === 'fallback_indisponivel'
+          ? 'fallback_indisponivel'
+          : 'aguardando_evento'
+    );
+
+  const normalizedPayload = {
+    ...payload,
+    provider_tracking_status: providerTrackingStatus,
+    webhook_status: webhookStatus,
+  };
+
+  const { error } = await supabaseAdmin.from('cobrancas_whatsapp').insert(normalizedPayload);
   if (error) throw new Error(error.message);
 }
 
@@ -4977,6 +6144,12 @@ interface BoletoLookupResult {
   secondFile: DriveCandidate | null;
 }
 
+interface OperationalBoletoTarget {
+  registro_id?: string;
+  numero_titulo?: string;
+  cliente_nome?: string;
+}
+
 async function lookupBoletoFileForRecord(
   token: string,
   folderId: string,
@@ -4987,14 +6160,7 @@ async function lookupBoletoFileForRecord(
     strategy: 'not_found', viewUrl: null, secondScore: null, secondFile: null,
   };
 
-  // Build query: "<numero_boleto>, <nome_cliente>"
-  // numero_boleto is the raw field (e.g. "4239-2"); nome / cliente_nome is the client.
-  const numPart = String(record.numero_boleto || record.documento || '').trim();
-  const namePart = String(record.cliente_nome || record.nome || '').trim();
-  const queryParts: string[] = [];
-  if (numPart) queryParts.push(numPart);
-  if (namePart) queryParts.push(namePart);
-  const query = queryParts.join(', ');
+  const query = buildRecordLookupQuery(record);
 
   if (!query) {
     return { ...empty, strategy: 'no_query' };
@@ -5014,26 +6180,92 @@ async function lookupBoletoFileForRecord(
   }
 
   const results = outcome.results;
-  if (!results.length) {
+  const fallbackCandidates = results.length > 0 ? [] : await searchDriveFilesByFinancialVariants(token, record);
+  if (!results.length && !fallbackCandidates.length) {
     return { ...empty, strategy: 'not_found' };
   }
 
-  const best = results[0];
-  const second = results[1] ?? null;
-  const strategy = outcome.meta.targeted_lookup_used
-    ? (best.exact_match ? 'targeted_exact' : 'targeted_base')
-    : (best.exact_match ? 'bfs_exact' : 'bfs_base');
+  const rescoredCandidates: Array<{
+    file: DriveCandidate;
+    score: number;
+    exact_match: boolean;
+    reasons: string[];
+    strategy: string;
+  }> = [];
+
+  const initialCandidates = results.length > 0
+    ? results.slice(0, 5).map((candidate) => ({
+        file: candidate.file,
+        score: candidate.score,
+        exact_match: candidate.exact_match,
+        reasons: candidate.reasons,
+        strategy: outcome.meta.targeted_lookup_used
+          ? (candidate.exact_match ? 'targeted_exact' : 'targeted_base')
+          : (candidate.exact_match ? 'bfs_exact' : 'bfs_base'),
+      }))
+    : fallbackCandidates.map((file) => ({
+        file,
+        score: 0,
+        exact_match: false,
+        reasons: ['financial_variant_name_search'],
+        strategy: 'financial_variant_name_search',
+      }));
+
+  for (const candidate of initialCandidates) {
+    try {
+      const pdfData = await extractBoletoDataFromDriveFile(token, candidate.file);
+      const match = scoreFinancialMatchV2(pdfData, record);
+      const exactFinancial = match.reasons.includes('financial_id_normalized')
+        || match.reasons.includes('linha_digitavel_match')
+        || match.reasons.includes('nosso_numero_match');
+      rescoredCandidates.push({
+        file: candidate.file,
+        score: match.score,
+        exact_match: exactFinancial && match.score >= 80,
+        reasons: [...candidate.reasons, ...match.reasons],
+        strategy: candidate.strategy === 'financial_variant_name_search'
+          ? 'financial_variant_rescored_pdf'
+          : `${outcome.meta.targeted_lookup_used ? 'targeted' : 'bfs'}_rescored_pdf`,
+      });
+    } catch (extractError) {
+      console.warn(JSON.stringify({
+        event: 'lookup_boleto_candidate_extract_failed',
+        record_id: record.id,
+        file_name: candidate.file?.name || null,
+        error: extractError instanceof Error ? extractError.message : String(extractError),
+      }));
+    }
+  }
+
+  const ranked = (rescoredCandidates.length > 0 ? rescoredCandidates : results.map((candidate) => ({
+    file: candidate.file,
+    score: candidate.score,
+    exact_match: candidate.exact_match,
+    reasons: candidate.reasons,
+    strategy: outcome.meta.targeted_lookup_used
+      ? (candidate.exact_match ? 'targeted_exact' : 'targeted_base')
+      : (candidate.exact_match ? 'bfs_exact' : 'bfs_base'),
+  })))
+    .sort((left, right) => right.score - left.score);
+
+  const best = ranked[0];
+  const second = ranked[1] ?? null;
+  const strategy = best.strategy;
+
+  const bestExplanation = explainMatch(best.score, best.reasons);
 
   console.log(JSON.stringify({
     event: 'lookup_boleto_file_result',
     record_id: record.id,
     query,
+    normalized_variants: summarizeFinancialVariants(record.numero_boleto || record.documento || record.numero_nf || ''),
     file_id: best.file.id,
     file_name: best.file.name,
     score: best.score,
     exact_match: best.exact_match,
     strategy,
     targeted_used: outcome.meta.targeted_lookup_used,
+    matched_by: bestExplanation.matchedBy,
   }));
 
   return {
@@ -9091,10 +10323,16 @@ async function assertCompanyAccess(
   companyId: string | null,
   authHeader: string | null,
   cronSecret: string | null,
+  gatewayAdminSecret: string | null,
 ) {
   const expectedCronSecret = Deno.env.get('BILLING_CRON_SECRET') || '';
   if (cronSecret && expectedCronSecret && cronSecret === expectedCronSecret) {
-    return { userId: null, bypass: true };
+    return { userId: null, bypass: true, isSystemAdmin: true, gatewayAdmin: false };
+  }
+
+  const expectedGatewayAdminSecret = Deno.env.get('GATEWAY_ADMIN_SECRET') || '';
+  if (gatewayAdminSecret && expectedGatewayAdminSecret && gatewayAdminSecret === expectedGatewayAdminSecret) {
+    return { userId: null, bypass: true, isSystemAdmin: true, gatewayAdmin: true };
   }
 
   if (!authHeader) {
@@ -9106,15 +10344,18 @@ async function assertCompanyAccess(
     throw new Error('Usuario nao autenticado.');
   }
 
-  if (!companyId) {
-    throw new Error('company_id e obrigatorio.');
-  }
-
   const { data: adminRow } = await admin
     .from('system_admins')
     .select('user_id')
     .eq('user_id', userData.user.id)
     .maybeSingle();
+
+  if (!companyId) {
+    if (!adminRow?.user_id) {
+      throw new Error('Acesso restrito a administradores globais.');
+    }
+    return { userId: userData.user.id, bypass: false, isSystemAdmin: true, gatewayAdmin: false };
+  }
 
   if (!adminRow?.user_id) {
     const { data: membership } = await admin
@@ -9129,7 +10370,7 @@ async function assertCompanyAccess(
     }
   }
 
-  return { userId: userData.user.id, bypass: false };
+  return { userId: userData.user.id, bypass: false, isSystemAdmin: Boolean(adminRow?.user_id), gatewayAdmin: false };
 }
 
 async function resolveTargetCompanies(admin: AdminClient, companyId: string | null, bypass: boolean) {
@@ -9161,6 +10402,7 @@ Deno.serve(async (req: Request) => {
     const serviceRoleKey = requireEnvSecret('SERVICE_ROLE_KEY');
     const authHeader = req.headers.get('Authorization');
     const cronSecret = req.headers.get('x-cron-secret');
+    const gatewayAdminSecret = req.headers.get('x-gateway-admin-secret');
 
     const admin = createClient(supabaseUrl, serviceRoleKey);
     const authClient = createClient(supabaseUrl, anonKey, {
@@ -9184,7 +10426,7 @@ Deno.serve(async (req: Request) => {
       },
     });
 
-    if (action === 'get_drive_config' || action === 'save_drive_config' || action === 'test_drive_connection' || action === 'test_drive_health' || action === 'sync_drive' || action === 'sync_boleto_drive_intelligent' || action === 'reprocess_boleto_drive_single' || action === 'test_boleto_lookup' || action === 'get_drive_folder_structure' || action === 'scan_folder_recursive') {
+    if (action === 'get_drive_config' || action === 'save_drive_config' || action === 'test_drive_connection' || action === 'test_drive_health' || action === 'sync_drive' || action === 'sync_boleto_drive_intelligent' || action === 'reprocess_boleto_drive_single' || action === 'test_boleto_lookup' || action === 'get_drive_folder_structure' || action === 'scan_folder_recursive' || action === 'audit_drive_tree' || action === 'search_operational_boleto_targets') {
       requireCompanyId(companyId);
       requireEnvSecret('GOOGLE_CLIENT_EMAIL');
       requireEnvSecret('GOOGLE_PRIVATE_KEY');
@@ -9196,7 +10438,7 @@ Deno.serve(async (req: Request) => {
     // Scheduler actions do NOT require company_id — they work across all companies
     // and are protected by cron secret only
 
-    const auth = await assertCompanyAccess(admin, authClient, companyId, authHeader, cronSecret);
+    const auth = await assertCompanyAccess(admin, authClient, companyId, authHeader, cronSecret, gatewayAdminSecret);
     const todayIso = todayInSaoPaulo();
     const needsGoogleToken = [
       'get_drive_config',
@@ -9208,6 +10450,8 @@ Deno.serve(async (req: Request) => {
       'test_boleto_lookup',
       'get_drive_folder_structure',
       'scan_folder_recursive',
+      'audit_drive_tree',
+      'search_operational_boleto_targets',
       'sync_boleto_drive_intelligent',
       'reprocess_boleto_drive_single',
       'run',
@@ -9452,19 +10696,78 @@ Deno.serve(async (req: Request) => {
         // Targeted Drive search for this specific record
         const candidates = await searchDriveFiles(googleToken, folderId, typedRecord);
 
-        let bestMatch: { pdfData: ExtractedBoletoData; score: number; status: string; reasons: string[] } | null = null;
+        const scoredMatches: Array<{
+          pdfData: ExtractedBoletoData;
+          score: number;
+          status: string;
+          reasons: string[];
+          explain: ReturnType<typeof buildExplainMatchPayload>;
+        }> = [];
 
         for (const file of candidates.slice(0, 5)) {
           try {
             const pdfData = await extractBoletoDataFromDriveFile(googleToken, file);
-            const match = scoreFinancialMatch(pdfData, typedRecord);
-            if (!bestMatch || match.score > bestMatch.score) {
-              const matchStatus = match.score >= 80 ? 'encontrado' : match.score >= 50 ? 'baixa_confianca' : 'nao_encontrado';
-              bestMatch = { pdfData, score: match.score, status: matchStatus, reasons: match.reasons };
-            }
+            const match = scoreFinancialMatchV2(pdfData, typedRecord);
+            const matchStatus = match.score >= 80 ? 'encontrado' : match.score >= 50 ? 'baixa_confianca' : 'nao_encontrado';
+            const rejectionReason = matchStatus === 'nao_encontrado'
+              ? 'score_abaixo_do_limite_seguro'
+              : matchStatus === 'baixa_confianca'
+                ? 'match_abaixo_do_limite_de_auto_attach'
+                : null;
+            scoredMatches.push({
+              pdfData,
+              score: match.score,
+              status: matchStatus,
+              reasons: match.reasons,
+              explain: buildExplainMatchPayload(
+                match.score,
+                match.reasons,
+                pdfData.pdf_nome,
+                pdfData.folder_hint,
+                rejectionReason,
+              ),
+            });
           } catch (_fileErr) {
             // Continue to next candidate
           }
+        }
+
+        scoredMatches.sort((left, right) => right.score - left.score);
+        const bestMatch = scoredMatches[0] || null;
+        const secondMatch = scoredMatches[1] || null;
+
+        if (bestMatch && secondMatch && bestMatch.score >= 80 && secondMatch.score >= 80 && Math.abs(bestMatch.score - secondMatch.score) <= 5) {
+          await admin
+            .from('registros_financeiros')
+            .update({
+              boleto_status: 'conflito',
+              boleto_match_confidence: Number(bestMatch.score.toFixed(2)),
+              boleto_match_strategy: 'reprocess_ambiguous_match',
+              boleto_erro: 'Match ambiguo entre multiplos PDFs candidatos.',
+              boleto_extraido_em: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', registroId)
+            .eq('company_id', companyId || '');
+
+          return jsonResponse({
+            ok: true,
+            success: true,
+            action: 'reprocess_boleto_drive_single',
+            registro_id: registroId,
+            result: {
+              status: 'conflito',
+              confidence: bestMatch.score,
+              reasons: ['match_ambiguo'],
+              explainMatch: buildExplainMatchPayload(
+                bestMatch.score,
+                ['match_ambiguo', ...bestMatch.reasons],
+                bestMatch.pdfData.pdf_nome,
+                bestMatch.pdfData.folder_hint,
+                'multiplos_pdfs_com_score_alto',
+              ),
+            },
+          }, 200);
         }
 
         if (bestMatch && bestMatch.status !== 'nao_encontrado') {
@@ -9492,8 +10795,18 @@ Deno.serve(async (req: Request) => {
           action: 'reprocess_boleto_drive_single',
           registro_id: registroId,
           result: bestMatch
-            ? { status: bestMatch.status, confidence: bestMatch.score, reasons: bestMatch.reasons }
-            : { status: 'nao_encontrado', confidence: 0, reasons: [] },
+            ? {
+                status: bestMatch.status,
+                confidence: bestMatch.score,
+                reasons: bestMatch.reasons,
+                explainMatch: bestMatch.explain,
+              }
+            : {
+                status: 'nao_encontrado',
+                confidence: 0,
+                reasons: [],
+                explainMatch: buildExplainMatchPayload(0, [], '', '', 'nenhum_pdf_com_score_suficiente'),
+              },
         }, 200);
       } catch (error) {
         return jsonResponse({
@@ -9604,6 +10917,12 @@ Deno.serve(async (req: Request) => {
           clientToken: zapiConfig.clientToken,
         });
         const connected = isZapiConnected(validation);
+        const phoneNumber = await resolveZapiPhoneNumber({
+          instanceId: zapiConfig.instanceId,
+          token: zapiConfig.token,
+          clientToken: zapiConfig.clientToken,
+        }, validation) || null;
+        const connectedPendingPhone = connected && !phoneNumber;
 
         return jsonResponse({
           ok: true,
@@ -9613,8 +10932,93 @@ Deno.serve(async (req: Request) => {
             ? 'Integracao Z-API validada com sucesso.'
             : 'Credenciais validas. Gere o QR Code e conclua a conexao no WhatsApp.',
           connected,
-          phone_number: extractZapiPhoneNumber(validation),
+          status: connected ? 'connected' : 'awaiting_qr',
+          phone_number: phoneNumber,
+          connected_pending_phone: connectedPendingPhone,
           data: validation,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action,
+          error: String(error instanceof Error ? error.message : error),
+        }, 200);
+      }
+    }
+
+    if (action === 'validate_global_whatsapp_connection') {
+      try {
+        if (!auth.isSystemAdmin) {
+          throw new Error('Acesso restrito a administradores globais.');
+        }
+
+        const zapiConfig = await resolveRequestedPlatformZapiConfig(
+          admin,
+          (body?.config || {}) as Record<string, unknown>,
+          { allowTestMode: auth.bypass === true },
+        );
+        const validation = await validatePlatformGatewayConnection({
+          instanceId: zapiConfig.instanceId,
+          token: zapiConfig.token,
+          clientToken: zapiConfig.clientToken,
+        });
+        const connected = isZapiConnected(validation);
+        const phoneNumber = await resolveZapiPhoneNumber({
+          instanceId: zapiConfig.instanceId,
+          token: zapiConfig.token,
+          clientToken: zapiConfig.clientToken,
+        }, validation) || null;
+        const connectedPendingPhone = connected && !phoneNumber;
+
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action,
+          message: connected
+            ? 'Gateway WhatsApp validado com sucesso.'
+            : 'Credenciais validas. Gere o QR Code e conclua a conexao no WhatsApp.',
+          connected,
+          status: connected ? 'connected' : 'awaiting_qr',
+          phone_number: phoneNumber,
+          connected_pending_phone: connectedPendingPhone,
+          data: validation,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action,
+          error: String(error instanceof Error ? error.message : error),
+        }, 200);
+      }
+    }
+
+    if (action === 'init_global_whatsapp_gateway') {
+      try {
+        if (!auth.isSystemAdmin) {
+          throw new Error('Acesso restrito a administradores globais.');
+        }
+
+        const initialized = await bootstrapPlatformZapiIntegration(
+          admin,
+          { allowTestMode: auth.bypass === true },
+        );
+
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action,
+          message: initialized.connected
+            ? 'Gateway WhatsApp global inicializado com sucesso.'
+            : 'Gateway WhatsApp global inicializado, aguardando conexao.',
+          connected: initialized.connected,
+          status: initialized.status,
+          phone_number: initialized.phone_number,
+          phone_number_masked: initialized.phone_number_masked,
+          connected_pending_phone: initialized.connected_pending_phone,
+          config_source: initialized.config_source,
+          data: initialized.row,
         }, 200);
       } catch (error) {
         return jsonResponse({
@@ -9656,7 +11060,13 @@ Deno.serve(async (req: Request) => {
         // isZapiConnected() alone can return true for API-valid-but-not-paired
         // instances (credentials OK but QR never scanned). Without a phone number
         // the WhatsApp session is not actually paired, so we must NOT block QR generation.
-        const preCheckPhone = preCheckData ? extractZapiPhoneNumber(preCheckData) : '';
+        const preCheckPhone = preCheckData
+          ? await resolveZapiPhoneNumber({
+            instanceId: zapiConfig.instanceId,
+            token: zapiConfig.token,
+            clientToken: zapiConfig.clientToken,
+          }, preCheckData)
+          : '';
         if (preCheckData && isZapiConnected(preCheckData) && preCheckPhone) {
           console.log('[ZAPI QR PRE-CHECK] already connected — skipping /qr-code/image');
           return jsonResponse({
@@ -9667,6 +11077,7 @@ Deno.serve(async (req: Request) => {
             status: 'connected',
             message: 'WhatsApp ja conectado',
             phone_number: preCheckPhone,
+            connected_pending_phone: false,
             qrCode: null,
             image_data_url: null,
             data: preCheckData,
@@ -9684,9 +11095,13 @@ Deno.serve(async (req: Request) => {
         // echo the phone number back.  Try to get it from (a) the QR raw
         // response, then (b) the pre-check /status data we already have.
         const qrPhone = qrCode.connected === true
-          ? (extractZapiPhoneNumber(qrCode.raw as Record<string, unknown>) ||
-             extractZapiPhoneNumber(preCheckData) ||
-             '')
+          ? (await resolveZapiPhoneNumber({
+            instanceId: zapiConfig.instanceId,
+            token: zapiConfig.token,
+            clientToken: zapiConfig.clientToken,
+          }, qrCode.raw as Record<string, unknown>) ||
+            preCheckPhone ||
+            '')
           : null;
 
         return jsonResponse({
@@ -9698,7 +11113,8 @@ Deno.serve(async (req: Request) => {
           message: qrCode.connected === true ? 'WhatsApp ja conectado' : 'QR Code carregado com sucesso.',
           qrCode: qrCode.connected === true ? null : qrCode.imageDataUrl,
           image_data_url: qrCode.connected === true ? null : qrCode.imageDataUrl,
-          phone_number: qrPhone,
+          phone_number: qrPhone || null,
+          connected_pending_phone: qrCode.connected === true && !qrPhone,
           data: qrCode.raw,
         }, 200);
       } catch (error) {
@@ -9706,6 +11122,90 @@ Deno.serve(async (req: Request) => {
           ok: false,
           success: false,
           action: 'get_qr_code',
+          error: String(error instanceof Error ? error.message : error),
+        }, 200);
+      }
+    }
+
+    if (action === 'get_global_whatsapp_qr_code') {
+      try {
+        if (!auth.isSystemAdmin) {
+          throw new Error('Acesso restrito a administradores globais.');
+        }
+
+        const zapiConfig = await resolveRequestedPlatformZapiConfig(
+          admin,
+          (body?.config || {}) as Record<string, unknown>,
+          { allowTestMode: auth.bypass === true },
+        );
+
+        let preCheckData: Record<string, unknown> | null = null;
+        try {
+          preCheckData = await validateZapiConnection({
+            instanceId: zapiConfig.instanceId,
+            token: zapiConfig.token,
+            clientToken: zapiConfig.clientToken,
+          });
+        } catch {
+          preCheckData = null;
+        }
+
+        const preCheckPhone = preCheckData
+          ? await resolveZapiPhoneNumber({
+            instanceId: zapiConfig.instanceId,
+            token: zapiConfig.token,
+            clientToken: zapiConfig.clientToken,
+          }, preCheckData)
+          : '';
+        if (preCheckData && isZapiConnected(preCheckData) && preCheckPhone) {
+          return jsonResponse({
+            ok: true,
+            success: true,
+            action,
+            connected: true,
+            status: 'connected',
+            message: 'WhatsApp ja conectado',
+            phone_number: preCheckPhone,
+            connected_pending_phone: false,
+            qrCode: null,
+            image_data_url: null,
+            data: preCheckData,
+          }, 200);
+        }
+
+        const qrCode = await getZapiQrCodeData({
+          instanceId: zapiConfig.instanceId,
+          token: zapiConfig.token,
+          clientToken: zapiConfig.clientToken,
+        });
+        const qrPhone = qrCode.connected === true
+          ? (await resolveZapiPhoneNumber({
+            instanceId: zapiConfig.instanceId,
+            token: zapiConfig.token,
+            clientToken: zapiConfig.clientToken,
+          }, qrCode.raw as Record<string, unknown>) ||
+             preCheckPhone ||
+             '')
+          : null;
+
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action,
+          connected: qrCode.connected === true,
+          status: qrCode.connected === true ? 'connected' : 'awaiting_qr',
+          message: qrCode.connected === true ? 'WhatsApp ja conectado' : 'QR Code carregado com sucesso.',
+          qrCode: qrCode.connected === true ? null : qrCode.imageDataUrl,
+          image_data_url: qrCode.connected === true ? null : qrCode.imageDataUrl,
+          phone_number: qrPhone || null,
+          connected_pending_phone: qrCode.connected === true && !qrPhone,
+          data: qrCode.raw,
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action,
           error: String(error instanceof Error ? error.message : error),
         }, 200);
       }
@@ -9725,17 +11225,27 @@ Deno.serve(async (req: Request) => {
           clientToken: zapiConfig.clientToken,
         });
         const connected = isZapiConnected(validation);
+        const phoneNumber = await resolveZapiPhoneNumber({
+          instanceId: zapiConfig.instanceId,
+          token: zapiConfig.token,
+          clientToken: zapiConfig.clientToken,
+        }, validation) || null;
+        const connectedPendingPhone = connected && !phoneNumber;
 
         return jsonResponse({
           ok: true,
           success: true,
           action: 'get_connection_status',
           connected,
-          phone_number: extractZapiPhoneNumber(validation),
-          status_label: connected ? 'Conectado' : 'Aguardando leitura do QR Code',
+          status: connected ? 'connected' : 'awaiting_qr',
+          phone_number: phoneNumber,
+          connected_pending_phone: connectedPendingPhone,
+          status_label: connected
+            ? (phoneNumber ? 'Conectado' : 'Conectado — aguardando numero')
+            : 'Aguardando leitura do QR Code',
           data: validation,
           message: connected
-            ? 'WhatsApp conectado com sucesso.'
+            ? (phoneNumber ? 'WhatsApp conectado com sucesso.' : 'WhatsApp conectado. Aguardando sincronizacao do numero.')
             : 'Instancia aguardando leitura do QR Code.',
         }, 200);
       } catch (error) {
@@ -9743,6 +11253,56 @@ Deno.serve(async (req: Request) => {
           ok: false,
           success: false,
           action: 'get_connection_status',
+          error: String(error instanceof Error ? error.message : error),
+        }, 200);
+      }
+    }
+
+    if (action === 'get_global_whatsapp_connection_status') {
+      try {
+        if (!auth.isSystemAdmin) {
+          throw new Error('Acesso restrito a administradores globais.');
+        }
+
+        const zapiConfig = await resolveRequestedPlatformZapiConfig(
+          admin,
+          (body?.config || {}) as Record<string, unknown>,
+          { allowTestMode: auth.bypass === true },
+        );
+        const validation = await validatePlatformGatewayConnection({
+          instanceId: zapiConfig.instanceId,
+          token: zapiConfig.token,
+          clientToken: zapiConfig.clientToken,
+        });
+        const connected = isZapiConnected(validation);
+        const phoneNumber = await resolveZapiPhoneNumber({
+          instanceId: zapiConfig.instanceId,
+          token: zapiConfig.token,
+          clientToken: zapiConfig.clientToken,
+        }, validation) || null;
+        const connectedPendingPhone = connected && !phoneNumber;
+
+        return jsonResponse({
+          ok: true,
+          success: true,
+          action,
+          connected,
+          status: connected ? 'connected' : 'awaiting_qr',
+          phone_number: phoneNumber,
+          connected_pending_phone: connectedPendingPhone,
+          status_label: connected
+            ? (phoneNumber ? 'Conectado' : 'Conectado - aguardando numero')
+            : 'Aguardando leitura do QR Code',
+          data: validation,
+          message: connected
+            ? (phoneNumber ? 'WhatsApp conectado com sucesso.' : 'WhatsApp conectado. Aguardando sincronizacao do numero.')
+            : 'Instancia aguardando leitura do QR Code.',
+        }, 200);
+      } catch (error) {
+        return jsonResponse({
+          ok: false,
+          success: false,
+          action,
           error: String(error instanceof Error ? error.message : error),
         }, 200);
       }
@@ -11212,6 +12772,78 @@ Deno.serve(async (req: Request) => {
           hint: 'Veja os logs da edge function para mais detalhes.',
         }, 200);
       }
+    }
+
+    if (action === 'audit_drive_tree') {
+      requireCompanyId(companyId);
+      const config = await getSheetsDriveConfig(admin, companyId || '');
+      const folderId = requireDriveFolderId(config?.drive_root_folder_id);
+      const rootFolder = await getDriveFolderInfo(googleToken, folderId);
+      const maxDepth = Math.min(6, Math.max(2, Number(body?.max_depth ?? config?.drive_max_depth ?? 4)));
+      const maxFolders = Math.min(400, Math.max(50, Number(body?.max_folders ?? 200)));
+      const auditStartedAt = Date.now();
+
+      const nodes = await scanFolderTree(folderId, {
+        rootName: rootFolder.name || 'root',
+        maxDepth,
+        maxFolders,
+        listSubfolders: async (parentId) => await listSubfoldersAll(googleToken, parentId, 500),
+        listPdfs: async (currentFolderId) => await listPdfFilesInFolder(googleToken, currentFolderId, 25),
+      });
+      const report = buildDriveAuditReport(nodes);
+
+      console.log(JSON.stringify({
+        event: 'drive_tree_audit',
+        company_id: companyId,
+        folder_id: folderId,
+        folders_visited: report.foldersVisited,
+        pdfs_scanned: report.pdfsScanned,
+        likely_roots: report.likelyRoots.map((item) => ({ path: item.path, pdf_count: item.pdfCount })),
+        naming_patterns: report.namingPatterns,
+      }));
+
+      return jsonResponse({
+        ok: true,
+        company_id: companyId,
+        folder_id: folderId,
+        folder_name: rootFolder.name || null,
+        duration_ms: Date.now() - auditStartedAt,
+        audit: report,
+      });
+    }
+
+    if (action === 'search_operational_boleto_targets') {
+      requireCompanyId(companyId);
+      const config = await getSheetsDriveConfig(admin, companyId || '');
+      const folderId = requireDriveFolderId(config?.drive_root_folder_id);
+      const rawTargets = Array.isArray(body?.targets) ? body.targets : [];
+      const targets = rawTargets
+        .map((item) => ({
+          registro_id: String((item as Record<string, unknown>)?.registro_id || '').trim() || undefined,
+          numero_titulo: String((item as Record<string, unknown>)?.numero_titulo || '').trim() || undefined,
+          cliente_nome: String((item as Record<string, unknown>)?.cliente_nome || '').trim() || undefined,
+        }))
+        .filter((item) => item.registro_id || item.numero_titulo || item.cliente_nome);
+
+      if (targets.length === 0) {
+        return jsonResponse({ ok: false, error: 'Informe ao menos um alvo em targets.' }, 400);
+      }
+
+      const startedAt = Date.now();
+      const results = [];
+      for (const target of targets.slice(0, 10)) {
+        results.push(await auditOperationalBoletoTarget(admin, googleToken, folderId, companyId || '', target));
+      }
+
+      return jsonResponse({
+        ok: true,
+        success: true,
+        action: 'search_operational_boleto_targets',
+        company_id: companyId,
+        folder_id: folderId,
+        duration_ms: Date.now() - startedAt,
+        results,
+      });
     }
 
     if (action === 'scan_folder_recursive') {

@@ -302,10 +302,10 @@ export async function getOnboardingProgress(companyId) {
 
 export const WIZARD_STEPS = [
   { id: 'welcome',             title: 'Bem-vindo',          icon: 'Rocket' },
-  { id: 'connect_whatsapp',   title: 'WhatsApp Z-API',     icon: 'Smartphone' },
   { id: 'connect_drive',      title: 'Google Drive',       icon: 'FolderOpen' },
-  { id: 'validate_env',       title: 'Validar Ambiente',   icon: 'ShieldCheck' },
+  { id: 'test_lookup',        title: 'Busca de boleto',    icon: 'Search' },
   { id: 'configure_messages', title: 'Mensagens',          icon: 'MessageSquare' },
+  { id: 'validate_env',       title: 'Validar Ambiente',   icon: 'ShieldCheck' },
   { id: 'test_dispatch',      title: 'Primeiro Dispatch',  icon: 'SendHorizonal' },
   { id: 'complete',           title: 'Pronto!',            icon: 'PartyPopper' },
 ];

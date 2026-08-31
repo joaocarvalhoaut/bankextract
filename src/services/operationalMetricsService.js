@@ -1,5 +1,4 @@
 import { getBillingHistory, getBillingInconsistencies, getBoletoSyncReport } from './billingAutomationService';
-import { getCompanyIntegration } from './companyIntegrationService';
 import { getGoogleSheetsStatus } from './googleSheetsService';
 import { supabase, hasSupabaseConfig } from './supabaseClient';
 
@@ -304,10 +303,10 @@ async function getIntegrationMetrics() {
 
   const [zapiResult, sheetsResult, subscriptionsResult] = await Promise.all([
     supabase
-      .from('company_integrations')
-      .select('company_id, connected')
+      .from('platform_integrations')
+      .select('provider, connected')
       .eq('provider', 'zapi')
-      .limit(500),
+      .limit(1),
     supabase
       .from('google_sheets_config')
       .select('empresa_id, ativo, spreadsheet_id, sheet_name, last_source_sync_status, last_source_sync_error')
@@ -368,7 +367,11 @@ export async function getOperationalCompanyDrilldown(companyId) {
     getBoletoSyncReport(companyId),
     getBillingInconsistencies(companyId, {}),
     getBillingHistory(companyId, {}, { page: 1, page_size: 10 }),
-    getCompanyIntegration(companyId, 'zapi'),
+    supabase
+      .from('platform_integrations')
+      .select('provider, connected, phone_number')
+      .eq('provider', 'zapi')
+      .maybeSingle(),
     getGoogleSheetsStatus(companyId),
   ]);
 
@@ -379,7 +382,7 @@ export async function getOperationalCompanyDrilldown(companyId) {
   const history = historyResult.status === 'fulfilled'
     ? (historyResult.value?.items || historyResult.value?.rows || historyResult.value?.data || historyResult.value?.registros || [])
     : [];
-  const zapi = zapiResult.status === 'fulfilled' ? zapiResult.value : null;
+  const zapi = zapiResult.status === 'fulfilled' ? zapiResult.value?.data || zapiResult.value : null;
   const sheets = sheetsResult.status === 'fulfilled' ? sheetsResult.value : null;
 
   return {

@@ -17,3 +17,13 @@ entrypoint = "./functions/process-import-ocr/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/process-import-ocr/*.html" ]
+
+[functions.zapi-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/zapi-webhook/index.ts"
+
+[functions.whatsapp-status-scheduler]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/whatsapp-status-scheduler/index.ts"

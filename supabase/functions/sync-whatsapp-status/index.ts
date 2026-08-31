@@ -28,6 +28,8 @@ interface WhatsappChargeRow {
   failed_at: string | null;
   failure_reason: string | null;
   created_at: string | null;
+  webhook_status: string | null;
+  provider_tracking_status: string | null;
 }
 
 const corsHeaders = {
@@ -69,6 +71,12 @@ function normalizeStatus(value: string | null | undefined) {
   return normalizeText(value) || 'queued';
 }
 
+function isUnsupportedStatusLookupResponse(data: Record<string, unknown>) {
+  const errorCode = String(data?.error || '').trim().toUpperCase();
+  const message = String(data?.message || '').trim().toLowerCase();
+  return errorCode === 'NOT_FOUND' && message.includes('unable to find matching target resource method');
+}
+
 function normalizePhone(raw: string | null | undefined) {
   const digits = String(raw || '').replace(/\D/g, '');
   if (!digits) return '';
@@ -79,13 +87,24 @@ function normalizePhone(raw: string | null | undefined) {
 
 async function getAdminClient() {
   const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_ROLE_KEY') || '';
 
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error('Supabase admin nao configurado.');
   }
 
   return createClient(supabaseUrl, serviceRoleKey);
+}
+
+async function safeInsertAudit(
+  supabaseAdmin: AdminClient,
+  payload: Record<string, unknown>,
+) {
+  try {
+    await supabaseAdmin.from('audit_logs').insert(payload);
+  } catch (error) {
+    console.warn('[sync-whatsapp-status] audit warning', error instanceof Error ? error.message : error);
+  }
 }
 
 async function getCompanyIntegration(
@@ -104,6 +123,17 @@ async function getCompanyIntegration(
   return (data || null) as CompanyIntegrationRow | null;
 }
 
+async function getPlatformIntegration(supabaseAdmin: AdminClient) {
+  const { data, error } = await supabaseAdmin
+    .from('platform_integrations')
+    .select('provider, instance_id, token, client_token, phone_number, connected')
+    .eq('provider', 'zapi')
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return (data || null) as Partial<CompanyIntegrationRow> | null;
+}
+
 function resolveZapiConfig(integration: CompanyIntegrationRow | null, companyId: string) {
   const instanceId = String(integration?.instance_id || '').trim();
   const token = String(integration?.token || '').trim();
@@ -118,6 +148,27 @@ function resolveZapiConfig(integration: CompanyIntegrationRow | null, companyId:
     token,
     clientToken,
   };
+}
+
+async function resolveGlobalFirstZapiConfig(
+  supabaseAdmin: AdminClient,
+  companyId: string,
+) {
+  const platform = await getPlatformIntegration(supabaseAdmin);
+  const platformInstanceId = String(platform?.instance_id || '').trim();
+  const platformToken = String(platform?.token || '').trim();
+  const platformClientToken = String(platform?.client_token || '').trim();
+
+  if (platformInstanceId && platformToken && platformClientToken) {
+    return {
+      instanceId: platformInstanceId,
+      token: platformToken,
+      clientToken: platformClientToken,
+    };
+  }
+
+  const integration = await getCompanyIntegration(supabaseAdmin, companyId);
+  return resolveZapiConfig(integration, companyId);
 }
 
 function buildStatusCandidates(instanceId: string, token: string, providerMessageId: string) {
@@ -195,6 +246,11 @@ async function fetchMessageStatusFromZapi(config: {
         continue;
       }
 
+      if (isUnsupportedStatusLookupResponse(data as Record<string, unknown>)) {
+        lastError = 'STATUS_LOOKUP_UNSUPPORTED';
+        continue;
+      }
+
       return data as Record<string, unknown>;
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
@@ -205,15 +261,16 @@ async function fetchMessageStatusFromZapi(config: {
 }
 
 function resolveStatusFromResponse(data: Record<string, unknown>) {
-  return normalizeStatus(
-    String(
-      data?.status ||
-      data?.messageStatus ||
-      data?.deliveryStatus ||
-      data?.state ||
-      '',
-    ),
-  );
+  const rawStatus = String(
+    data?.status ||
+    data?.messageStatus ||
+    data?.deliveryStatus ||
+    data?.state ||
+    '',
+  ).trim();
+
+  if (!rawStatus) return null;
+  return normalizeStatus(rawStatus);
 }
 
 async function fetchPendingCharges(supabaseAdmin: AdminClient) {
@@ -221,7 +278,7 @@ async function fetchPendingCharges(supabaseAdmin: AdminClient) {
 
   const { data, error } = await supabaseAdmin
     .from('cobrancas_whatsapp')
-    .select('id, empresa_id, company_id, registro_id, telefone, provider, provider_message_id, status, sent_at, delivered_at, read_at, failed_at, failure_reason, created_at')
+    .select('id, empresa_id, company_id, registro_id, telefone, provider, provider_message_id, status, sent_at, delivered_at, read_at, failed_at, failure_reason, created_at, webhook_status, provider_tracking_status')
     .eq('provider', 'zapi')
     .in('status', ['sent', 'sent_pending_provider_id', 'queued', 'delivered'])
     .not('provider_message_id', 'is', null)
@@ -244,6 +301,8 @@ function buildUpdatePayload(
 
   const payload: Record<string, unknown> = {
     status: nextStatus,
+    provider_tracking_status: nextStatus === 'failed' ? 'fallback_indisponivel' : 'resolved',
+    webhook_status: ['delivered', 'read'].includes(nextStatus) ? 'recebido' : 'aguardando_evento',
     failure_reason: nextStatus === 'failed' ? (failureReason || current.failure_reason || 'Falha retornada pela Z-API.') : null,
   };
 
@@ -274,8 +333,6 @@ async function syncStatuses() {
 
   const supabaseAdmin = await getAdminClient();
   const charges = await fetchPendingCharges(supabaseAdmin);
-  const integrationCache = new Map<string, CompanyIntegrationRow | null>();
-
   let updated = 0;
   let checked = 0;
   const errors: Array<{ id: string; error: string }> = [];
@@ -289,12 +346,7 @@ async function syncStatuses() {
         throw new Error('company_id ausente na cobranca.');
       }
 
-      if (!integrationCache.has(companyId)) {
-        integrationCache.set(companyId, await getCompanyIntegration(supabaseAdmin, companyId));
-      }
-
-      const integration = integrationCache.get(companyId) || null;
-      const config = resolveZapiConfig(integration, companyId);
+      const config = await resolveGlobalFirstZapiConfig(supabaseAdmin, companyId);
 
       console.log('[SYNC STATUS CHECK]', {
         charge_id: charge.id,
@@ -305,6 +357,15 @@ async function syncStatuses() {
 
       const zapiResponse = await fetchMessageStatusFromZapi(config, charge);
       const nextStatus = resolveStatusFromResponse(zapiResponse);
+      if (!nextStatus) {
+        errors.push({ id: charge.id, error: 'STATUS_NOT_RESOLVED' });
+        console.warn('[SYNC STATUS SKIP]', {
+          charge_id: charge.id,
+          provider_message_id: charge.provider_message_id,
+          reason: 'STATUS_NOT_RESOLVED',
+        });
+        continue;
+      }
       const patch = buildUpdatePayload(charge, nextStatus, zapiResponse);
 
       const { error } = await supabaseAdmin
@@ -324,6 +385,33 @@ async function syncStatuses() {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (message === 'STATUS_LOOKUP_UNSUPPORTED' && charge.webhook_status !== 'fallback_indisponivel') {
+        const restoredStatus = charge.status === 'queued' && charge.sent_at && !charge.delivered_at && !charge.read_at && !charge.failed_at
+          ? 'sent'
+          : charge.status;
+        await supabaseAdmin
+          .from('cobrancas_whatsapp')
+          .update({
+            status: restoredStatus,
+            provider_tracking_status: 'fallback_indisponivel',
+            webhook_status: 'fallback_indisponivel',
+          })
+          .eq('id', charge.id);
+
+        await safeInsertAudit(supabaseAdmin, {
+          company_id: companyId || null,
+          user_id: null,
+          entity: 'cobrancas_whatsapp',
+          action: 'whatsapp_status_lookup_unsupported',
+          metadata: {
+            charge_id: charge.id,
+            provider_message_id: charge.provider_message_id,
+            previous_status: charge.status,
+            restored_status: restoredStatus,
+            webhook_status: 'fallback_indisponivel',
+          },
+        });
+      }
       errors.push({ id: charge.id, error: message });
       console.error('[SYNC STATUS ERROR]', {
         charge_id: charge.id,

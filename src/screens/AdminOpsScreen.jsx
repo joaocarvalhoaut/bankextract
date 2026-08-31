@@ -12,6 +12,7 @@ import {
   Search,
   Send,
   ServerCrash,
+  Smartphone,
   Settings2,
   ShieldCheck,
   Siren,
@@ -29,6 +30,7 @@ import {
   clearOperationalAlertAcknowledgement,
   getOperationalAlerts,
 } from '../services/operationalAlertsService';
+import WhatsappGatewayCard from '../components/WhatsappGatewayCard';
 
 const PERIOD_OPTIONS = [
   { value: 7, label: '7 dias' },
@@ -39,6 +41,7 @@ const PERIOD_OPTIONS = [
 
 const TABS = [
   { id: 'overview', label: 'Visao geral', icon: BarChart3 },
+  { id: 'gateway', label: 'Gateway WhatsApp', icon: Smartphone },
   { id: 'health', label: 'Health', icon: Activity },
   { id: 'automations', label: 'Automacoes', icon: Settings2 },
   { id: 'alerts', label: 'Alertas', icon: Siren },
@@ -648,6 +651,15 @@ export default function AdminOpsScreen({ isSystemAdminUser = false, onToast }) {
             </SectionCard>
           </div>
         </div>
+      ) : null}
+
+      {activeTab === 'gateway' ? (
+        <SectionCard
+          title="Gateway WhatsApp global"
+          subtitle="Configuracao unica da Z-API compartilhada por todas as empresas, com QR automatico, polling seguro e healthcheck visual."
+        >
+          <WhatsappGatewayCard onToast={onToast} />
+        </SectionCard>
       ) : null}
 
       {activeTab === 'health' ? (

@@ -98,14 +98,14 @@ export function normalizeRuntimeError(error: unknown) {
 const REDACTED_KEYS = ['token', 'secret', 'password', 'authorization', 'client_token', 'private_key'];
 const PHONE_KEYS = ['phone', 'telefone', 'mobile', 'whatsapp', 'celular'];
 
-function maskSecret(value: unknown) {
+export function maskSecret(value: unknown) {
   const raw = String(value || '').trim();
   if (!raw) return '';
   if (raw.length <= 8) return `${raw.slice(0, 2)}***${raw.slice(-2)}`;
   return `${raw.slice(0, 4)}***${raw.slice(-4)}`;
 }
 
-function maskPhone(value: unknown) {
+export function maskPhone(value: unknown) {
   const digits = String(value || '').replace(/\D/g, '');
   if (!digits) return '';
   if (digits.length <= 4) return `${digits.slice(0, 1)}***`;

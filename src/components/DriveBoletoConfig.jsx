@@ -230,12 +230,10 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
     setDebugOpen(true);
     try {
       const result = await testDriveBoletoLookup(empresaId, lookupQuery.trim());
-      // eslint-disable-next-line no-console
       console.log('[TEST_BOLETO_LOOKUP_RESPONSE]', result);
       setLookupRawResponse(result);
       setLookupResults(result?.results || result || []);
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.log('[TEST_BOLETO_LOOKUP_RESPONSE] ERROR', err);
       setLookupRawResponse({ ok: false, error: err.message, stack: err.stack });
       onToast?.('erro', err.message || 'Falha ao buscar boleto no Drive.');
@@ -253,11 +251,9 @@ export default function DriveBoletoConfig({ empresaId, canManage = false, onToas
     setDiagnoseOpen(true);
     try {
       const result = await diagnoseDriveAccessForCompany(empresaId);
-      // eslint-disable-next-line no-console
       console.log('[DIAGNOSE_DRIVE_ACCESS]', result);
       setDiagnoseResult(result);
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.log('[DIAGNOSE_DRIVE_ACCESS] ERROR', err);
       setDiagnoseResult({ ok: false, error: err.message });
     } finally {

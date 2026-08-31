@@ -1,12 +1,8 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { Buffer } from 'node:buffer';
 import { pathToFileURL } from 'node:url';
+import { createClient } from '@supabase/supabase-js';
 import {
   RESULT_LEVELS,
   createResult,
-  createSupabaseClients,
-  fetchJson,
   getEnvValue,
   loadEnvironment,
   maskPhone,
@@ -17,34 +13,93 @@ import {
   toBoolean,
 } from './_shared/diagnostic-core.js';
 
-function resolveConfigSource(env, companyIntegration = null) {
-  if (companyIntegration?.instance_id && companyIntegration?.token && companyIntegration?.client_token) {
-    return {
-      source: 'company',
-      instanceId: String(companyIntegration.instance_id || '').trim(),
-      token: String(companyIntegration.token || '').trim(),
-      clientToken: String(companyIntegration.client_token || '').trim(),
-    };
-  }
+function buildFunctionUrl(supabaseUrl, fnName) {
+  return `${String(supabaseUrl || '').replace(/\/$/, '')}/functions/v1/${fnName}`;
+}
 
-  const testInstanceId = getEnvValue(env, 'TEST_ZAPI_INSTANCE_ID');
-  const testToken = getEnvValue(env, 'TEST_ZAPI_TOKEN');
-  const testClientToken = getEnvValue(env, 'TEST_ZAPI_CLIENT_TOKEN');
-  if (testInstanceId && testToken && testClientToken) {
-    return {
-      source: 'test',
-      instanceId: testInstanceId,
-      token: testToken,
-      clientToken: testClientToken,
-    };
+function createClients(env) {
+  const supabaseUrl = getEnvValue(env, 'SUPABASE_URL', ['VITE_SUPABASE_URL']);
+  const anonKey = getEnvValue(env, 'SUPABASE_ANON_KEY', ['VITE_SUPABASE_ANON_KEY']);
+  const serviceRoleKey = getEnvValue(env, 'SUPABASE_SERVICE_ROLE_KEY', ['SERVICE_ROLE_KEY']);
+  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    throw new Error('SUPABASE_URL, SUPABASE_ANON_KEY e SUPABASE_SERVICE_ROLE_KEY/SERVICE_ROLE_KEY sao obrigatorios para o diagnostico.');
   }
-
   return {
-    source: 'global',
-    instanceId: getEnvValue(env, 'ZAPI_INSTANCE_ID'),
-    token: getEnvValue(env, 'ZAPI_TOKEN'),
-    clientToken: getEnvValue(env, 'ZAPI_CLIENT_TOKEN'),
+    admin: createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } }),
+    anon: createClient(supabaseUrl, anonKey, { auth: { persistSession: false } }),
   };
+}
+
+async function invokeGatewayAction(env, action, extraBody = {}) {
+  const supabaseUrl = getEnvValue(env, 'SUPABASE_URL', ['VITE_SUPABASE_URL']);
+  const gatewaySecret = getEnvValue(env, 'GATEWAY_ADMIN_SECRET');
+  const accessToken = String(extraBody.__access_token || '').trim();
+  delete extraBody.__access_token;
+  if (!supabaseUrl || (!gatewaySecret && !accessToken)) {
+    throw new Error('SUPABASE_URL/VITE_SUPABASE_URL e autenticacao (GATEWAY_ADMIN_SECRET ou JWT admin) sao obrigatorios para o diagnostico global.');
+  }
+
+  const response = await fetch(buildFunctionUrl(supabaseUrl, 'billing-automation'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(gatewaySecret ? { 'x-gateway-admin-secret': gatewaySecret } : {}),
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify({
+      action,
+      ...extraBody,
+    }),
+  });
+
+  const text = await response.text();
+  let data = {};
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Resposta invalida da function billing-automation: ${text.slice(0, 200)}`);
+  }
+
+  if (!response.ok || !(data?.ok === true || data?.success === true)) {
+    throw new Error(String(data?.error || `Falha ao executar ${action}.`));
+  }
+
+  return data;
+}
+
+async function getPlatformRow(admin) {
+  if (!admin) return null;
+  const { data, error } = await admin
+    .from('platform_integrations')
+    .select('provider, instance_id, token, client_token, connected, phone_number, connected_at, last_healthcheck_at, metadata')
+    .eq('provider', 'zapi')
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function ensureDiagnosticAdminSession(env, admin, anon) {
+  const email = getEnvValue(env, 'E2E_TEST_EMAIL') || 'e2e.whatsapp@ncfinance.local';
+  const password = getEnvValue(env, 'E2E_TEST_PASSWORD') || 'NcFinance!2026';
+  const { data: existing } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  const user = existing?.users?.find((row) => String(row.email || '').toLowerCase() === email.toLowerCase()) || null;
+  const authUser = user
+    ? await admin.auth.admin.updateUserById(user.id, { password, email_confirm: true }).then(() => user)
+    : await admin.auth.admin.createUser({ email, password, email_confirm: true }).then(({ data, error }) => {
+      if (error || !data?.user) throw new Error(error?.message || 'Falha ao criar usuario diagnostico.');
+      return data.user;
+    });
+
+  const { error: adminError } = await admin
+    .from('system_admins')
+    .upsert({ user_id: authUser.id, email }, { onConflict: 'user_id' });
+  if (adminError) throw new Error(adminError.message || 'Falha ao registrar diagnostico em system_admins.');
+
+  const { data: signInData, error: signInError } = await anon.auth.signInWithPassword({ email, password });
+  if (signInError || !signInData?.session?.access_token) {
+    throw new Error(signInError?.message || 'Falha ao autenticar usuario diagnostico.');
+  }
+  return signInData.session.access_token;
 }
 
 function buildMockPdfBase64() {
@@ -62,62 +117,94 @@ function buildDocumentPayload(mockNumber, fileName, base64) {
   };
 }
 
-function detectConnectionStatus(payload = {}) {
-  const value = String(
-    payload.connected ??
-      payload.status ??
-      payload.state ??
-      payload.instanceStatus ??
-      payload.session ??
-      '',
-  ).toLowerCase();
-
-  return ['connected', 'true', 'online', 'open', 'ready'].some((item) => value.includes(item));
-}
-
 export async function runDiagnostic(options = {}) {
   const rootDir = options.rootDir || process.cwd();
   const env = loadEnvironment({ cwd: rootDir });
   const dryRun = toBoolean(options['dry-run'] ?? options.dryRun ?? env.DIAGNOSTIC_DRY_RUN, true);
-  const companyId = String(options['company-id'] || options.companyId || env.DIAGNOSTIC_COMPANY_ID || '').trim();
-  const mockNumber = String(options['mock-number'] || options.mockNumber || '5511999999999').replace(/\D/g, '');
+  const mockNumber = String(options['mock-number'] || options.mockNumber || env.TEST_RECIPIENT_PHONE || '5511999999999').replace(/\D/g, '');
   const maxBytes = Math.max(1024, Number(options['max-bytes'] || env.ZAPI_DOCUMENT_MAX_BYTES || 10485760));
-  const { admin } = createSupabaseClients(env);
+  const { admin, anon } = createClients(env);
   const results = [];
+  let accessToken = '';
 
-  let companyIntegration = null;
-  if (companyId && admin) {
-    try {
-      const { data, error } = await admin
-        .from('company_integrations')
-        .select('company_id, instance_id, token, client_token, connected')
-        .eq('company_id', companyId)
-        .eq('provider', 'zapi')
-        .maybeSingle();
-      if (error) throw error;
-      companyIntegration = data || null;
-    } catch (error) {
-      results.push(
-        createResult(
-          RESULT_LEVELS.WARNING,
-          `Falha ao carregar integracao Z-API da empresa: ${sanitizeErrorMessage(error)}`,
-          'Revisar company_integrations e a service role do Supabase.',
-        ),
-      );
-    }
+  try {
+    accessToken = await ensureDiagnosticAdminSession(env, admin, anon);
+  } catch (error) {
+    results.push(
+      createResult(
+        RESULT_LEVELS.ERROR,
+        `Falha ao preparar sessao admin para diagnostico: ${sanitizeErrorMessage(error)}`,
+        'Revisar credenciais locais e disponibilidade do Supabase Auth.',
+      ),
+    );
   }
 
-  const config = resolveConfigSource(env, companyIntegration);
-  const hasCredentials = Boolean(config.instanceId && config.token && config.clientToken);
+  let initPayload = null;
+  try {
+    initPayload = await invokeGatewayAction(env, 'init_global_whatsapp_gateway', { __access_token: accessToken });
+    results.push(
+      createResult(
+        RESULT_LEVELS.OK,
+        `Gateway global inicializado com fonte ${String(initPayload.config_source || 'desconhecida')}.`,
+        'Prosseguir para validacao de conexao e payload.',
+      ),
+    );
+  } catch (error) {
+    results.push(
+      createResult(
+        RESULT_LEVELS.ERROR,
+        `Falha ao inicializar o gateway global: ${sanitizeErrorMessage(error)}`,
+        'Configurar GATEWAY_ADMIN_SECRET local e a secret remota correspondente antes do smoke.',
+      ),
+    );
+  }
+
+  let platformRow = null;
+  try {
+    platformRow = await getPlatformRow(admin);
+  } catch (error) {
+    results.push(
+      createResult(
+        RESULT_LEVELS.WARNING,
+        `Falha ao ler platform_integrations: ${sanitizeErrorMessage(error)}`,
+        'Revisar SERVICE_ROLE_KEY/SUPABASE_URL locais.',
+      ),
+    );
+  }
+
+  const instanceId = String(platformRow?.instance_id || '').trim();
+  const token = String(platformRow?.token || '').trim();
+  const clientToken = String(platformRow?.client_token || '').trim();
+  const phoneNumber = String(initPayload?.phone_number || platformRow?.phone_number || '').trim();
+  const connected = Boolean(initPayload?.connected ?? platformRow?.connected);
+  const connectedPendingPhone = Boolean(initPayload?.connected_pending_phone ?? (connected && !phoneNumber));
+  const stateLabel = connected
+    ? (phoneNumber ? 'CONECTADO_COM_NUMERO' : 'CONECTADO_AGUARDANDO_NUMERO')
+    : 'DESCONECTADO';
+
   results.push(
     createResult(
-      hasCredentials ? RESULT_LEVELS.OK : RESULT_LEVELS.ERROR,
-      hasCredentials
-        ? `Credenciais Z-API localizadas (${config.source}) para instancia ${maskSecret(config.instanceId)}.`
-        : 'Credenciais Z-API incompletas para diagnostico.',
-      hasCredentials
-        ? 'Prosseguir com handshake e validacao de payload.'
-        : 'Configurar ZAPI_INSTANCE_ID/ZAPI_TOKEN/ZAPI_CLIENT_TOKEN ou TEST_*.',
+      instanceId && token && clientToken ? RESULT_LEVELS.OK : RESULT_LEVELS.ERROR,
+      instanceId && token && clientToken
+        ? `Credenciais Z-API globais localizadas para instancia ${maskSecret(instanceId)}.`
+        : 'Credenciais Z-API globais incompletas em platform_integrations.',
+      instanceId && token && clientToken
+        ? 'Credenciais prontas para handshake.'
+        : 'Bootstrap do gateway nao preencheu instance/token/client token.',
+    ),
+  );
+
+  results.push(
+    createResult(
+      connected ? RESULT_LEVELS.OK : RESULT_LEVELS.ERROR,
+      `Estado de conexao do gateway: ${stateLabel}.`,
+      connected
+        ? (connectedPendingPhone ? 'Aguardar sincronizacao do numero ou validar endpoint secundario de status.' : 'Instancia pronta para piloto.')
+        : 'Reconectar a instancia Z-API antes do E2E live.',
+      {
+        connected_pending_phone: connectedPendingPhone,
+        phone_number_masked: maskPhone(phoneNumber),
+      },
     ),
   );
 
@@ -137,97 +224,27 @@ export async function runDiagnostic(options = {}) {
   results.push(
     createResult(
       base64.length > 0 ? RESULT_LEVELS.OK : RESULT_LEVELS.ERROR,
-      'Geracao base64 de PDF sintético concluida.',
+      'Geracao base64 de PDF sintetico concluida.',
       'Nenhuma acao imediata.',
     ),
   );
-
-  if (hasCredentials) {
-    try {
-      const statusUrl = `https://api.z-api.io/instances/${config.instanceId}/token/${config.token}/status`;
-      const response = await fetchJson(statusUrl, {
-        method: 'GET',
-        headers: {
-          'Client-Token': config.clientToken,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        results.push(
-          createResult(
-            RESULT_LEVELS.ERROR,
-            `Handshake Z-API falhou: HTTP ${response.status}.`,
-            'Conferir instance/token/client token e conectividade da instancia.',
-          ),
-        );
-      } else {
-        const active = detectConnectionStatus(response.data);
-        results.push(
-          createResult(
-            active ? RESULT_LEVELS.OK : RESULT_LEVELS.WARNING,
-            `Handshake Z-API respondeu com status ${response.status}; instancia ${active ? 'ativa' : 'nao confirmada como ativa'}.`,
-            active ? 'Nenhuma acao imediata.' : 'Escanear QR Code/reconectar instancia antes do piloto.',
-          ),
-        );
-      }
-    } catch (error) {
-      results.push(
-        createResult(
-          RESULT_LEVELS.ERROR,
-          `Falha ao consultar status da Z-API: ${sanitizeErrorMessage(error)}`,
-          'Validar rede, firewall e credenciais da instancia.',
-        ),
-      );
-    }
-  }
 
   if (dryRun) {
     results.push(
       createResult(
         RESULT_LEVELS.OK,
-        'dry-run=true: nenhum envio real foi executado; somente handshake e montagem de payload.',
-        'Desligar dry-run apenas em janela controlada de smoke test integrado.',
-      ),
-    );
-  } else {
-    results.push(
-      createResult(
-        RESULT_LEVELS.WARNING,
-        'dry-run=false solicitado; por seguranca o diagnostico continua sem enviar cobrancas reais.',
-        'Use este script apenas para auditoria operacional, nao para disparo de mensagens.',
+        'dry-run=true: nenhum envio real foi executado; somente bootstrap, handshake e montagem de payload.',
+        'Desligar dry-run apenas apos o report E2E ficar limpo.',
       ),
     );
   }
 
-  const billingAutomationSource = fs.readFileSync(path.join(rootDir, 'supabase', 'functions', 'billing-automation', 'index.ts'), 'utf8');
-  const hasIdempotency = /automation_dispatches/.test(billingAutomationSource) && /send_single_charge/.test(billingAutomationSource);
-  results.push(
-    createResult(
-      hasIdempotency ? RESULT_LEVELS.OK : RESULT_LEVELS.WARNING,
-      hasIdempotency
-        ? 'Base de idempotencia localizada no fluxo de cobranca (automation_dispatches).'
-        : 'Base de idempotencia nao localizada com confianca no fluxo auditado.',
-      hasIdempotency ? 'Nenhuma acao imediata.' : 'Revisar o fluxo de deduplicacao antes do piloto.',
-    ),
-  );
-
-  const hasCorrelation = /request_id/.test(billingAutomationSource) && /correlation_id/.test(billingAutomationSource);
-  results.push(
-    createResult(
-      hasCorrelation ? RESULT_LEVELS.OK : RESULT_LEVELS.WARNING,
-      hasCorrelation
-        ? 'Request/correlation identifiers aparecem no codigo auditado.'
-        : 'Nao foi possivel confirmar correlation_id/request_id em todo o fluxo auditado.',
-      hasCorrelation ? 'Nenhuma acao imediata.' : 'Padronizar request_id e correlation_id nos eventos da cobranca.',
-    ),
-  );
-
   return printReport('Diagnostico WhatsApp Z-API', results, {
     dry_run: dryRun,
-    company_id: companyId || null,
-    config_source: config.source,
+    config_source: String(initPayload?.config_source || platformRow?.metadata?.source || 'desconhecida'),
     mock_number: maskPhone(mockNumber),
+    state: stateLabel,
+    phone_number_masked: maskPhone(phoneNumber),
   });
 }
 
